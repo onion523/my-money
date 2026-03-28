@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=375">
+<title>My Money - Travel Fund Tracker Wireframe</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #f5f5f5;
+    color: #333;
+    display: flex;
+    gap: 40px;
+    padding: 30px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .phone {
+    width: 375px;
+    min-height: 700px;
+    background: #fff;
+    border-radius: 24px;
+    border: 2px solid #ccc;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .phone-label {
+    text-align: center;
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 8px;
+    font-style: italic;
+  }
+  .status-bar {
+    height: 44px;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #999;
+  }
+  .header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #eee;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a1a;
+  }
+  .header .subtitle {
+    font-size: 13px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .summary-card {
+    margin: 16px 20px;
+    padding: 20px;
+    background: linear-gradient(135deg, #e8f4f8, #f0f8e8);
+    border-radius: 16px;
+    border: 1px dashed #bbb;
+  }
+  .summary-label {
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .summary-amount {
+    font-size: 32px;
+    font-weight: 800;
+    color: #1a1a1a;
+    margin: 4px 0;
+  }
+  .summary-sub {
+    font-size: 13px;
+    color: #888;
+  }
+  .status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+  .status-on-track {
+    background: #e6f7e6;
+    color: #2d8a2d;
+    border: 1px dashed #2d8a2d;
+  }
+  .status-behind {
+    background: #fff3e6;
+    color: #c47200;
+    border: 1px dashed #c47200;
+  }
+  .goal-card {
+    margin: 12px 20px;
+    padding: 16px;
+    border: 1px dashed #ccc;
+    border-radius: 12px;
+    background: #fafafa;
+  }
+  .goal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .goal-title {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .goal-emoji {
+    font-size: 24px;
+  }
+  .goal-dates {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+  }
+  .progress-container {
+    margin-top: 12px;
+  }
+  .progress-bar {
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: repeating-linear-gradient(45deg, #666, #666 2px, #888 2px, #888 4px);
+  }
+  .progress-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #666;
+  }
+  .progress-amount {
+    font-weight: 600;
+  }
+  .suggestion {
+    margin: 12px 20px;
+    padding: 12px 16px;
+    border: 1px dashed #aaa;
+    border-radius: 10px;
+    background: #fffde6;
+    font-size: 13px;
+    color: #555;
+  }
+  .bottom-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    border-top: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background: #fff;
+  }
+  .nav-item {
+    text-align: center;
+    font-size: 10px;
+    color: #999;
+  }
+  .nav-item.active { color: #333; font-weight: 600; }
+  .nav-icon {
+    width: 24px;
+    height: 24px;
+    border: 1.5px dashed currentColor;
+    border-radius: 6px;
+    margin: 0 auto 2px;
+  }
+  .detail-section {
+    padding: 16px 20px;
+  }
+  .detail-section h3 {
+    font-size: 13px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+  .chart-placeholder {
+    height: 160px;
+    border: 1px dashed #bbb;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    font-size: 13px;
+    background: #fafafa;
+    margin-bottom: 16px;
+  }
+  .stats-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .stat-box {
+    flex: 1;
+    padding: 12px;
+    border: 1px dashed #ccc;
+    border-radius: 10px;
+    text-align: center;
+    background: #fafafa;
+  }
+  .stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a1a1a;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .tx-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .tx-date { font-size: 12px; color: #888; }
+  .tx-note { font-size: 14px; color: #333; }
+  .tx-amount { font-size: 14px; font-weight: 600; color: #2d8a2d; }
+  .tx-amount.expense { color: #c44; }
+  .expense-summary {
+    margin: 12px 20px;
+    padding: 16px;
+    border: 1px dashed #ccc;
+    border-radius: 12px;
+    background: #fff8f8;
+  }
+  .expense-summary .es-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .expense-summary .es-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+  }
+  .expense-summary .es-total {
+    font-size: 18px;
+    font-weight: 700;
+    color: #c44;
+  }
+  .expense-cats {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .expense-cat {
+    padding: 4px 10px;
+    border: 1px dashed #ddd;
+    border-radius: 8px;
+    font-size: 11px;
+    color: #666;
+    background: #fff;
+  }
+  .tab-bar {
+    display: flex;
+    margin: 0 20px;
+    border-bottom: 1px solid #eee;
+  }
+  .tab-bar .tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px 0;
+    font-size: 13px;
+    color: #999;
+  }
+  .tab-bar .tab.active {
+    color: #333;
+    font-weight: 600;
+    border-bottom: 2px solid #333;
+  }
+  .fab {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 2px dashed #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #555;
+    background: #fff;
+  }
+  /* ===== Desktop wireframe ===== */
+  .desktop-wrapper {
+    width: 100%;
+    flex-basis: 100%;
+  }
+  .desktop-label {
+    text-align: center;
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 8px;
+    font-style: italic;
+  }
+  .desktop {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 12px;
+    border: 2px solid #ccc;
+    overflow: hidden;
+    min-height: 650px;
+  }
+  .desktop .d-topbar {
+    height: 48px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+  }
+  .desktop .d-topbar h1 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a1a1a;
+  }
+  .desktop .d-topbar-nav {
+    display: flex;
+    gap: 24px;
+    font-size: 13px;
+    color: #888;
+  }
+  .desktop .d-topbar-nav span.active {
+    color: #333;
+    font-weight: 600;
+    border-bottom: 2px solid #333;
+    padding-bottom: 2px;
+  }
+  .desktop .d-body {
+    display: flex;
+    padding: 24px;
+    gap: 24px;
+  }
+  .desktop .d-main {
+    flex: 2;
+  }
+  .desktop .d-side {
+    flex: 1;
+    min-width: 300px;
+  }
+  .desktop .d-summary-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .desktop .d-summary-card {
+    flex: 1;
+    padding: 20px;
+    border: 1px dashed #bbb;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #e8f4f8, #f0f8e8);
+  }
+  .desktop .d-goals-grid {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .desktop .d-goal-card {
+    flex: 1;
+    padding: 16px;
+    border: 1px dashed #ccc;
+    border-radius: 12px;
+    background: #fafafa;
+  }
+  .desktop .d-chart {
+    height: 200px;
+    border: 1px dashed #bbb;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    font-size: 14px;
+    background: #fafafa;
+  }
+  .desktop .d-side-section {
+    margin-bottom: 20px;
+  }
+  .desktop .d-side-section h3 {
+    font-size: 13px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+  .desktop .d-side-card {
+    padding: 14px;
+    border: 1px dashed #ccc;
+    border-radius: 10px;
+    background: #fafafa;
+    margin-bottom: 10px;
+  }
+  .desktop .d-suggestion {
+    padding: 12px 16px;
+    border: 1px dashed #aaa;
+    border-radius: 10px;
+    background: #fffde6;
+    font-size: 13px;
+    color: #555;
+  }
+  .desktop .d-btn {
+    display: inline-block;
+    padding: 8px 20px;
+    border: 2px dashed #555;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #555;
+    background: #fff;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div>
+  <div class="phone-label">畫面 1：首頁儀表板</div>
+  <div class="phone">
+    <div class="status-bar">9:41</div>
+    <div class="header">
+      <h1>My Money</h1>
+      <div class="subtitle">旅遊基金儀表板</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">總儲蓄進度</div>
+      <div class="summary-amount">$42,800</div>
+      <div class="summary-sub">目標 $85,000 ・已達成 50.4%</div>
+      <div class="status-badge status-on-track">進度正常</div>
+    </div>
+    <div class="goal-card">
+      <div class="goal-header">
+        <div>
+          <div class="goal-title">日本京都</div>
+          <div class="goal-dates">2026/10/01 出發 ・還有 187 天</div>
+        </div>
+        <div class="goal-emoji">&#127471;&#127477;</div>
+      </div>
+      <div class="progress-container">
+        <div class="progress-bar"><div class="progress-fill" style="width:68%"></div></div>
+        <div class="progress-labels">
+          <span class="progress-amount">$27,200 / $40,000</span>
+          <span class="status-badge status-on-track" style="font-size:11px;padding:2px 8px;">充裕</span>
+        </div>
+      </div>
+    </div>
+    <div class="goal-card">
+      <div class="goal-header">
+        <div>
+          <div class="goal-title">泰國曼谷</div>
+          <div class="goal-dates">2027/02/15 出發 ・還有 324 天</div>
+        </div>
+        <div class="goal-emoji">&#127481;&#127469;</div>
+      </div>
+      <div class="progress-container">
+        <div class="progress-bar"><div class="progress-fill" style="width:35%"></div></div>
+        <div class="progress-labels">
+          <span class="progress-amount">$15,600 / $45,000</span>
+          <span class="status-badge status-behind" style="font-size:11px;padding:2px 8px;">需加油</span>
+        </div>
+      </div>
+    </div>
+    <!-- Expense summary -->
+    <div class="expense-summary">
+      <div class="es-header">
+        <div class="es-title">本月花費</div>
+        <div class="es-total">-$18,500</div>
+      </div>
+      <div class="expense-cats">
+        <div class="expense-cat">餐飲 $6,200</div>
+        <div class="expense-cat">交通 $3,800</div>
+        <div class="expense-cat">娛樂 $4,500</div>
+        <div class="expense-cat">其他 $4,000</div>
+      </div>
+    </div>
+
+    <div class="suggestion">
+      &#128161; 本月娛樂花費偏高，少花 $2,000 就能多存一筆給泰國旅費
+    </div>
+    <div class="fab">+</div>
+    <div class="bottom-nav">
+      <div class="nav-item active"><div class="nav-icon"></div>首頁</div>
+      <div class="nav-item"><div class="nav-icon"></div>旅遊基金</div>
+      <div class="nav-item"><div class="nav-icon"></div>花費</div>
+      <div class="nav-item"><div class="nav-icon"></div>設定</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN 2: Expense List ============ -->
+<div>
+  <div class="phone-label">畫面 2：花費紀錄</div>
+  <div class="phone">
+    <div class="status-bar">9:41</div>
+    <div class="header">
+      <h1>花費紀錄</h1>
+      <div class="subtitle">2026 年 3 月</div>
+    </div>
+
+    <!-- Monthly summary -->
+    <div class="expense-summary" style="margin-top:16px;">
+      <div class="es-header">
+        <div class="es-title">本月總花費</div>
+        <div class="es-total">-$18,500</div>
+      </div>
+      <div style="font-size:12px;color:#888;margin-top:4px;">預算 $25,000 ・剩餘 $6,500</div>
+      <div class="progress-container" style="margin-top:8px;">
+        <div class="progress-bar"><div class="progress-fill" style="width:74%;background:repeating-linear-gradient(45deg,#c44,#c44 2px,#d66 2px,#d66 4px);"></div></div>
+      </div>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <div class="tab active">全部</div>
+      <div class="tab">餐飲</div>
+      <div class="tab">交通</div>
+      <div class="tab">娛樂</div>
+    </div>
+
+    <!-- Expense list -->
+    <div class="detail-section" style="padding-top:12px;">
+      <div class="tx-item">
+        <div><div class="tx-note">午餐 - 牛肉麵</div><div class="tx-date">2026/03/28 ・餐飲</div></div>
+        <div class="tx-amount expense">-$180</div>
+      </div>
+      <div class="tx-item">
+        <div><div class="tx-note">加油</div><div class="tx-date">2026/03/27 ・交通</div></div>
+        <div class="tx-amount expense">-$1,200</div>
+      </div>
+      <div class="tx-item">
+        <div><div class="tx-note">電影票 x2</div><div class="tx-date">2026/03/26 ・娛樂</div></div>
+        <div class="tx-amount expense">-$600</div>
+      </div>
+      <div class="tx-item">
+        <div><div class="tx-note">超市採買</div><div class="tx-date">2026/03/25 ・餐飲</div></div>
+        <div class="tx-amount expense">-$850</div>
+      </div>
+      <div class="tx-item">
+        <div><div class="tx-note">捷運儲值</div><div class="tx-date">2026/03/24 ・交通</div></div>
+        <div class="tx-amount expense">-$500</div>
+      </div>
+      <div class="tx-item">
+        <div><div class="tx-note">咖啡</div><div class="tx-date">2026/03/24 ・餐飲</div></div>
+        <div class="tx-amount expense">-$150</div>
+      </div>
+    </div>
+
+    <div class="fab">+</div>
+    <div class="bottom-nav">
+      <div class="nav-item"><div class="nav-icon"></div>首頁</div>
+      <div class="nav-item"><div class="nav-icon"></div>旅遊基金</div>
+      <div class="nav-item active"><div class="nav-icon"></div>花費</div>
+      <div class="nav-item"><div class="nav-icon"></div>設定</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN 3: Goal Detail ============ -->
+<div>
+  <div class="phone-label">畫面 3：旅遊基金詳情</div>
+  <div class="phone">
+    <div class="status-bar">9:41</div>
+    <div class="header">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="color:#888;font-size:18px;">&larr;</span>
+        <h1 style="font-size:20px;">日本京都 &#127471;&#127477;</h1>
+      </div>
+      <div class="subtitle">2026/10/01 出發</div>
+    </div>
+    <div class="summary-card">
+      <div style="text-align:center;">
+        <div class="summary-amount">68%</div>
+        <div class="summary-sub">$27,200 / $40,000</div>
+        <div class="status-badge status-on-track">照目前速度，9月中就能存滿</div>
+      </div>
+    </div>
+    <div class="detail-section">
+      <h3>概覽</h3>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-value">$12,800</div>
+          <div class="stat-label">還差</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">$4,500</div>
+          <div class="stat-label">月均存入</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">2.8 月</div>
+          <div class="stat-label">預計存滿</div>
+        </div>
+      </div>
+    </div>
+    <div class="detail-section" style="padding-top:0;">
+      <h3>儲蓄趨勢</h3>
+      <div class="chart-placeholder">
+        ── 折線圖：實際存款 vs 理想進度線 ──
+      </div>
+    </div>
+    <div class="detail-section" style="padding-top:0;">
+      <h3>最近紀錄</h3>
+      <div class="tx-item">
+        <div><div class="tx-note">薪水撥入</div><div class="tx-date">2026/03/25</div></div>
+        <div class="tx-amount">+$5,000</div>
+      </div>
+      <div class="tx-item">
+        <div><div class="tx-note">獎金</div><div class="tx-date">2026/03/15</div></div>
+        <div class="tx-amount">+$3,000</div>
+      </div>
+      <div class="tx-item">
+        <div><div class="tx-note">零錢存入</div><div class="tx-date">2026/03/10</div></div>
+        <div class="tx-amount">+$800</div>
+      </div>
+    </div>
+    <div class="fab">+</div>
+    <div class="bottom-nav">
+      <div class="nav-item"><div class="nav-icon"></div>首頁</div>
+      <div class="nav-item active"><div class="nav-icon"></div>旅遊基金</div>
+      <div class="nav-item"><div class="nav-icon"></div>花費</div>
+      <div class="nav-item"><div class="nav-icon"></div>設定</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN 4: Desktop RWD ============ -->
+<div class="desktop-wrapper">
+  <div class="desktop-label">畫面 4：桌面版（RWD）</div>
+  <div class="desktop">
+    <div class="d-topbar">
+      <h1>My Money</h1>
+      <div class="d-topbar-nav">
+        <span class="active">首頁</span>
+        <span>旅遊基金</span>
+        <span>花費紀錄</span>
+        <span>設定</span>
+      </div>
+    </div>
+    <div class="d-body">
+      <!-- Main content -->
+      <div class="d-main">
+        <!-- Summary row -->
+        <div class="d-summary-row">
+          <div class="d-summary-card">
+            <div class="summary-label">總儲蓄進度</div>
+            <div class="summary-amount">$42,800</div>
+            <div class="summary-sub">目標 $85,000 ・已達成 50.4%</div>
+            <div class="status-badge status-on-track">進度正常</div>
+          </div>
+          <div class="d-summary-card" style="background: linear-gradient(135deg, #fff0f0, #fff5f0);">
+            <div class="summary-label">本月花費</div>
+            <div class="summary-amount" style="color:#c44;">$18,500</div>
+            <div class="summary-sub">預算 $25,000 ・剩餘 $6,500</div>
+            <div class="status-badge status-on-track">控制得宜</div>
+          </div>
+        </div>
+
+        <!-- Goals grid -->
+        <div class="d-goals-grid">
+          <div class="d-goal-card">
+            <div class="goal-header">
+              <div>
+                <div class="goal-title">日本京都</div>
+                <div class="goal-dates">2026/10/01 出發 ・還有 187 天</div>
+              </div>
+              <div class="goal-emoji">&#127471;&#127477;</div>
+            </div>
+            <div class="progress-container">
+              <div class="progress-bar"><div class="progress-fill" style="width:68%"></div></div>
+              <div class="progress-labels">
+                <span class="progress-amount">$27,200 / $40,000</span>
+                <span class="status-badge status-on-track" style="font-size:11px;padding:2px 8px;">充裕</span>
+              </div>
+            </div>
+          </div>
+          <div class="d-goal-card">
+            <div class="goal-header">
+              <div>
+                <div class="goal-title">泰國曼谷</div>
+                <div class="goal-dates">2027/02/15 出發 ・還有 324 天</div>
+              </div>
+              <div class="goal-emoji">&#127481;&#127469;</div>
+            </div>
+            <div class="progress-container">
+              <div class="progress-bar"><div class="progress-fill" style="width:35%"></div></div>
+              <div class="progress-labels">
+                <span class="progress-amount">$15,600 / $45,000</span>
+                <span class="status-badge status-behind" style="font-size:11px;padding:2px 8px;">需加油</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="d-chart">
+          ── 儲蓄趨勢折線圖：所有目標的實際存款 vs 理想進度線 ──
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="d-side">
+        <div class="d-side-section">
+          <h3>智慧建議</h3>
+          <div class="d-suggestion">
+            &#128161; 本月娛樂花費偏高，少花 $2,000 就能多存一筆給泰國旅費
+          </div>
+          <div class="d-suggestion" style="margin-top:8px;">
+            &#128200; 照目前速度，京都旅費 9 月中就能存滿
+          </div>
+          <div class="d-suggestion" style="margin-top:8px;">
+            &#9749; 本月咖啡花了 $2,400，佔餐飲 39%
+          </div>
+        </div>
+
+        <div class="d-side-section">
+          <h3>最近紀錄</h3>
+          <div class="d-side-card">
+            <div class="tx-item" style="border-bottom:none;padding:0;">
+              <div><div class="tx-note">午餐 - 牛肉麵</div><div class="tx-date">2026/03/28 ・餐飲</div></div>
+              <div class="tx-amount expense">-$180</div>
+            </div>
+          </div>
+          <div class="d-side-card">
+            <div class="tx-item" style="border-bottom:none;padding:0;">
+              <div><div class="tx-note">薪水撥入旅遊基金</div><div class="tx-date">2026/03/25</div></div>
+              <div class="tx-amount">+$5,000</div>
+            </div>
+          </div>
+          <div class="d-side-card">
+            <div class="tx-item" style="border-bottom:none;padding:0;">
+              <div><div class="tx-note">加油</div><div class="tx-date">2026/03/27 ・交通</div></div>
+              <div class="tx-amount expense">-$1,200</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-btn">+ 記一筆花費</div>
+        <div class="d-btn" style="margin-left:8px;">+ 存入旅遊基金</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

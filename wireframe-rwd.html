@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Money - RWD Wireframe</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #f5f5f5;
+    color: #333;
+    min-height: 100vh;
+  }
+
+  /* ===== Top Nav (desktop) / Bottom Nav (mobile) ===== */
+  .topbar {
+    display: none;
+    background: #fff;
+    border-bottom: 1px solid #eee;
+    padding: 0 32px;
+    height: 56px;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .topbar h1 { font-size: 20px; font-weight: 700; }
+  .topbar-nav { display: flex; gap: 28px; }
+  .topbar-nav a {
+    font-size: 14px; color: #888; text-decoration: none; padding: 16px 0;
+  }
+  .topbar-nav a.active {
+    color: #333; font-weight: 600; border-bottom: 2px solid #333;
+  }
+
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 64px;
+    border-top: 1px solid #eee;
+    display: flex; align-items: center; justify-content: space-around;
+    background: #fff; z-index: 10;
+  }
+  .nav-item { text-align: center; font-size: 10px; color: #999; cursor: pointer; }
+  .nav-item.active { color: #333; font-weight: 600; }
+  .nav-icon {
+    width: 24px; height: 24px;
+    border: 1.5px dashed currentColor; border-radius: 6px;
+    margin: 0 auto 2px;
+  }
+
+  /* ===== Container ===== */
+  .container {
+    max-width: 1200px; margin: 0 auto;
+    padding: 16px; padding-bottom: 80px;
+  }
+  .mobile-header { padding: 4px 0 12px; }
+  .mobile-header h1 { font-size: 24px; font-weight: 700; }
+  .mobile-header .subtitle { font-size: 13px; color: #888; }
+
+  /* ===== Grid ===== */
+  .dashboard-grid {
+    display: grid; grid-template-columns: 1fr; gap: 16px;
+  }
+
+  /* ===== Cards ===== */
+  .card {
+    background: #fff; border-radius: 16px; padding: 20px; border: 1px dashed #ccc;
+  }
+  .card-label {
+    font-size: 12px; color: #666; text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 4px;
+  }
+  .card-amount { font-size: 28px; font-weight: 800; color: #1a1a1a; }
+  .card-amount.red { color: #c44; }
+  .card-amount.green { color: #2d8a2d; }
+  .card-sub { font-size: 13px; color: #888; margin-top: 2px; }
+
+  .card-hero { background: linear-gradient(135deg, #e8f4f8, #eef8e8); }
+  .card-accounts { background: #fafafa; }
+  .card-budget { background: linear-gradient(135deg, #f0f0ff, #f5f0ff); }
+  .card-savings { background: linear-gradient(135deg, #e8f4f8, #f0f8e8); }
+
+  .status-badge {
+    display: inline-block; padding: 4px 12px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; margin-top: 8px;
+  }
+  .status-on-track { background: #e6f7e6; color: #2d8a2d; border: 1px dashed #2d8a2d; }
+  .status-behind { background: #fff3e6; color: #c47200; border: 1px dashed #c47200; }
+  .status-info { background: #e8f0ff; color: #3366cc; border: 1px dashed #3366cc; }
+
+  /* ===== Real-Time Balance Flow ===== */
+  .balance-flow { display: flex; flex-direction: column; }
+  .bf-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 0; font-size: 14px;
+  }
+  .bf-row + .bf-row { border-top: 1px solid #eee; }
+  .bf-label { color: #666; }
+  .bf-sub { font-size: 11px; color: #aaa; margin-left: 8px; }
+  .bf-amount { font-weight: 600; }
+  .bf-amount.positive { color: #2d8a2d; }
+  .bf-amount.negative { color: #c44; }
+  .bf-divider { border-top: 2px dashed #aaa; margin: 4px 0; }
+  .bf-result {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0 0; font-size: 16px;
+  }
+  .bf-result-label { font-weight: 700; color: #333; }
+  .bf-result-amount { font-weight: 800; font-size: 22px; }
+
+  /* ===== Account Items ===== */
+  .acct-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid #f0f0f0;
+  }
+  .acct-item:last-child { border-bottom: none; }
+  .acct-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    border: 1.5px dashed #ccc; display: flex; align-items: center;
+    justify-content: center; font-size: 16px; margin-right: 10px; flex-shrink: 0;
+  }
+  .acct-info { flex: 1; }
+  .acct-name { font-size: 14px; font-weight: 600; }
+  .acct-detail { font-size: 11px; color: #888; margin-top: 1px; }
+  .acct-balance { text-align: right; }
+  .acct-bal-main { font-size: 15px; font-weight: 700; }
+  .acct-bal-main.negative { color: #c44; }
+  .acct-bal-sub { font-size: 11px; color: #999; }
+
+  /* ===== Timeline (upcoming deductions) ===== */
+  .timeline { display: flex; flex-direction: column; gap: 0; }
+  .tl-item {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid #f0f0f0;
+  }
+  .tl-item:last-child { border-bottom: none; }
+  .tl-date {
+    width: 44px; text-align: center; flex-shrink: 0;
+    padding: 4px 0; border-radius: 8px;
+    background: #f5f5f5; border: 1px dashed #ddd;
+  }
+  .tl-day { font-size: 16px; font-weight: 700; color: #333; line-height: 1; }
+  .tl-month { font-size: 10px; color: #888; }
+  .tl-content { flex: 1; }
+  .tl-name { font-size: 13px; font-weight: 600; color: #333; }
+  .tl-desc { font-size: 11px; color: #888; }
+  .tl-amount { font-size: 14px; font-weight: 600; color: #c44; white-space: nowrap; }
+  .tl-item.done { opacity: 0.5; }
+  .tl-item.done .tl-date { background: #e6f7e6; border-color: #2d8a2d; }
+
+  /* ===== Summary Row ===== */
+  .summary-row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+
+  /* ===== Goals Grid ===== */
+  .goals-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .goal-card { background: #fafafa; }
+  .goal-header { display: flex; justify-content: space-between; align-items: center; }
+  .goal-title { font-size: 16px; font-weight: 600; }
+  .goal-emoji { font-size: 24px; }
+  .goal-dates { font-size: 12px; color: #888; margin-top: 4px; }
+  .progress-bar {
+    height: 8px; background: #e0e0e0; border-radius: 4px;
+    overflow: hidden; margin-top: 12px;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 4px;
+    background: repeating-linear-gradient(45deg, #666, #666 2px, #888 2px, #888 4px);
+  }
+  .progress-fill.behind {
+    background: repeating-linear-gradient(45deg, #c47200, #c47200 2px, #d89030 2px, #d89030 4px);
+  }
+  .progress-labels {
+    display: flex; justify-content: space-between; margin-top: 6px;
+    font-size: 12px; color: #666;
+  }
+
+  /* ===== Expense Cats ===== */
+  .expense-cats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .expense-cat {
+    padding: 4px 10px; border: 1px dashed #ddd; border-radius: 8px;
+    font-size: 11px; color: #666; background: #fff;
+  }
+
+  /* ===== Fixed Items ===== */
+  .fixed-item {
+    padding: 10px 0; font-size: 13px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .fixed-item:last-child { border-bottom: none; }
+  .fi-top {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .fi-name { color: #555; font-weight: 600; }
+  .fi-cycle {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    border: 1px dashed #ccc; color: #888; margin-left: 6px;
+  }
+  .fi-detail { font-size: 11px; color: #aaa; margin-top: 2px; }
+  .fi-amount { font-weight: 600; color: #888; }
+  .fi-progress {
+    margin-top: 6px;
+  }
+  .fi-progress-bar {
+    height: 5px; background: #e8e8e8; border-radius: 3px; overflow: hidden;
+  }
+  .fi-progress-fill {
+    height: 100%; border-radius: 3px;
+    background: repeating-linear-gradient(45deg, #88b, #88b 2px, #99c 2px, #99c 4px);
+  }
+  .fi-progress-fill.warning {
+    background: repeating-linear-gradient(45deg, #c47200, #c47200 2px, #d89030 2px, #d89030 4px);
+  }
+  .fi-progress-fill.ok {
+    background: repeating-linear-gradient(45deg, #2d8a2d, #2d8a2d 2px, #4a4 2px, #4a4 4px);
+  }
+  .fi-progress-labels {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: #999; margin-top: 3px;
+  }
+
+  /* ===== Reserve Fund Summary ===== */
+  .reserve-summary {
+    padding: 12px 16px; border-radius: 12px;
+    background: linear-gradient(135deg, #f0f0ff, #f5f0ff);
+    border: 1px dashed #bbb; margin-bottom: 12px;
+  }
+  .reserve-label { font-size: 12px; color: #666; }
+  .reserve-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 4px;
+  }
+  .reserve-amount { font-size: 20px; font-weight: 800; color: #555; }
+  .reserve-target { font-size: 13px; color: #888; }
+
+  /* ===== Suggestions ===== */
+  .suggestion {
+    padding: 12px 16px; border: 1px dashed #aaa; border-radius: 10px;
+    background: #fffde6; font-size: 13px; color: #555;
+  }
+  .suggestions-stack { display: flex; flex-direction: column; gap: 8px; }
+
+  /* ===== Transaction Items ===== */
+  .tx-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid #f0f0f0;
+  }
+  .tx-item:last-child { border-bottom: none; }
+  .tx-date { font-size: 12px; color: #888; }
+  .tx-note { font-size: 14px; color: #333; }
+  .tx-amount { font-size: 14px; font-weight: 600; color: #2d8a2d; }
+  .tx-amount.expense-amt { color: #c44; }
+
+  /* ===== Section Title ===== */
+  .section-title {
+    font-size: 13px; color: #888; text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 10px; padding-top: 4px;
+  }
+
+  /* ===== FAB ===== */
+  .fab {
+    position: fixed; bottom: 80px; right: 20px;
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 2px dashed #555;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; color: #555; background: #fff; z-index: 10;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+
+  /* ===== Action Buttons ===== */
+  .action-btns { display: none; }
+  .action-btn {
+    display: inline-block; padding: 10px 20px;
+    border: 2px dashed #555; border-radius: 8px;
+    font-size: 13px; color: #555; background: #fff; cursor: pointer;
+  }
+
+  /* ============================================
+     RESPONSIVE
+     ============================================ */
+  @media (min-width: 768px) {
+    .summary-row { grid-template-columns: 1fr 1fr; }
+    .goals-grid { grid-template-columns: 1fr 1fr; }
+    .container { padding: 24px; padding-bottom: 80px; }
+    .accounts-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  @media (min-width: 1024px) {
+    .topbar { display: flex; }
+    .bottom-nav { display: none; }
+    .mobile-header { display: none; }
+    .fab { bottom: 32px; right: 32px; }
+    .container { padding: 32px; padding-bottom: 32px; }
+    .dashboard-grid { grid-template-columns: 2fr 1fr; gap: 24px; }
+    .main-col { display: flex; flex-direction: column; gap: 20px; }
+    .side-col { display: flex; flex-direction: column; gap: 20px; }
+    .action-btns { display: flex; gap: 12px; }
+  }
+
+  @media (min-width: 1280px) {
+    .summary-row { grid-template-columns: 1fr 1fr; }
+    .goals-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* ===== Accounts Grid ===== */
+  .accounts-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+
+  /* ===== Cash Flow Forecast ===== */
+  .cf-toggle {
+    display: flex; gap: 0; margin-bottom: 16px;
+    border: 1px dashed #ccc; border-radius: 10px; overflow: hidden;
+  }
+  .cf-toggle-btn {
+    flex: 1; padding: 10px; text-align: center;
+    font-size: 13px; color: #888; background: #fafafa; cursor: pointer;
+    border-right: 1px dashed #ccc;
+  }
+  .cf-toggle-btn:last-child { border-right: none; }
+  .cf-toggle-btn.active {
+    background: #333; color: #fff; font-weight: 600;
+  }
+
+  .cf-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+  }
+  .cf-row:last-child { border-bottom: none; }
+  .cf-date {
+    width: 50px; font-size: 12px; color: #888; flex-shrink: 0; text-align: center;
+  }
+  .cf-desc { flex: 1; color: #555; }
+  .cf-delta { width: 80px; text-align: right; font-weight: 600; flex-shrink: 0; }
+  .cf-delta.income { color: #2d8a2d; }
+  .cf-delta.expense { color: #c44; }
+  .cf-balance {
+    width: 90px; text-align: right; font-weight: 700; flex-shrink: 0;
+    font-size: 14px;
+  }
+  .cf-balance.safe { color: #2d8a2d; }
+  .cf-balance.warning { color: #c47200; }
+  .cf-balance.danger { color: #c44; }
+  .cf-check { width: 20px; text-align: center; flex-shrink: 0; font-size: 14px; }
+  .cf-row.is-today {
+    background: #f0f8ff; border-radius: 8px; padding: 8px 6px; margin: 0 -6px;
+  }
+  .cf-row.is-today .cf-date { font-weight: 700; color: #333; }
+  .cf-safe-line {
+    padding: 6px 12px; font-size: 11px; color: #888;
+    border: 1px dashed #ddd; border-radius: 8px;
+    margin-top: 8px; text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- Desktop Top Navigation -->
+<nav class="topbar">
+  <h1>My Money</h1>
+  <div class="topbar-nav">
+    <a href="#" class="active">首頁</a>
+    <a href="#">帳戶</a>
+    <a href="#">儲蓄目標</a>
+    <a href="#">花費紀錄</a>
+    <a href="#">設定</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="mobile-header">
+    <h1>My Money</h1>
+    <div class="subtitle">即時財務總覽</div>
+  </div>
+
+  <div class="dashboard-grid">
+    <!-- ===== 主要內容欄 ===== -->
+    <div class="main-col">
+
+      <!-- 即時可用餘額 — 整個 app 最重要的數字 -->
+      <div class="card card-hero">
+        <div class="card-label">即時可用餘額</div>
+        <div class="card-amount green">$89,700</div>
+        <div class="card-sub">扣除所有待繳款項與預留基金後，你真正可以動用的錢</div>
+        <div class="balance-flow" style="margin-top:12px;">
+          <div class="bf-row">
+            <span class="bf-label">銀行帳戶總額</span>
+            <span class="bf-amount positive">$152,800</span>
+          </div>
+          <div class="bf-row">
+            <span class="bf-label">信用卡已出帳<span class="bf-sub">4/10 扣繳</span></span>
+            <span class="bf-amount negative">-$23,500</span>
+          </div>
+          <div class="bf-row">
+            <span class="bf-label">信用卡未入帳<span class="bf-sub">尚未結帳</span></span>
+            <span class="bf-amount negative">-$8,800</span>
+          </div>
+          <div class="bf-row">
+            <span class="bf-label">本月剩餘固定支出<span class="bf-sub">月繳・尚未扣</span></span>
+            <span class="bf-amount negative">-$3,000</span>
+          </div>
+          <div class="bf-row">
+            <span class="bf-label">繳費預留基金<span class="bf-sub">年/半年/季/雙月繳</span></span>
+            <span class="bf-amount negative">-$13,800</span>
+          </div>
+          <div class="bf-row">
+            <span class="bf-label">本月預留攤提<span class="bf-sub">本月還要存入</span></span>
+            <span class="bf-amount negative">-$5,800</span>
+          </div>
+          <div class="bf-row">
+            <span class="bf-label">儲蓄目標預留<span class="bf-sub">2 個有期限目標</span></span>
+            <span class="bf-amount negative">-$7,000</span>
+          </div>
+          <div class="bf-divider"></div>
+          <div class="bf-result">
+            <span class="bf-result-label">可自由花用</span>
+            <span class="bf-result-amount" style="color:#2d8a2d;">$89,700</span>
+          </div>
+        </div>
+        <div class="card-sub" style="margin-top:8px;">本月已自由花費 $18,500 ・還剩 $71,200</div>
+      </div>
+
+      <!-- 帳戶總覽 -->
+      <div>
+        <div class="section-title">帳戶總覽</div>
+        <div class="accounts-grid">
+          <!-- 銀行帳戶 -->
+          <div class="card card-accounts">
+            <div class="card-label">銀行帳戶</div>
+            <div class="acct-item">
+              <div class="acct-icon">&#127974;</div>
+              <div class="acct-info">
+                <div class="acct-name">中國信託 活存</div>
+                <div class="acct-detail">主要薪轉帳戶</div>
+              </div>
+              <div class="acct-balance">
+                <div class="acct-bal-main">$102,800</div>
+              </div>
+            </div>
+            <div class="acct-item">
+              <div class="acct-icon">&#127974;</div>
+              <div class="acct-info">
+                <div class="acct-name">國泰世華 數位帳戶</div>
+                <div class="acct-detail">旅遊基金專用</div>
+              </div>
+              <div class="acct-balance">
+                <div class="acct-bal-main">$42,800</div>
+              </div>
+            </div>
+            <div class="acct-item" style="border-bottom:none;padding-bottom:0;">
+              <div class="acct-info" style="text-align:right;">
+                <div class="acct-detail">銀行帳戶合計</div>
+              </div>
+              <div class="acct-balance">
+                <div class="acct-bal-main" style="font-size:17px;">$152,800</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 信用卡 -->
+          <div class="card card-accounts">
+            <div class="card-label">信用卡</div>
+            <div class="acct-item">
+              <div class="acct-icon">&#128179;</div>
+              <div class="acct-info">
+                <div class="acct-name">中信 LINE Pay 卡</div>
+                <div class="acct-detail">結帳日 25 號 ・扣繳日 4/10</div>
+              </div>
+              <div class="acct-balance">
+                <div class="acct-bal-main negative">-$15,200</div>
+                <div class="acct-bal-sub">已出帳</div>
+              </div>
+            </div>
+            <div class="acct-item">
+              <div class="acct-icon" style="border-color:#ddd;">&#128179;</div>
+              <div class="acct-info">
+                <div class="acct-name" style="color:#888;">中信 LINE Pay 卡</div>
+                <div class="acct-detail">下期帳單（累積中）</div>
+              </div>
+              <div class="acct-balance">
+                <div class="acct-bal-main" style="color:#c47200;">-$5,300</div>
+                <div class="acct-bal-sub">未入帳</div>
+              </div>
+            </div>
+            <div class="acct-item">
+              <div class="acct-icon">&#128179;</div>
+              <div class="acct-info">
+                <div class="acct-name">國泰 CUBE 卡</div>
+                <div class="acct-detail">結帳日 15 號 ・扣繳日 4/2</div>
+              </div>
+              <div class="acct-balance">
+                <div class="acct-bal-main negative">-$8,300</div>
+                <div class="acct-bal-sub">已出帳</div>
+              </div>
+            </div>
+            <div class="acct-item">
+              <div class="acct-icon" style="border-color:#ddd;">&#128179;</div>
+              <div class="acct-info">
+                <div class="acct-name" style="color:#888;">國泰 CUBE 卡</div>
+                <div class="acct-detail">下期帳單（累積中）</div>
+              </div>
+              <div class="acct-balance">
+                <div class="acct-bal-main" style="color:#c47200;">-$3,500</div>
+                <div class="acct-bal-sub">未入帳</div>
+              </div>
+            </div>
+            <div class="acct-item" style="border-bottom:none;padding-bottom:0;">
+              <div class="acct-info" style="text-align:right;">
+                <div class="acct-detail">信用卡合計（已出帳 + 未入帳）</div>
+              </div>
+              <div class="acct-balance">
+                <div class="acct-bal-main negative" style="font-size:17px;">-$32,300</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 儲蓄目標 -->
+      <div>
+        <div class="section-title">儲蓄目標</div>
+        <div class="goals-grid">
+          <div class="card goal-card">
+            <div class="goal-header">
+              <div>
+                <div class="goal-title">日本京都</div>
+                <div class="goal-dates">2026/10/01 出發 ・還有 187 天</div>
+              </div>
+              <div class="goal-emoji">&#127471;&#127477;</div>
+            </div>
+            <div style="margin-top:4px;"><span class="fi-cycle">旅遊</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:68%"></div></div>
+            <div class="progress-labels">
+              <span style="font-weight:600;">$27,200 / $40,000</span>
+              <span class="status-badge status-on-track" style="font-size:11px;padding:2px 8px;margin:0;">充裕</span>
+            </div>
+          </div>
+          <div class="card goal-card">
+            <div class="goal-header">
+              <div>
+                <div class="goal-title">泰國曼谷</div>
+                <div class="goal-dates">2027/02/15 出發 ・還有 324 天</div>
+              </div>
+              <div class="goal-emoji">&#127481;&#127469;</div>
+            </div>
+            <div style="margin-top:4px;"><span class="fi-cycle">旅遊</span></div>
+            <div class="progress-bar"><div class="progress-fill behind" style="width:35%"></div></div>
+            <div class="progress-labels">
+              <span style="font-weight:600;">$15,600 / $45,000</span>
+              <span class="status-badge status-behind" style="font-size:11px;padding:2px 8px;margin:0;">需加油</span>
+            </div>
+          </div>
+          <div class="card goal-card" style="opacity:0.75;">
+            <div class="goal-header">
+              <div>
+                <div class="goal-title">MacBook Pro</div>
+                <div class="goal-dates">無期限 ・有閒錢再存</div>
+              </div>
+              <div class="goal-emoji">&#128187;</div>
+            </div>
+            <div style="margin-top:4px;"><span class="fi-cycle">購物</span><span class="fi-cycle" style="background:#f0f0ff;">不佔月預算</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:45%"></div></div>
+            <div class="progress-labels">
+              <span style="font-weight:600;">$36,000 / $80,000</span>
+              <span class="status-badge status-info" style="font-size:11px;padding:2px 8px;margin:0;">慢慢存</span>
+            </div>
+          </div>
+          <div class="card goal-card" style="opacity:0.75;">
+            <div class="goal-header">
+              <div>
+                <div class="goal-title">緊急預備金</div>
+                <div class="goal-dates">無期限 ・目標 6 個月生活費</div>
+              </div>
+              <div class="goal-emoji">&#128737;</div>
+            </div>
+            <div style="margin-top:4px;"><span class="fi-cycle">儲蓄</span><span class="fi-cycle" style="background:#f0f0ff;">不佔月預算</span></div>
+            <div class="progress-bar"><div class="progress-fill ok" style="width:60%"></div></div>
+            <div class="progress-labels">
+              <span style="font-weight:600;">$108,000 / $180,000</span>
+              <span class="status-badge status-on-track" style="font-size:11px;padding:2px 8px;margin:0;">穩定累積</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 模式切換 -->
+      <div class="cf-toggle">
+        <div class="cf-toggle-btn">月預算總覽</div>
+        <div class="cf-toggle-btn active">現金流預測</div>
+      </div>
+
+      <!-- 現金流預測 -->
+      <div class="card">
+        <div class="card-label">現金流預測 ・中國信託 活存</div>
+        <div class="card-sub" style="margin-bottom:12px;">逐筆模擬未來扣款，確保每個時間點餘額都足夠</div>
+
+        <!-- Header -->
+        <div class="cf-row" style="border-bottom:2px solid #eee;font-weight:600;font-size:12px;color:#888;">
+          <div class="cf-date">日期</div>
+          <div class="cf-desc">項目</div>
+          <div class="cf-delta">異動</div>
+          <div class="cf-balance">餘額</div>
+          <div class="cf-check"></div>
+        </div>
+
+        <!-- Today -->
+        <div class="cf-row is-today">
+          <div class="cf-date">3/29</div>
+          <div class="cf-desc" style="font-weight:600;">目前餘額</div>
+          <div class="cf-delta">—</div>
+          <div class="cf-balance safe">$102,800</div>
+          <div class="cf-check">&#10003;</div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-date">4/01</div>
+          <div class="cf-desc">健身房（月繳）</div>
+          <div class="cf-delta expense">-$1,300</div>
+          <div class="cf-balance safe">$101,500</div>
+          <div class="cf-check">&#10003;</div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-date">4/02</div>
+          <div class="cf-desc">國泰 CUBE 卡帳單</div>
+          <div class="cf-delta expense">-$8,300</div>
+          <div class="cf-balance safe">$93,200</div>
+          <div class="cf-check">&#10003;</div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-date">4/05</div>
+          <div class="cf-desc">壽險保費（年繳預留扣款）</div>
+          <div class="cf-delta expense">-$3,000</div>
+          <div class="cf-balance safe">$90,200</div>
+          <div class="cf-check">&#10003;</div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-date">4/10</div>
+          <div class="cf-desc">中信 LINE Pay 卡帳單</div>
+          <div class="cf-delta expense">-$15,200</div>
+          <div class="cf-balance safe">$75,000</div>
+          <div class="cf-check">&#10003;</div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-date">4/12</div>
+          <div class="cf-desc">Netflix + Spotify（月繳）</div>
+          <div class="cf-delta expense">-$500</div>
+          <div class="cf-balance safe">$74,500</div>
+          <div class="cf-check">&#10003;</div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-date">4/15</div>
+          <div class="cf-desc">手機網路（月繳）</div>
+          <div class="cf-delta expense">-$1,200</div>
+          <div class="cf-balance safe">$73,300</div>
+          <div class="cf-check">&#10003;</div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-date">4/20</div>
+          <div class="cf-desc">水費（雙月繳）</div>
+          <div class="cf-delta expense">-$1,600</div>
+          <div class="cf-balance safe">$71,700</div>
+          <div class="cf-check">&#10003;</div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-date">4/25</div>
+          <div class="cf-desc" style="color:#2d8a2d;font-weight:600;">薪水入帳</div>
+          <div class="cf-delta income">+$50,000</div>
+          <div class="cf-balance safe">$121,700</div>
+          <div class="cf-check">&#10003;</div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-date">4/28</div>
+          <div class="cf-desc">房租（月繳）</div>
+          <div class="cf-delta expense">-$10,000</div>
+          <div class="cf-balance safe">$111,700</div>
+          <div class="cf-check">&#10003;</div>
+        </div>
+
+        <div class="cf-safe-line">
+          &#128994; 未來 30 天所有扣款時間點餘額皆安全 ・最低點 4/20 $71,700
+        </div>
+      </div>
+
+      <!-- 圖表 -->
+      <div class="card" style="height:200px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:14px;background:#fafafa;">
+        ── 折線圖：未來 30 天餘額預測曲線（含安全水位線）──
+      </div>
+
+      <!-- 桌面版按鈕 -->
+      <div class="action-btns">
+        <div class="action-btn">+ 記一筆花費</div>
+        <div class="action-btn">+ 存入儲蓄目標</div>
+        <div class="action-btn">+ 更新帳戶餘額</div>
+      </div>
+    </div>
+
+    <!-- ===== 側欄 ===== -->
+    <div class="side-col">
+
+      <!-- 即將扣繳時間軸 -->
+      <div class="card">
+        <div class="section-title" style="padding-top:0;">即將扣繳</div>
+        <div class="timeline">
+          <div class="tl-item done">
+            <div class="tl-date">
+              <div class="tl-day">28</div>
+              <div class="tl-month">3月</div>
+            </div>
+            <div class="tl-content">
+              <div class="tl-name">房租</div>
+              <div class="tl-desc">自動轉帳 ・已扣</div>
+            </div>
+            <div class="tl-amount" style="color:#999;text-decoration:line-through;">$10,000</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-date">
+              <div class="tl-day">2</div>
+              <div class="tl-month">4月</div>
+            </div>
+            <div class="tl-content">
+              <div class="tl-name">國泰 CUBE 卡帳單</div>
+              <div class="tl-desc">自動扣繳 ・中國信託</div>
+            </div>
+            <div class="tl-amount">-$8,300</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-date">
+              <div class="tl-day">5</div>
+              <div class="tl-month">4月</div>
+            </div>
+            <div class="tl-content">
+              <div class="tl-name">保險費</div>
+              <div class="tl-desc">自動扣繳 ・中國信託</div>
+            </div>
+            <div class="tl-amount">-$3,000</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-date">
+              <div class="tl-day">10</div>
+              <div class="tl-month">4月</div>
+            </div>
+            <div class="tl-content">
+              <div class="tl-name">中信 LINE Pay 卡帳單</div>
+              <div class="tl-desc">自動扣繳 ・中國信託</div>
+            </div>
+            <div class="tl-amount">-$15,200</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-date">
+              <div class="tl-day">15</div>
+              <div class="tl-month">4月</div>
+            </div>
+            <div class="tl-content">
+              <div class="tl-name">手機網路</div>
+              <div class="tl-desc">中華電信 ・信用卡扣繳</div>
+            </div>
+            <div class="tl-amount">-$1,200</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 繳費預留基金 -->
+      <div class="card">
+        <div class="section-title" style="padding-top:0;">繳費預留基金</div>
+        <div class="reserve-summary">
+          <div class="reserve-label">已累積預留金</div>
+          <div class="reserve-row">
+            <span class="reserve-amount">$13,800</span>
+            <span class="reserve-target">每月攤提 $5,800</span>
+          </div>
+        </div>
+
+        <!-- 年繳 -->
+        <div class="fixed-item">
+          <div class="fi-top">
+            <div><span class="fi-name">壽險</span><span class="fi-cycle">年繳</span></div>
+            <span class="fi-amount">$36,000/年</span>
+          </div>
+          <div class="fi-detail">到期 2026/12/01 ・每月預留 $3,000</div>
+          <div class="fi-progress">
+            <div class="fi-progress-bar"><div class="fi-progress-fill ok" style="width:25%;"></div></div>
+            <div class="fi-progress-labels">
+              <span>已存 $9,000</span>
+              <span>還差 $27,000</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 半年繳 -->
+        <div class="fixed-item">
+          <div class="fi-top">
+            <div><span class="fi-name">車險</span><span class="fi-cycle">半年繳</span></div>
+            <span class="fi-amount">$12,000/半年</span>
+          </div>
+          <div class="fi-detail">到期 2026/07/15 ・每月預留 $2,000</div>
+          <div class="fi-progress">
+            <div class="fi-progress-bar"><div class="fi-progress-fill" style="width:33%;"></div></div>
+            <div class="fi-progress-labels">
+              <span>已存 $4,000</span>
+              <span>還差 $8,000（剩 3.5 個月）</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 雙月繳 -->
+        <div class="fixed-item">
+          <div class="fi-top">
+            <div><span class="fi-name">水費</span><span class="fi-cycle">雙月繳</span></div>
+            <span class="fi-amount">$1,600/2月</span>
+          </div>
+          <div class="fi-detail">到期 2026/04/20 ・每月預留 $800</div>
+          <div class="fi-progress">
+            <div class="fi-progress-bar"><div class="fi-progress-fill ok" style="width:100%;"></div></div>
+            <div class="fi-progress-labels">
+              <span>已存 $800</span>
+              <span style="color:#2d8a2d;">到期時足夠</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 月繳固定支出 -->
+      <div class="card">
+        <div class="section-title" style="padding-top:0;">月繳固定支出 $13,000</div>
+        <div class="fixed-item">
+          <div class="fi-top">
+            <div><span class="fi-name">房租</span><span class="fi-cycle">月繳</span></div>
+            <span class="fi-amount">$10,000</span>
+          </div>
+          <div class="fi-detail">每月 28 號 ・自動轉帳</div>
+        </div>
+        <div class="fixed-item">
+          <div class="fi-top">
+            <div><span class="fi-name">健身房</span><span class="fi-cycle">月繳</span></div>
+            <span class="fi-amount">$1,300</span>
+          </div>
+          <div class="fi-detail">每月 1 號 ・信用卡扣繳</div>
+        </div>
+        <div class="fixed-item">
+          <div class="fi-top">
+            <div><span class="fi-name">手機網路</span><span class="fi-cycle">月繳</span></div>
+            <span class="fi-amount">$1,200</span>
+          </div>
+          <div class="fi-detail">每月 15 號 ・信用卡扣繳</div>
+        </div>
+        <div class="fixed-item">
+          <div class="fi-top">
+            <div><span class="fi-name">Netflix + Spotify</span><span class="fi-cycle">月繳</span></div>
+            <span class="fi-amount">$500</span>
+          </div>
+          <div class="fi-detail">每月 12 號 ・信用卡扣繳</div>
+        </div>
+      </div>
+
+      <!-- 智慧建議 -->
+      <div>
+        <div class="section-title">智慧建議</div>
+        <div class="suggestions-stack">
+          <div class="suggestion">&#128161; 車險 7/15 到期，目前預留進度正常，持續每月存 $2,000 即可</div>
+          <div class="suggestion">&#128200; 4/10 信用卡扣繳後帳戶剩 $79,300，所有預留基金安全</div>
+          <div class="suggestion">&#128187; MacBook 再存 4 個月就到 50%，考慮趁週年慶入手？</div>
+          <div class="suggestion">&#127881; 京都旅費照目前速度 9 月中能存滿</div>
+        </div>
+      </div>
+
+      <!-- 最近紀錄 -->
+      <div class="card">
+        <div class="section-title" style="padding-top:0;">最近紀錄</div>
+        <div class="tx-item">
+          <div><div class="tx-note">午餐 - 牛肉麵</div><div class="tx-date">03/28 ・LINE Pay 卡</div></div>
+          <div class="tx-amount expense-amt">-$180</div>
+        </div>
+        <div class="tx-item">
+          <div><div class="tx-note">加油</div><div class="tx-date">03/27 ・CUBE 卡</div></div>
+          <div class="tx-amount expense-amt">-$1,200</div>
+        </div>
+        <div class="tx-item">
+          <div><div class="tx-note">薪水入帳</div><div class="tx-date">03/25 ・中國信託</div></div>
+          <div class="tx-amount">+$50,000</div>
+        </div>
+        <div class="tx-item">
+          <div><div class="tx-note">轉入旅遊基金</div><div class="tx-date">03/25 ・國泰世華</div></div>
+          <div class="tx-amount expense-amt">-$7,000</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="fab">+</div>
+
+<nav class="bottom-nav">
+  <div class="nav-item active"><div class="nav-icon"></div>首頁</div>
+  <div class="nav-item"><div class="nav-icon"></div>帳戶</div>
+  <div class="nav-item"><div class="nav-icon"></div>儲蓄目標</div>
+  <div class="nav-item"><div class="nav-icon"></div>花費</div>
+</nav>
+
+</body>
+</html>

@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Money - 設計風格預覽</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Kosugi+Maru&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════
+   RESET & BASE
+   ══════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body {
+  font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #F0EFEB;
+  color: #333;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ══════════════════════════════════════════════════
+   TOP NAVBAR
+   ══════════════════════════════════════════════════ */
+.navbar {
+  position: sticky; top: 0; z-index: 1000;
+  background: rgba(240,239,235,0.82);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  padding: 0 24px;
+}
+.navbar-inner {
+  max-width: 1400px; margin: 0 auto;
+  display: flex; align-items: center; gap: 8px;
+  height: 60px; overflow-x: auto;
+  scrollbar-width: none;
+}
+.navbar-inner::-webkit-scrollbar { display: none; }
+.nav-logo {
+  font-family: 'Zen Maru Gothic', sans-serif;
+  font-weight: 900; font-size: 18px;
+  white-space: nowrap; letter-spacing: -0.5px;
+  color: #222; margin-right: 12px; flex-shrink: 0;
+}
+.nav-logo span { opacity: 0.35; font-weight: 400; font-size: 12px; margin-left: 6px; font-family: 'Noto Sans TC', sans-serif; }
+.nav-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 999px;
+  font-size: 13px; font-weight: 500;
+  text-decoration: none; color: #666;
+  white-space: nowrap; transition: all 0.25s;
+  border: 1px solid transparent; flex-shrink: 0;
+}
+.nav-link:hover { background: rgba(0,0,0,0.06); color: #222; }
+.nav-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════════
+   HERO
+   ══════════════════════════════════════════════════ */
+.hero {
+  text-align: center; padding: 72px 24px 56px;
+  max-width: 720px; margin: 0 auto;
+}
+.hero h1 {
+  font-family: 'Zen Maru Gothic', sans-serif;
+  font-size: clamp(26px, 5vw, 40px);
+  font-weight: 900; color: #222;
+  letter-spacing: -1px; margin-bottom: 14px;
+}
+.hero p {
+  font-size: clamp(14px, 2.5vw, 16px);
+  color: #888; max-width: 500px;
+  margin: 0 auto; line-height: 1.9;
+}
+
+/* ══════════════════════════════════════════════════
+   SCHEME SECTION
+   ══════════════════════════════════════════════════ */
+.scheme-section {
+  max-width: 1400px; margin: 0 auto 80px;
+  padding: 0 24px;
+}
+.scheme-outer {
+  background: #fff;
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 4px 40px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+}
+.scheme-layout {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  min-height: 900px;
+}
+
+/* Left info panel */
+.scheme-info {
+  padding: 48px 44px;
+  display: flex; flex-direction: column;
+}
+.scheme-number {
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 2.5px; text-transform: uppercase;
+  opacity: 0.3; margin-bottom: 10px;
+}
+.scheme-title {
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 700; margin-bottom: 8px;
+  letter-spacing: -0.5px;
+}
+.scheme-desc {
+  font-size: 14px; opacity: 0.5; margin-bottom: 20px; line-height: 1.7;
+}
+.scheme-mood {
+  display: inline-block; font-size: 12px;
+  padding: 5px 14px; border-radius: 999px;
+  background: rgba(0,0,0,0.04); color: #666;
+  margin-bottom: 28px; align-self: flex-start;
+}
+
+/* Swatches */
+.swatch-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 28px; }
+.swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.swatch-color {
+  width: 50px; height: 50px; border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  cursor: pointer;
+}
+.swatch-color:hover { transform: scale(1.15); }
+.swatch-label { font-size: 10px; font-family: 'SF Mono', 'Courier New', monospace; color: #aaa; }
+.swatch-name { font-size: 10px; color: #bbb; }
+
+/* Typography */
+.type-preview {
+  padding: 22px 0; border-top: 1px solid rgba(0,0,0,0.06); margin-bottom: 8px;
+}
+.type-label {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: #bbb; margin-bottom: 14px;
+}
+.type-samples { display: flex; flex-direction: column; gap: 12px; }
+.type-sample-item span {
+  display: block; font-size: 11px; color: #bbb; margin-top: 3px;
+  font-family: 'Noto Sans TC', sans-serif !important;
+}
+
+/* Animation desc */
+.anim-preview {
+  padding: 22px 0; border-top: 1px solid rgba(0,0,0,0.06);
+}
+.anim-label {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: #bbb; margin-bottom: 10px;
+}
+.anim-desc {
+  font-size: 13px; color: #888; line-height: 1.8;
+}
+.anim-tag {
+  display: inline-block; font-size: 11px;
+  padding: 3px 10px; border-radius: 6px;
+  background: rgba(0,0,0,0.04); color: #888;
+  margin: 2px 4px 2px 0;
+}
+
+/* ══════════════════════════════════════════════════
+   PHONE MOCKUP (RIGHT PANEL)
+   ══════════════════════════════════════════════════ */
+.phone-container {
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px 30px;
+  position: relative;
+}
+.phone-frame {
+  width: 375px; height: 812px;
+  border-radius: 48px;
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 2px rgba(0,0,0,0.08),
+    0 20px 60px rgba(0,0,0,0.15),
+    0 4px 16px rgba(0,0,0,0.08),
+    inset 0 0 0 1px rgba(255,255,255,0.1);
+  transform: scale(0.88);
+  transform-origin: center center;
+}
+
+/* iPhone notch (Dynamic Island style) */
+.phone-notch {
+  position: absolute; top: 12px;
+  left: 50%; transform: translateX(-50%);
+  width: 126px; height: 36px;
+  background: #000; border-radius: 20px;
+  z-index: 50;
+}
+
+/* Status bar */
+.phone-status {
+  position: relative; z-index: 40;
+  display: flex; justify-content: space-between;
+  align-items: center;
+  padding: 16px 28px 0;
+  height: 54px; font-size: 14px; font-weight: 600;
+}
+.status-time { font-size: 15px; font-weight: 700; }
+.status-icons { display: flex; gap: 5px; align-items: center; }
+.status-icons svg { width: 17px; height: 17px; }
+
+/* Phone screen */
+.phone-screen {
+  height: 100%; width: 100%;
+  overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  padding-bottom: 100px;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* iOS Large Title Nav Bar */
+.ios-nav {
+  padding: 8px 20px 4px;
+}
+.ios-nav-large {
+  font-size: 34px; font-weight: 800;
+  letter-spacing: -0.5px;
+  padding: 4px 0 12px;
+}
+
+/* iOS Segmented Control */
+.ios-segment {
+  display: flex; margin: 0 20px 16px;
+  border-radius: 9px; padding: 2px;
+  position: relative;
+}
+.ios-segment-btn {
+  flex: 1; text-align: center;
+  padding: 7px 0; font-size: 13px; font-weight: 600;
+  border: none; background: none;
+  cursor: pointer; position: relative; z-index: 2;
+  transition: color 0.25s;
+  border-radius: 7px;
+  -webkit-tap-highlight-color: transparent;
+}
+.ios-segment-slider {
+  position: absolute; top: 2px; bottom: 2px;
+  width: 50%; border-radius: 7px;
+  transition: left 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  z-index: 1;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+/* Content sections in phone */
+.phone-content { padding: 0 20px; }
+.phone-balance-section { padding: 0 20px 8px; }
+.phone-balance-amount {
+  font-size: 42px; font-weight: 800;
+  letter-spacing: -1.5px;
+  line-height: 1.1;
+}
+.phone-balance-sub {
+  font-size: 15px; opacity: 0.5;
+  margin-top: 4px; font-weight: 500;
+}
+
+/* Savings card */
+.phone-card {
+  border-radius: 14px; padding: 18px;
+  margin: 8px 20px 10px;
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.phone-card:active { transform: scale(0.97); }
+.phone-card-title {
+  font-size: 17px; font-weight: 700;
+  margin-bottom: 2px;
+}
+.phone-card-subtitle {
+  font-size: 13px; opacity: 0.55;
+  margin-bottom: 12px;
+}
+.phone-progress-bar {
+  width: 100%; height: 8px;
+  border-radius: 999px; overflow: hidden;
+  position: relative;
+}
+.phone-progress-fill {
+  height: 100%; border-radius: 999px;
+  width: 0%; /* animated via JS */
+  transition: width 1.5s cubic-bezier(0.25,0.46,0.45,0.94);
+  position: relative;
+}
+.phone-progress-fill::after {
+  content: ''; position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%);
+  animation: shimmer 2.5s infinite;
+}
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.phone-progress-info {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-top: 8px;
+}
+.phone-progress-text { font-size: 12px; opacity: 0.55; }
+.phone-progress-pct { font-size: 14px; font-weight: 700; }
+
+/* Cash flow section (hidden by default, toggled by segment) */
+.phone-cashflow { padding: 0 20px; display: none; }
+.cashflow-item {
+  display: flex; justify-content: space-between;
+  align-items: center; padding: 14px 0;
+  border-bottom: 0.5px solid rgba(0,0,0,0.06);
+}
+.cashflow-label { font-size: 14px; font-weight: 500; }
+.cashflow-amount { font-size: 15px; font-weight: 700; }
+
+/* Expense row */
+.phone-expense {
+  display: flex; align-items: center;
+  gap: 14px; padding: 14px 20px;
+  cursor: pointer; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  border-radius: 14px; margin: 0 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+.phone-expense:active { transform: scale(0.97); }
+.phone-expense-icon {
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+.phone-expense-info { flex: 1; min-width: 0; }
+.phone-expense-name { font-size: 15px; font-weight: 600; }
+.phone-expense-cat { font-size: 12px; opacity: 0.45; margin-top: 1px; }
+.phone-expense-amt {
+  font-size: 16px; font-weight: 700;
+  white-space: nowrap; flex-shrink: 0;
+}
+
+/* Section header in phone */
+.phone-section-header {
+  font-size: 13px; font-weight: 600;
+  opacity: 0.4; padding: 14px 20px 8px;
+  letter-spacing: 0.5px;
+}
+
+/* iOS Tab Bar */
+.phone-tabbar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 84px; z-index: 40;
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-top: 0.5px solid rgba(0,0,0,0.08);
+  display: flex; align-items: flex-start;
+  justify-content: space-around;
+  padding-top: 8px;
+  padding-bottom: 30px;
+}
+.tab-item {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 3px;
+  font-size: 10px; font-weight: 500;
+  opacity: 0.45; cursor: pointer;
+  transition: opacity 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-item.active { opacity: 1; }
+.tab-item svg { width: 24px; height: 24px; }
+.tab-item span { margin-top: 1px; }
+
+/* Floating add button */
+.phone-fab {
+  position: absolute;
+  bottom: 96px; right: 24px;
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 45;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  cursor: pointer;
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  -webkit-tap-highlight-color: transparent;
+}
+.phone-fab:active { transform: scale(0.9); }
+.phone-fab:hover { transform: scale(1.08); }
+.phone-fab svg { width: 24px; height: 24px; }
+
+/* ══════════════════════════════════════════════════
+   SCHEME CAPTION (below phone)
+   ══════════════════════════════════════════════════ */
+.scheme-caption {
+  text-align: center; padding: 16px 20px 24px;
+  font-size: 12px; color: #aaa;
+  border-top: 1px solid rgba(0,0,0,0.04);
+}
+.scheme-caption strong { color: #888; font-weight: 600; }
+
+/* ══════════════════════════════════════════════════
+   ANIMATIONS
+   ══════════════════════════════════════════════════ */
+/* Watercolor fade */
+@keyframes watercolor-in {
+  0% { opacity: 0; filter: blur(8px); transform: scale(0.96); }
+  100% { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+/* Warm pour */
+@keyframes warm-pour {
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+/* Page flip */
+@keyframes page-flip {
+  0% { opacity: 0; transform: perspective(600px) rotateY(-8deg) translateX(-10px); }
+  100% { opacity: 1; transform: perspective(600px) rotateY(0) translateX(0); }
+}
+/* Sunshine radial */
+@keyframes sunshine-in {
+  0% { opacity: 0; transform: scale(0.92); }
+  50% { opacity: 0.8; }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* Lavender float */
+@keyframes lavender-float {
+  0% { opacity: 0; transform: translateY(8px); }
+  60% { opacity: 1; transform: translateY(-3px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+/* Leaf fall */
+@keyframes leaf-fall {
+  0% { opacity: 0; transform: translateY(-8px) rotate(-2deg); }
+  70% { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0) rotate(0); }
+}
+
+/* Counter animation helper */
+.count-up { transition: none; }
+
+/* ══════════════════════════════════════════════════
+   STATIONERY GRID BG
+   ══════════════════════════════════════════════════ */
+.stationery-phone-bg::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,0,0,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.025) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none; z-index: 0;
+}
+
+/* ══════════════════════════════════════════════════
+   FOOTER
+   ══════════════════════════════════════════════════ */
+.footer {
+  text-align: center; padding: 40px 24px 72px;
+  color: #bbb; font-size: 13px;
+}
+
+/* ══════════════════════════════════════════════════
+   RESPONSIVE
+   ══════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .scheme-layout {
+    grid-template-columns: 1fr;
+  }
+  .phone-container {
+    padding: 30px 16px 40px;
+  }
+  .phone-frame {
+    transform: scale(0.82);
+  }
+  .scheme-info {
+    padding: 32px 28px;
+  }
+}
+@media (max-width: 600px) {
+  .scheme-info { padding: 24px 20px; }
+  .phone-frame { transform: scale(0.72); }
+  .phone-container { padding: 10px 0 20px; }
+  .hero { padding: 48px 20px 36px; }
+  .swatch-color { width: 40px; height: 40px; border-radius: 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ Navbar ════════════════ -->
+<nav class="navbar">
+  <div class="navbar-inner">
+    <div class="nav-logo">My Money <span>設計風格預覽</span></div>
+    <a href="#scheme1" class="nav-link"><span class="nav-dot" style="background:#FF8A8A"></span>柔和水彩</a>
+    <a href="#scheme2" class="nav-link"><span class="nav-dot" style="background:#C8956C"></span>奶茶色系</a>
+    <a href="#scheme3" class="nav-link"><span class="nav-dot" style="background:#FF6B6B"></span>文具風</a>
+    <a href="#scheme4" class="nav-link"><span class="nav-dot" style="background:#F59E0B"></span>蜂蜜檸檬</a>
+    <a href="#scheme5" class="nav-link"><span class="nav-dot" style="background:#8B5CF6"></span>薰衣草牛奶</a>
+    <a href="#scheme6" class="nav-link"><span class="nav-dot" style="background:#4D7C4A"></span>森林小屋</a>
+  </div>
+</nav>
+
+<!-- ════════════════ Hero ════════════════ -->
+<section class="hero">
+  <h1>My Money 設計風格提案</h1>
+  <p>六種溫暖可愛的設計方向，融合 iOS Human Interface Guidelines，<br>為你的個人財務管理帶來好心情。</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     SCHEME 1 - 柔和水彩
+     ════════════════════════════════════════════════════════════ -->
+<section class="scheme-section" id="scheme1">
+<div class="scheme-outer">
+  <div class="scheme-layout">
+    <!-- Left Info -->
+    <div class="scheme-info">
+      <div class="scheme-number">Scheme 01</div>
+      <div class="scheme-title" style="font-family:'Zen Maru Gothic',sans-serif; color:#2D3436;">柔和水彩</div>
+      <div class="scheme-desc">淡水彩色調 + iOS 毛玻璃 nav bar，夢幻又精緻</div>
+      <div class="scheme-mood">可愛的手帳 + iOS 的精緻</div>
+
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background:#FFF5F5"></div><div class="swatch-label">#FFF5F5</div><div class="swatch-name">背景</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#FF8A8A"></div><div class="swatch-label">#FF8A8A</div><div class="swatch-name">粉紅重點</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#FFD4A0"></div><div class="swatch-label">#FFD4A0</div><div class="swatch-name">暖黃</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#A8D8EA"></div><div class="swatch-label">#A8D8EA</div><div class="swatch-name">淺藍</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#2D3436"></div><div class="swatch-label">#2D3436</div><div class="swatch-name">文字</div></div>
+      </div>
+
+      <div class="type-preview">
+        <div class="type-label">字型搭配</div>
+        <div class="type-samples">
+          <div class="type-sample-item"><div style="font-family:'Zen Maru Gothic',sans-serif; font-size:22px; font-weight:700; color:#2D3436;">我的記帳日記</div><span>Zen Maru Gothic / 標題</span></div>
+          <div class="type-sample-item"><div style="font-family:'Noto Sans TC',sans-serif; font-size:14px; color:#2D3436;">今天花了一杯拿鐵的錢，心情很好。</div><span>Noto Sans TC / 內文</span></div>
+          <div class="type-sample-item"><div style="font-family:'Zen Maru Gothic',sans-serif; font-size:26px; font-weight:700; color:#FF8A8A;">$89,700</div><span>Zen Maru Gothic / 數字</span></div>
+        </div>
+      </div>
+
+      <div class="anim-preview">
+        <div class="anim-label">動畫特色</div>
+        <div class="anim-desc">
+          <span class="anim-tag">水彩暈開漸入</span>
+          <span class="anim-tag">iOS 毛玻璃導覽</span>
+          <span class="anim-tag">spring 彈跳動畫</span>
+          <span class="anim-tag">計數器動畫</span>
+          <br style="margin-top:6px">
+          卡片載入時像水彩暈開般柔焦後逐漸清晰，搭配 iOS 標準的彈跳回饋。
+        </div>
+      </div>
+    </div>
+
+    <!-- Phone -->
+    <div class="phone-container" style="background: linear-gradient(180deg, #FFF5F5 0%, #FFE8E8 100%);">
+      <div class="phone-frame" style="background:#FFF5F5;" data-scheme="1">
+        <!-- Notch -->
+        <div class="phone-notch"></div>
+        <!-- Status bar -->
+        <div class="phone-status" style="color:#2D3436;">
+          <div class="status-time">9:41</div>
+          <div class="status-icons">
+            <svg viewBox="0 0 17 12" fill="currentColor"><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1zm3.5-1h1.5v12.5h-1.5A1 1 0 0111.5 11.5V1a1 1 0 011-1z" opacity="0.35"/><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1z"/></svg>
+            <svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 1.6A8.7 8.7 0 0115.4.1l.3.3a.5.5 0 010 .7A8.2 8.2 0 008 4.2 8.2 8.2 0 00.3 1.1a.5.5 0 010-.7L.6.1A8.7 8.7 0 018 1.6zm0 3a5.6 5.6 0 014.7 1A.5.5 0 0112.4 6 5.1 5.1 0 008 7.2 5.1 5.1 0 003.6 6a.5.5 0 01-.3-.5A5.6 5.6 0 018 4.6zM9.2 9a1.2 1.2 0 11-2.4 0 1.2 1.2 0 012.4 0z"/></svg>
+            <svg viewBox="0 0 25 12" fill="currentColor"><rect x="0" y="1" width="21" height="10" rx="2" stroke="currentColor" stroke-width="1" fill="none" opacity="0.35"/><rect x="22" y="3.5" width="2" height="5" rx="1" opacity="0.35"/><rect x="1.5" y="2.5" width="14" height="7" rx="1" fill="currentColor"/></svg>
+          </div>
+        </div>
+        <!-- Screen -->
+        <div class="phone-screen">
+          <div class="ios-nav">
+            <div class="ios-nav-large" style="font-family:'Zen Maru Gothic',sans-serif; color:#2D3436;">My Money</div>
+          </div>
+
+          <!-- Segmented Control -->
+          <div class="ios-segment" style="background:rgba(255,138,138,0.12);" data-scheme-id="1">
+            <div class="ios-segment-slider" style="background:#fff; left:0;"></div>
+            <button class="ios-segment-btn active" style="color:#FF8A8A;" onclick="switchSegment(this, 0)">月預算總覽</button>
+            <button class="ios-segment-btn" style="color:#2D3436; opacity:0.5;" onclick="switchSegment(this, 1)">現金流預測</button>
+          </div>
+
+          <!-- Budget Overview (default) -->
+          <div class="phone-budget-view" data-view="budget">
+            <div class="phone-balance-section">
+              <div style="font-size:13px; opacity:0.5; color:#2D3436; margin-bottom:4px;">即時可用餘額</div>
+              <div class="phone-balance-amount" style="font-family:'Zen Maru Gothic',sans-serif; color:#2D3436;">
+                <span style="font-size:24px; opacity:0.6;">$</span><span class="count-target" data-target="89700">0</span>
+              </div>
+              <div class="phone-balance-sub" style="color:#2D3436;">攤提後可用 $<span class="count-target" data-target="83900">0</span></div>
+            </div>
+
+            <!-- Savings Card -->
+            <div class="phone-card" style="background:#fff; box-shadow: 0 2px 12px rgba(255,138,138,0.1);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                <div class="phone-card-title" style="font-family:'Zen Maru Gothic',sans-serif; color:#2D3436;">日本京都</div>
+                <div style="font-size:20px;">&#9961;</div>
+              </div>
+              <div class="phone-card-subtitle" style="color:#2D3436;">$27,200 / $40,000</div>
+              <div class="phone-progress-bar" style="background:rgba(255,138,138,0.12);">
+                <div class="phone-progress-fill progress-animated" data-width="68" style="background:linear-gradient(90deg, #FFD4A0, #FF8A8A);"></div>
+              </div>
+              <div class="phone-progress-info" style="color:#2D3436;">
+                <div class="phone-progress-text">儲蓄目標</div>
+                <div class="phone-progress-pct" style="color:#FF8A8A;">68%</div>
+              </div>
+            </div>
+
+            <!-- Expense -->
+            <div class="phone-section-header" style="color:#2D3436;">今日花費</div>
+            <div class="phone-expense" style="background:rgba(255,212,160,0.08);">
+              <div class="phone-expense-icon" style="background:rgba(255,212,160,0.3);">&#127836;</div>
+              <div class="phone-expense-info" style="color:#2D3436;">
+                <div class="phone-expense-name">牛肉麵</div>
+                <div class="phone-expense-cat">午餐</div>
+              </div>
+              <div class="phone-expense-amt" style="font-family:'Zen Maru Gothic',sans-serif; color:#FF8A8A;">-$180</div>
+            </div>
+          </div>
+
+          <!-- Cash Flow View (hidden) -->
+          <div class="phone-cashflow" data-view="cashflow">
+            <div class="cashflow-item" style="color:#2D3436;">
+              <div class="cashflow-label">&#128198; 本月預計收入</div>
+              <div class="cashflow-amount" style="color:#4ECDC4;">+$52,000</div>
+            </div>
+            <div class="cashflow-item" style="color:#2D3436;">
+              <div class="cashflow-label">&#128179; 本月預計支出</div>
+              <div class="cashflow-amount" style="color:#FF8A8A;">-$38,500</div>
+            </div>
+            <div class="cashflow-item" style="color:#2D3436;">
+              <div class="cashflow-label">&#128176; 預計月底餘額</div>
+              <div class="cashflow-amount" style="color:#2D3436; font-size:18px;">$103,200</div>
+            </div>
+            <div class="cashflow-item" style="color:#2D3436;">
+              <div class="cashflow-label">&#128200; 下月預估</div>
+              <div class="cashflow-amount" style="color:#A8D8EA;">$115,700</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAB -->
+        <div class="phone-fab" style="background:#FF8A8A;">
+          <svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+
+        <!-- Tab Bar -->
+        <div class="phone-tabbar" style="background:rgba(255,245,245,0.82);">
+          <div class="tab-item active" style="color:#FF8A8A;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+            <span>首頁</span>
+          </div>
+          <div class="tab-item" style="color:#2D3436;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            <span>帳戶</span>
+          </div>
+          <div class="tab-item" style="color:#2D3436;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+            <span>儲蓄目標</span>
+          </div>
+          <div class="tab-item" style="color:#2D3436;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <span>花費</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="scheme-caption">
+    <strong>方案 1：柔和水彩</strong> &nbsp;/&nbsp; iOS 水彩暈開漸入 + 毛玻璃導覽列 + spring 彈跳 &nbsp;/&nbsp; 可愛手帳 &#215; iOS 精緻
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     SCHEME 2 - 奶茶色系
+     ════════════════════════════════════════════════════════════ -->
+<section class="scheme-section" id="scheme2">
+<div class="scheme-outer">
+  <div class="scheme-layout">
+    <div class="scheme-info">
+      <div class="scheme-number">Scheme 02</div>
+      <div class="scheme-title" style="font-family:'Kosugi Maru',sans-serif; color:#3E2723;">奶茶色系</div>
+      <div class="scheme-desc">奶茶焦糖色調 + iOS 毛玻璃效果，溫暖又流暢</div>
+      <div class="scheme-mood">溫暖咖啡廳 + iOS 的流暢</div>
+
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background:#FDF6EC"></div><div class="swatch-label">#FDF6EC</div><div class="swatch-name">背景</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#C8956C"></div><div class="swatch-label">#C8956C</div><div class="swatch-name">焦糖重點</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#E8D5B7"></div><div class="swatch-label">#E8D5B7</div><div class="swatch-name">奶茶</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#F5E6D0"></div><div class="swatch-label">#F5E6D0</div><div class="swatch-name">米色</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#3E2723"></div><div class="swatch-label">#3E2723</div><div class="swatch-name">文字</div></div>
+      </div>
+
+      <div class="type-preview">
+        <div class="type-label">字型搭配</div>
+        <div class="type-samples">
+          <div class="type-sample-item"><div style="font-family:'Kosugi Maru',sans-serif; font-size:22px; color:#3E2723;">我的記帳日記</div><span>Kosugi Maru / 標題</span></div>
+          <div class="type-sample-item"><div style="font-family:'Noto Sans TC',sans-serif; font-size:14px; color:#3E2723;">今天花了一杯拿鐵的錢，心情很好。</div><span>Noto Sans TC / 內文</span></div>
+          <div class="type-sample-item"><div style="font-family:'Kosugi Maru',sans-serif; font-size:26px; color:#C8956C;">$89,700</div><span>Kosugi Maru / 數字</span></div>
+        </div>
+      </div>
+
+      <div class="anim-preview">
+        <div class="anim-label">動畫特色</div>
+        <div class="anim-desc">
+          <span class="anim-tag">奶茶注入淡入</span>
+          <span class="anim-tag">iOS 毛玻璃效果</span>
+          <span class="anim-tag">溫暖彈跳動畫</span>
+          <span class="anim-tag">計數器動畫</span>
+          <br style="margin-top:6px">
+          溫暖的淡入效果，像奶茶慢慢注入杯中，搭配 iOS 標準的流暢過渡。
+        </div>
+      </div>
+    </div>
+
+    <div class="phone-container" style="background: linear-gradient(180deg, #FDF6EC 0%, #F5E6D0 100%);">
+      <div class="phone-frame" style="background:#FDF6EC;" data-scheme="2">
+        <div class="phone-notch"></div>
+        <div class="phone-status" style="color:#3E2723;">
+          <div class="status-time">9:41</div>
+          <div class="status-icons">
+            <svg viewBox="0 0 17 12" fill="currentColor"><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1zm3.5-1h1.5v12.5h-1.5A1 1 0 0111.5 11.5V1a1 1 0 011-1z" opacity="0.35"/><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1z"/></svg>
+            <svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 1.6A8.7 8.7 0 0115.4.1l.3.3a.5.5 0 010 .7A8.2 8.2 0 008 4.2 8.2 8.2 0 00.3 1.1a.5.5 0 010-.7L.6.1A8.7 8.7 0 018 1.6zm0 3a5.6 5.6 0 014.7 1A.5.5 0 0112.4 6 5.1 5.1 0 008 7.2 5.1 5.1 0 003.6 6a.5.5 0 01-.3-.5A5.6 5.6 0 018 4.6zM9.2 9a1.2 1.2 0 11-2.4 0 1.2 1.2 0 012.4 0z"/></svg>
+            <svg viewBox="0 0 25 12" fill="currentColor"><rect x="0" y="1" width="21" height="10" rx="2" stroke="currentColor" stroke-width="1" fill="none" opacity="0.35"/><rect x="22" y="3.5" width="2" height="5" rx="1" opacity="0.35"/><rect x="1.5" y="2.5" width="14" height="7" rx="1" fill="currentColor"/></svg>
+          </div>
+        </div>
+        <div class="phone-screen">
+          <div class="ios-nav">
+            <div class="ios-nav-large" style="font-family:'Kosugi Maru',sans-serif; color:#3E2723;">My Money</div>
+          </div>
+          <div class="ios-segment" style="background:rgba(200,149,108,0.15);" data-scheme-id="2">
+            <div class="ios-segment-slider" style="background:#fff; left:0;"></div>
+            <button class="ios-segment-btn active" style="color:#C8956C;" onclick="switchSegment(this, 0)">月預算總覽</button>
+            <button class="ios-segment-btn" style="color:#3E2723; opacity:0.5;" onclick="switchSegment(this, 1)">現金流預測</button>
+          </div>
+          <div class="phone-budget-view" data-view="budget">
+            <div class="phone-balance-section">
+              <div style="font-size:13px; opacity:0.5; color:#3E2723; margin-bottom:4px;">即時可用餘額</div>
+              <div class="phone-balance-amount" style="font-family:'Kosugi Maru',sans-serif; color:#3E2723;">
+                <span style="font-size:24px; opacity:0.6;">$</span><span class="count-target" data-target="89700">0</span>
+              </div>
+              <div class="phone-balance-sub" style="color:#3E2723;">攤提後可用 $<span class="count-target" data-target="83900">0</span></div>
+            </div>
+            <div class="phone-card" style="background:#fff; box-shadow: 0 2px 12px rgba(200,149,108,0.1);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                <div class="phone-card-title" style="font-family:'Kosugi Maru',sans-serif; color:#3E2723;">日本京都</div>
+                <div style="font-size:20px;">&#9961;</div>
+              </div>
+              <div class="phone-card-subtitle" style="color:#3E2723;">$27,200 / $40,000</div>
+              <div class="phone-progress-bar" style="background:rgba(200,149,108,0.12);">
+                <div class="phone-progress-fill progress-animated" data-width="68" style="background:linear-gradient(90deg, #E8D5B7, #C8956C);"></div>
+              </div>
+              <div class="phone-progress-info" style="color:#3E2723;">
+                <div class="phone-progress-text">儲蓄目標</div>
+                <div class="phone-progress-pct" style="color:#C8956C;">68%</div>
+              </div>
+            </div>
+            <div class="phone-section-header" style="color:#3E2723;">今日花費</div>
+            <div class="phone-expense" style="background:rgba(232,213,183,0.15);">
+              <div class="phone-expense-icon" style="background:rgba(200,149,108,0.2);">&#127836;</div>
+              <div class="phone-expense-info" style="color:#3E2723;">
+                <div class="phone-expense-name">牛肉麵</div>
+                <div class="phone-expense-cat">午餐</div>
+              </div>
+              <div class="phone-expense-amt" style="font-family:'Kosugi Maru',sans-serif; color:#C8956C;">-$180</div>
+            </div>
+          </div>
+          <div class="phone-cashflow" data-view="cashflow">
+            <div class="cashflow-item" style="color:#3E2723;"><div class="cashflow-label">&#128198; 本月預計收入</div><div class="cashflow-amount" style="color:#8AAE6B;">+$52,000</div></div>
+            <div class="cashflow-item" style="color:#3E2723;"><div class="cashflow-label">&#128179; 本月預計支出</div><div class="cashflow-amount" style="color:#C8956C;">-$38,500</div></div>
+            <div class="cashflow-item" style="color:#3E2723;"><div class="cashflow-label">&#128176; 預計月底餘額</div><div class="cashflow-amount" style="color:#3E2723; font-size:18px;">$103,200</div></div>
+            <div class="cashflow-item" style="color:#3E2723;"><div class="cashflow-label">&#128200; 下月預估</div><div class="cashflow-amount" style="color:#E8D5B7;">$115,700</div></div>
+          </div>
+        </div>
+        <div class="phone-fab" style="background:#C8956C;">
+          <svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+        <div class="phone-tabbar" style="background:rgba(253,246,236,0.82);">
+          <div class="tab-item active" style="color:#C8956C;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span>首頁</span></div>
+          <div class="tab-item" style="color:#3E2723;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg><span>帳戶</span></div>
+          <div class="tab-item" style="color:#3E2723;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg><span>儲蓄目標</span></div>
+          <div class="tab-item" style="color:#3E2723;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span>花費</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="scheme-caption">
+    <strong>方案 2：奶茶色系</strong> &nbsp;/&nbsp; iOS 奶茶注入淡入 + 毛玻璃效果 + 溫暖彈跳 &nbsp;/&nbsp; 溫暖咖啡廳 &#215; iOS 流暢
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     SCHEME 3 - 文具風
+     ════════════════════════════════════════════════════════════ -->
+<section class="scheme-section" id="scheme3">
+<div class="scheme-outer">
+  <div class="scheme-layout">
+    <div class="scheme-info">
+      <div class="scheme-number">Scheme 03</div>
+      <div class="scheme-title" style="font-family:'Kosugi Maru',sans-serif; color:#2C3E50;">文具風</div>
+      <div class="scheme-desc">日本文具質感 + iOS 精緻感，背景有淡淡方格紋</div>
+      <div class="scheme-mood">打開新文具 + iOS 的互動感</div>
+
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background:#FFFEF2"></div><div class="swatch-label">#FFFEF2</div><div class="swatch-name">背景</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#FF6B6B"></div><div class="swatch-label">#FF6B6B</div><div class="swatch-name">紅色重點</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#4ECDC4"></div><div class="swatch-label">#4ECDC4</div><div class="swatch-name">薄荷綠</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#FFE66D"></div><div class="swatch-label">#FFE66D</div><div class="swatch-name">鵝黃</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#2C3E50"></div><div class="swatch-label">#2C3E50</div><div class="swatch-name">文字</div></div>
+      </div>
+
+      <div class="type-preview">
+        <div class="type-label">字型搭配</div>
+        <div class="type-samples">
+          <div class="type-sample-item"><div style="font-family:'Kosugi Maru',sans-serif; font-size:22px; color:#2C3E50;">我的記帳日記</div><span>Kosugi Maru / 標題</span></div>
+          <div class="type-sample-item"><div style="font-family:'Noto Sans TC',sans-serif; font-size:14px; color:#2C3E50;">今天花了一杯拿鐵的錢，心情很好。</div><span>Noto Sans TC / 內文</span></div>
+          <div class="type-sample-item"><div style="font-family:'Kosugi Maru',sans-serif; font-size:26px; color:#FF6B6B;">$89,700</div><span>Kosugi Maru / 數字</span></div>
+        </div>
+      </div>
+
+      <div class="anim-preview">
+        <div class="anim-label">動畫特色</div>
+        <div class="anim-desc">
+          <span class="anim-tag">筆記本翻頁過渡</span>
+          <span class="anim-tag">iOS 精緻互動</span>
+          <span class="anim-tag">方格紋背景</span>
+          <span class="anim-tag">彩色文具動感</span>
+          <br style="margin-top:6px">
+          像翻開筆記本般的頁面過渡效果，方格紋背景營造文具氛圍。
+        </div>
+      </div>
+    </div>
+
+    <div class="phone-container" style="background: linear-gradient(180deg, #FFFEF2 0%, #FFF8DC 100%);">
+      <div class="phone-frame stationery-phone-bg" style="background:#FFFEF2; position:relative;" data-scheme="3">
+        <div class="phone-notch"></div>
+        <div class="phone-status" style="color:#2C3E50; position:relative; z-index:2;">
+          <div class="status-time">9:41</div>
+          <div class="status-icons">
+            <svg viewBox="0 0 17 12" fill="currentColor"><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1zm3.5-1h1.5v12.5h-1.5A1 1 0 0111.5 11.5V1a1 1 0 011-1z" opacity="0.35"/><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1z"/></svg>
+            <svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 1.6A8.7 8.7 0 0115.4.1l.3.3a.5.5 0 010 .7A8.2 8.2 0 008 4.2 8.2 8.2 0 00.3 1.1a.5.5 0 010-.7L.6.1A8.7 8.7 0 018 1.6zm0 3a5.6 5.6 0 014.7 1A.5.5 0 0112.4 6 5.1 5.1 0 008 7.2 5.1 5.1 0 003.6 6a.5.5 0 01-.3-.5A5.6 5.6 0 018 4.6zM9.2 9a1.2 1.2 0 11-2.4 0 1.2 1.2 0 012.4 0z"/></svg>
+            <svg viewBox="0 0 25 12" fill="currentColor"><rect x="0" y="1" width="21" height="10" rx="2" stroke="currentColor" stroke-width="1" fill="none" opacity="0.35"/><rect x="22" y="3.5" width="2" height="5" rx="1" opacity="0.35"/><rect x="1.5" y="2.5" width="14" height="7" rx="1" fill="currentColor"/></svg>
+          </div>
+        </div>
+        <div class="phone-screen" style="position:relative; z-index:2;">
+          <div class="ios-nav">
+            <div class="ios-nav-large" style="font-family:'Kosugi Maru',sans-serif; color:#2C3E50;">My Money</div>
+          </div>
+          <div class="ios-segment" style="background:rgba(255,107,107,0.12);" data-scheme-id="3">
+            <div class="ios-segment-slider" style="background:#fff; left:0;"></div>
+            <button class="ios-segment-btn active" style="color:#FF6B6B;" onclick="switchSegment(this, 0)">月預算總覽</button>
+            <button class="ios-segment-btn" style="color:#2C3E50; opacity:0.5;" onclick="switchSegment(this, 1)">現金流預測</button>
+          </div>
+          <div class="phone-budget-view" data-view="budget">
+            <div class="phone-balance-section">
+              <div style="font-size:13px; opacity:0.5; color:#2C3E50; margin-bottom:4px;">即時可用餘額</div>
+              <div class="phone-balance-amount" style="font-family:'Kosugi Maru',sans-serif; color:#2C3E50;">
+                <span style="font-size:24px; opacity:0.6;">$</span><span class="count-target" data-target="89700">0</span>
+              </div>
+              <div class="phone-balance-sub" style="color:#2C3E50;">攤提後可用 $<span class="count-target" data-target="83900">0</span></div>
+            </div>
+            <div class="phone-card" style="background:#fff; box-shadow: 0 2px 12px rgba(255,107,107,0.08);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                <div class="phone-card-title" style="font-family:'Kosugi Maru',sans-serif; color:#2C3E50;">日本京都</div>
+                <div style="font-size:20px;">&#9961;</div>
+              </div>
+              <div class="phone-card-subtitle" style="color:#2C3E50;">$27,200 / $40,000</div>
+              <div class="phone-progress-bar" style="background:rgba(78,205,196,0.12);">
+                <div class="phone-progress-fill progress-animated" data-width="68" style="background:linear-gradient(90deg, #4ECDC4, #FF6B6B);"></div>
+              </div>
+              <div class="phone-progress-info" style="color:#2C3E50;">
+                <div class="phone-progress-text">儲蓄目標</div>
+                <div class="phone-progress-pct" style="color:#FF6B6B;">68%</div>
+              </div>
+            </div>
+            <div class="phone-section-header" style="color:#2C3E50;">今日花費</div>
+            <div class="phone-expense" style="background:rgba(255,230,109,0.12);">
+              <div class="phone-expense-icon" style="background:rgba(255,230,109,0.3);">&#127836;</div>
+              <div class="phone-expense-info" style="color:#2C3E50;">
+                <div class="phone-expense-name">牛肉麵</div>
+                <div class="phone-expense-cat">午餐</div>
+              </div>
+              <div class="phone-expense-amt" style="font-family:'Kosugi Maru',sans-serif; color:#FF6B6B;">-$180</div>
+            </div>
+          </div>
+          <div class="phone-cashflow" data-view="cashflow">
+            <div class="cashflow-item" style="color:#2C3E50;"><div class="cashflow-label">&#128198; 本月預計收入</div><div class="cashflow-amount" style="color:#4ECDC4;">+$52,000</div></div>
+            <div class="cashflow-item" style="color:#2C3E50;"><div class="cashflow-label">&#128179; 本月預計支出</div><div class="cashflow-amount" style="color:#FF6B6B;">-$38,500</div></div>
+            <div class="cashflow-item" style="color:#2C3E50;"><div class="cashflow-label">&#128176; 預計月底餘額</div><div class="cashflow-amount" style="color:#2C3E50; font-size:18px;">$103,200</div></div>
+            <div class="cashflow-item" style="color:#2C3E50;"><div class="cashflow-label">&#128200; 下月預估</div><div class="cashflow-amount" style="color:#4ECDC4;">$115,700</div></div>
+          </div>
+        </div>
+        <div class="phone-fab" style="background:#FF6B6B;">
+          <svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+        <div class="phone-tabbar" style="background:rgba(255,254,242,0.82);">
+          <div class="tab-item active" style="color:#FF6B6B;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span>首頁</span></div>
+          <div class="tab-item" style="color:#2C3E50;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg><span>帳戶</span></div>
+          <div class="tab-item" style="color:#2C3E50;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg><span>儲蓄目標</span></div>
+          <div class="tab-item" style="color:#2C3E50;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span>花費</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="scheme-caption">
+    <strong>方案 3：文具風</strong> &nbsp;/&nbsp; iOS 翻頁過渡 + 方格紋背景 + 彩色文具活力 &nbsp;/&nbsp; 打開新文具 &#215; iOS 互動感
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     SCHEME 4 - 蜂蜜檸檬
+     ════════════════════════════════════════════════════════════ -->
+<section class="scheme-section" id="scheme4">
+<div class="scheme-outer">
+  <div class="scheme-layout">
+    <div class="scheme-info">
+      <div class="scheme-number">Scheme 04</div>
+      <div class="scheme-title" style="font-family:'M PLUS Rounded 1c',sans-serif; color:#78350F;">蜂蜜檸檬</div>
+      <div class="scheme-desc">明亮溫暖的黃色系，像夏天的檸檬水般清爽</div>
+      <div class="scheme-mood">充滿活力的夏日午後</div>
+
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background:#FFFEF5"></div><div class="swatch-label">#FFFEF5</div><div class="swatch-name">背景</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#F59E0B"></div><div class="swatch-label">#F59E0B</div><div class="swatch-name">蜂蜜金重點</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#FCD34D"></div><div class="swatch-label">#FCD34D</div><div class="swatch-name">檸檬黃</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#FEF3C7"></div><div class="swatch-label">#FEF3C7</div><div class="swatch-name">淡黃</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#78350F"></div><div class="swatch-label">#78350F</div><div class="swatch-name">文字</div></div>
+      </div>
+
+      <div class="type-preview">
+        <div class="type-label">字型搭配</div>
+        <div class="type-samples">
+          <div class="type-sample-item"><div style="font-family:'M PLUS Rounded 1c',sans-serif; font-size:22px; font-weight:700; color:#78350F;">我的記帳日記</div><span>M PLUS Rounded 1c / 標題</span></div>
+          <div class="type-sample-item"><div style="font-family:'Noto Sans TC',sans-serif; font-size:14px; color:#78350F;">今天花了一杯拿鐵的錢，心情很好。</div><span>Noto Sans TC / 內文</span></div>
+          <div class="type-sample-item"><div style="font-family:'M PLUS Rounded 1c',sans-serif; font-size:26px; font-weight:700; color:#F59E0B;">$89,700</div><span>M PLUS Rounded 1c / 數字</span></div>
+        </div>
+      </div>
+
+      <div class="anim-preview">
+        <div class="anim-label">動畫特色</div>
+        <div class="anim-desc">
+          <span class="anim-tag">陽光放射漸入</span>
+          <span class="anim-tag">iOS 彈跳回饋</span>
+          <span class="anim-tag">明亮色彩過渡</span>
+          <span class="anim-tag">活力計數動畫</span>
+          <br style="margin-top:6px">
+          陽光般的放射漸入效果，從中心向外擴散，充滿夏日活力。
+        </div>
+      </div>
+    </div>
+
+    <div class="phone-container" style="background: linear-gradient(180deg, #FFFEF5 0%, #FEF3C7 100%);">
+      <div class="phone-frame" style="background:#FFFEF5;" data-scheme="4">
+        <div class="phone-notch"></div>
+        <div class="phone-status" style="color:#78350F;">
+          <div class="status-time">9:41</div>
+          <div class="status-icons">
+            <svg viewBox="0 0 17 12" fill="currentColor"><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1zm3.5-1h1.5v12.5h-1.5A1 1 0 0111.5 11.5V1a1 1 0 011-1z" opacity="0.35"/><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1z"/></svg>
+            <svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 1.6A8.7 8.7 0 0115.4.1l.3.3a.5.5 0 010 .7A8.2 8.2 0 008 4.2 8.2 8.2 0 00.3 1.1a.5.5 0 010-.7L.6.1A8.7 8.7 0 018 1.6zm0 3a5.6 5.6 0 014.7 1A.5.5 0 0112.4 6 5.1 5.1 0 008 7.2 5.1 5.1 0 003.6 6a.5.5 0 01-.3-.5A5.6 5.6 0 018 4.6zM9.2 9a1.2 1.2 0 11-2.4 0 1.2 1.2 0 012.4 0z"/></svg>
+            <svg viewBox="0 0 25 12" fill="currentColor"><rect x="0" y="1" width="21" height="10" rx="2" stroke="currentColor" stroke-width="1" fill="none" opacity="0.35"/><rect x="22" y="3.5" width="2" height="5" rx="1" opacity="0.35"/><rect x="1.5" y="2.5" width="14" height="7" rx="1" fill="currentColor"/></svg>
+          </div>
+        </div>
+        <div class="phone-screen">
+          <div class="ios-nav">
+            <div class="ios-nav-large" style="font-family:'M PLUS Rounded 1c',sans-serif; font-weight:800; color:#78350F;">My Money</div>
+          </div>
+          <div class="ios-segment" style="background:rgba(245,158,11,0.12);" data-scheme-id="4">
+            <div class="ios-segment-slider" style="background:#fff; left:0;"></div>
+            <button class="ios-segment-btn active" style="color:#F59E0B;" onclick="switchSegment(this, 0)">月預算總覽</button>
+            <button class="ios-segment-btn" style="color:#78350F; opacity:0.5;" onclick="switchSegment(this, 1)">現金流預測</button>
+          </div>
+          <div class="phone-budget-view" data-view="budget">
+            <div class="phone-balance-section">
+              <div style="font-size:13px; opacity:0.5; color:#78350F; margin-bottom:4px;">即時可用餘額</div>
+              <div class="phone-balance-amount" style="font-family:'M PLUS Rounded 1c',sans-serif; font-weight:800; color:#78350F;">
+                <span style="font-size:24px; opacity:0.6;">$</span><span class="count-target" data-target="89700">0</span>
+              </div>
+              <div class="phone-balance-sub" style="color:#78350F;">攤提後可用 $<span class="count-target" data-target="83900">0</span></div>
+            </div>
+            <div class="phone-card" style="background:#fff; box-shadow: 0 2px 12px rgba(245,158,11,0.1);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                <div class="phone-card-title" style="font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; color:#78350F;">日本京都</div>
+                <div style="font-size:20px;">&#9961;</div>
+              </div>
+              <div class="phone-card-subtitle" style="color:#78350F;">$27,200 / $40,000</div>
+              <div class="phone-progress-bar" style="background:rgba(245,158,11,0.1);">
+                <div class="phone-progress-fill progress-animated" data-width="68" style="background:linear-gradient(90deg, #FCD34D, #F59E0B);"></div>
+              </div>
+              <div class="phone-progress-info" style="color:#78350F;">
+                <div class="phone-progress-text">儲蓄目標</div>
+                <div class="phone-progress-pct" style="color:#F59E0B;">68%</div>
+              </div>
+            </div>
+            <div class="phone-section-header" style="color:#78350F;">今日花費</div>
+            <div class="phone-expense" style="background:rgba(252,211,77,0.1);">
+              <div class="phone-expense-icon" style="background:rgba(252,211,77,0.3);">&#127836;</div>
+              <div class="phone-expense-info" style="color:#78350F;">
+                <div class="phone-expense-name">牛肉麵</div>
+                <div class="phone-expense-cat">午餐</div>
+              </div>
+              <div class="phone-expense-amt" style="font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; color:#F59E0B;">-$180</div>
+            </div>
+          </div>
+          <div class="phone-cashflow" data-view="cashflow">
+            <div class="cashflow-item" style="color:#78350F;"><div class="cashflow-label">&#128198; 本月預計收入</div><div class="cashflow-amount" style="color:#059669;">+$52,000</div></div>
+            <div class="cashflow-item" style="color:#78350F;"><div class="cashflow-label">&#128179; 本月預計支出</div><div class="cashflow-amount" style="color:#F59E0B;">-$38,500</div></div>
+            <div class="cashflow-item" style="color:#78350F;"><div class="cashflow-label">&#128176; 預計月底餘額</div><div class="cashflow-amount" style="color:#78350F; font-size:18px;">$103,200</div></div>
+            <div class="cashflow-item" style="color:#78350F;"><div class="cashflow-label">&#128200; 下月預估</div><div class="cashflow-amount" style="color:#FCD34D;">$115,700</div></div>
+          </div>
+        </div>
+        <div class="phone-fab" style="background:#F59E0B;">
+          <svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+        <div class="phone-tabbar" style="background:rgba(255,254,245,0.82);">
+          <div class="tab-item active" style="color:#F59E0B;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span>首頁</span></div>
+          <div class="tab-item" style="color:#78350F;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg><span>帳戶</span></div>
+          <div class="tab-item" style="color:#78350F;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg><span>儲蓄目標</span></div>
+          <div class="tab-item" style="color:#78350F;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span>花費</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="scheme-caption">
+    <strong>方案 4：蜂蜜檸檬</strong> &nbsp;/&nbsp; iOS 陽光放射漸入 + 明亮色彩過渡 + 活力彈跳 &nbsp;/&nbsp; 充滿活力的夏日午後
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     SCHEME 5 - 薰衣草牛奶
+     ════════════════════════════════════════════════════════════ -->
+<section class="scheme-section" id="scheme5">
+<div class="scheme-outer">
+  <div class="scheme-layout">
+    <div class="scheme-info">
+      <div class="scheme-number">Scheme 05</div>
+      <div class="scheme-title" style="font-family:'Zen Maru Gothic',sans-serif; color:#4C1D95;">薰衣草牛奶</div>
+      <div class="scheme-desc">優雅的薰衣草紫 + 奶白色，柔美又精緻</div>
+      <div class="scheme-mood">優雅柔美的午茶時光</div>
+
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background:#FAF5FF"></div><div class="swatch-label">#FAF5FF</div><div class="swatch-name">背景</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#8B5CF6"></div><div class="swatch-label">#8B5CF6</div><div class="swatch-name">薰衣草紫重點</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#DDD6FE"></div><div class="swatch-label">#DDD6FE</div><div class="swatch-name">淡紫</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#FDF2F8"></div><div class="swatch-label">#FDF2F8</div><div class="swatch-name">粉白</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#4C1D95"></div><div class="swatch-label">#4C1D95</div><div class="swatch-name">文字</div></div>
+      </div>
+
+      <div class="type-preview">
+        <div class="type-label">字型搭配</div>
+        <div class="type-samples">
+          <div class="type-sample-item"><div style="font-family:'Zen Maru Gothic',sans-serif; font-size:22px; font-weight:700; color:#4C1D95;">我的記帳日記</div><span>Zen Maru Gothic / 標題</span></div>
+          <div class="type-sample-item"><div style="font-family:'Noto Sans TC',sans-serif; font-size:14px; color:#4C1D95;">今天花了一杯拿鐵的錢，心情很好。</div><span>Noto Sans TC / 內文</span></div>
+          <div class="type-sample-item"><div style="font-family:'Zen Maru Gothic',sans-serif; font-size:26px; font-weight:700; color:#8B5CF6;">$89,700</div><span>Zen Maru Gothic / 數字</span></div>
+        </div>
+      </div>
+
+      <div class="anim-preview">
+        <div class="anim-label">動畫特色</div>
+        <div class="anim-desc">
+          <span class="anim-tag">薰衣草浮動效果</span>
+          <span class="anim-tag">iOS 柔和彈跳</span>
+          <span class="anim-tag">輕柔搖曳漸入</span>
+          <span class="anim-tag">優雅計數動畫</span>
+          <br style="margin-top:6px">
+          輕柔的浮動效果，像薰衣草在風中搖曳，優雅柔美。
+        </div>
+      </div>
+    </div>
+
+    <div class="phone-container" style="background: linear-gradient(180deg, #FAF5FF 0%, #EDE9FE 100%);">
+      <div class="phone-frame" style="background:#FAF5FF;" data-scheme="5">
+        <div class="phone-notch"></div>
+        <div class="phone-status" style="color:#4C1D95;">
+          <div class="status-time">9:41</div>
+          <div class="status-icons">
+            <svg viewBox="0 0 17 12" fill="currentColor"><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1zm3.5-1h1.5v12.5h-1.5A1 1 0 0111.5 11.5V1a1 1 0 011-1z" opacity="0.35"/><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1z"/></svg>
+            <svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 1.6A8.7 8.7 0 0115.4.1l.3.3a.5.5 0 010 .7A8.2 8.2 0 008 4.2 8.2 8.2 0 00.3 1.1a.5.5 0 010-.7L.6.1A8.7 8.7 0 018 1.6zm0 3a5.6 5.6 0 014.7 1A.5.5 0 0112.4 6 5.1 5.1 0 008 7.2 5.1 5.1 0 003.6 6a.5.5 0 01-.3-.5A5.6 5.6 0 018 4.6zM9.2 9a1.2 1.2 0 11-2.4 0 1.2 1.2 0 012.4 0z"/></svg>
+            <svg viewBox="0 0 25 12" fill="currentColor"><rect x="0" y="1" width="21" height="10" rx="2" stroke="currentColor" stroke-width="1" fill="none" opacity="0.35"/><rect x="22" y="3.5" width="2" height="5" rx="1" opacity="0.35"/><rect x="1.5" y="2.5" width="14" height="7" rx="1" fill="currentColor"/></svg>
+          </div>
+        </div>
+        <div class="phone-screen">
+          <div class="ios-nav">
+            <div class="ios-nav-large" style="font-family:'Zen Maru Gothic',sans-serif; color:#4C1D95;">My Money</div>
+          </div>
+          <div class="ios-segment" style="background:rgba(139,92,246,0.1);" data-scheme-id="5">
+            <div class="ios-segment-slider" style="background:#fff; left:0;"></div>
+            <button class="ios-segment-btn active" style="color:#8B5CF6;" onclick="switchSegment(this, 0)">月預算總覽</button>
+            <button class="ios-segment-btn" style="color:#4C1D95; opacity:0.5;" onclick="switchSegment(this, 1)">現金流預測</button>
+          </div>
+          <div class="phone-budget-view" data-view="budget">
+            <div class="phone-balance-section">
+              <div style="font-size:13px; opacity:0.5; color:#4C1D95; margin-bottom:4px;">即時可用餘額</div>
+              <div class="phone-balance-amount" style="font-family:'Zen Maru Gothic',sans-serif; color:#4C1D95;">
+                <span style="font-size:24px; opacity:0.6;">$</span><span class="count-target" data-target="89700">0</span>
+              </div>
+              <div class="phone-balance-sub" style="color:#4C1D95;">攤提後可用 $<span class="count-target" data-target="83900">0</span></div>
+            </div>
+            <div class="phone-card" style="background:#fff; box-shadow: 0 2px 12px rgba(139,92,246,0.08);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                <div class="phone-card-title" style="font-family:'Zen Maru Gothic',sans-serif; color:#4C1D95;">日本京都</div>
+                <div style="font-size:20px;">&#9961;</div>
+              </div>
+              <div class="phone-card-subtitle" style="color:#4C1D95;">$27,200 / $40,000</div>
+              <div class="phone-progress-bar" style="background:rgba(139,92,246,0.08);">
+                <div class="phone-progress-fill progress-animated" data-width="68" style="background:linear-gradient(90deg, #DDD6FE, #8B5CF6);"></div>
+              </div>
+              <div class="phone-progress-info" style="color:#4C1D95;">
+                <div class="phone-progress-text">儲蓄目標</div>
+                <div class="phone-progress-pct" style="color:#8B5CF6;">68%</div>
+              </div>
+            </div>
+            <div class="phone-section-header" style="color:#4C1D95;">今日花費</div>
+            <div class="phone-expense" style="background:rgba(221,214,254,0.15);">
+              <div class="phone-expense-icon" style="background:rgba(221,214,254,0.4);">&#127836;</div>
+              <div class="phone-expense-info" style="color:#4C1D95;">
+                <div class="phone-expense-name">牛肉麵</div>
+                <div class="phone-expense-cat">午餐</div>
+              </div>
+              <div class="phone-expense-amt" style="font-family:'Zen Maru Gothic',sans-serif; color:#8B5CF6;">-$180</div>
+            </div>
+          </div>
+          <div class="phone-cashflow" data-view="cashflow">
+            <div class="cashflow-item" style="color:#4C1D95;"><div class="cashflow-label">&#128198; 本月預計收入</div><div class="cashflow-amount" style="color:#059669;">+$52,000</div></div>
+            <div class="cashflow-item" style="color:#4C1D95;"><div class="cashflow-label">&#128179; 本月預計支出</div><div class="cashflow-amount" style="color:#8B5CF6;">-$38,500</div></div>
+            <div class="cashflow-item" style="color:#4C1D95;"><div class="cashflow-label">&#128176; 預計月底餘額</div><div class="cashflow-amount" style="color:#4C1D95; font-size:18px;">$103,200</div></div>
+            <div class="cashflow-item" style="color:#4C1D95;"><div class="cashflow-label">&#128200; 下月預估</div><div class="cashflow-amount" style="color:#DDD6FE;">$115,700</div></div>
+          </div>
+        </div>
+        <div class="phone-fab" style="background:#8B5CF6;">
+          <svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+        <div class="phone-tabbar" style="background:rgba(250,245,255,0.82);">
+          <div class="tab-item active" style="color:#8B5CF6;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span>首頁</span></div>
+          <div class="tab-item" style="color:#4C1D95;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg><span>帳戶</span></div>
+          <div class="tab-item" style="color:#4C1D95;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg><span>儲蓄目標</span></div>
+          <div class="tab-item" style="color:#4C1D95;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span>花費</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="scheme-caption">
+    <strong>方案 5：薰衣草牛奶</strong> &nbsp;/&nbsp; iOS 薰衣草浮動效果 + 柔和搖曳漸入 + 優雅彈跳 &nbsp;/&nbsp; 優雅柔美的午茶時光
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     SCHEME 6 - 森林小屋
+     ════════════════════════════════════════════════════════════ -->
+<section class="scheme-section" id="scheme6">
+<div class="scheme-outer">
+  <div class="scheme-layout">
+    <div class="scheme-info">
+      <div class="scheme-number">Scheme 06</div>
+      <div class="scheme-title" style="font-family:'Kosugi Maru',sans-serif; color:#2C3E2C;">森林小屋</div>
+      <div class="scheme-desc">自然溫暖的森林綠 + 木質棕，療癒又安心</div>
+      <div class="scheme-mood">在森林小屋裡的安心感</div>
+
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background:#F5F5F0"></div><div class="swatch-label">#F5F5F0</div><div class="swatch-name">背景</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#4D7C4A"></div><div class="swatch-label">#4D7C4A</div><div class="swatch-name">森林綠重點</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#8B7355"></div><div class="swatch-label">#8B7355</div><div class="swatch-name">木質棕</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#D4C5A9"></div><div class="swatch-label">#D4C5A9</div><div class="swatch-name">沙色</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#2C3E2C"></div><div class="swatch-label">#2C3E2C</div><div class="swatch-name">文字</div></div>
+      </div>
+
+      <div class="type-preview">
+        <div class="type-label">字型搭配</div>
+        <div class="type-samples">
+          <div class="type-sample-item"><div style="font-family:'Kosugi Maru',sans-serif; font-size:22px; color:#2C3E2C;">我的記帳日記</div><span>Kosugi Maru / 標題</span></div>
+          <div class="type-sample-item"><div style="font-family:'Noto Sans TC',sans-serif; font-size:14px; color:#2C3E2C;">今天花了一杯拿鐵的錢，心情很好。</div><span>Noto Sans TC / 內文</span></div>
+          <div class="type-sample-item"><div style="font-family:'Kosugi Maru',sans-serif; font-size:26px; color:#4D7C4A;">$89,700</div><span>Kosugi Maru / 數字</span></div>
+        </div>
+      </div>
+
+      <div class="anim-preview">
+        <div class="anim-label">動畫特色</div>
+        <div class="anim-desc">
+          <span class="anim-tag">樹葉飄落漸入</span>
+          <span class="anim-tag">iOS 自然彈跳</span>
+          <span class="anim-tag">木質溫暖過渡</span>
+          <span class="anim-tag">療癒計數動畫</span>
+          <br style="margin-top:6px">
+          像樹葉輕輕飄落的緩和漸入效果，自然溫暖，讓人安心。
+        </div>
+      </div>
+    </div>
+
+    <div class="phone-container" style="background: linear-gradient(180deg, #F5F5F0 0%, #E8E3D8 100%);">
+      <div class="phone-frame" style="background:#F5F5F0;" data-scheme="6">
+        <div class="phone-notch"></div>
+        <div class="phone-status" style="color:#2C3E2C;">
+          <div class="status-time">9:41</div>
+          <div class="status-icons">
+            <svg viewBox="0 0 17 12" fill="currentColor"><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1zm3.5-1h1.5v12.5h-1.5A1 1 0 0111.5 11.5V1a1 1 0 011-1z" opacity="0.35"/><path d="M1 3.5h1.5v5H1a1 1 0 01-1-1v-3a1 1 0 011-1zm3.5-1h1.5v7H4.5a1 1 0 01-1-1v-5a1 1 0 011-1zm3.5-1.5h1.5v10H8a1 1 0 01-1-1V2a1 1 0 011-1z"/></svg>
+            <svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 1.6A8.7 8.7 0 0115.4.1l.3.3a.5.5 0 010 .7A8.2 8.2 0 008 4.2 8.2 8.2 0 00.3 1.1a.5.5 0 010-.7L.6.1A8.7 8.7 0 018 1.6zm0 3a5.6 5.6 0 014.7 1A.5.5 0 0112.4 6 5.1 5.1 0 008 7.2 5.1 5.1 0 003.6 6a.5.5 0 01-.3-.5A5.6 5.6 0 018 4.6zM9.2 9a1.2 1.2 0 11-2.4 0 1.2 1.2 0 012.4 0z"/></svg>
+            <svg viewBox="0 0 25 12" fill="currentColor"><rect x="0" y="1" width="21" height="10" rx="2" stroke="currentColor" stroke-width="1" fill="none" opacity="0.35"/><rect x="22" y="3.5" width="2" height="5" rx="1" opacity="0.35"/><rect x="1.5" y="2.5" width="14" height="7" rx="1" fill="currentColor"/></svg>
+          </div>
+        </div>
+        <div class="phone-screen">
+          <div class="ios-nav">
+            <div class="ios-nav-large" style="font-family:'Kosugi Maru',sans-serif; color:#2C3E2C;">My Money</div>
+          </div>
+          <div class="ios-segment" style="background:rgba(77,124,74,0.1);" data-scheme-id="6">
+            <div class="ios-segment-slider" style="background:#fff; left:0;"></div>
+            <button class="ios-segment-btn active" style="color:#4D7C4A;" onclick="switchSegment(this, 0)">月預算總覽</button>
+            <button class="ios-segment-btn" style="color:#2C3E2C; opacity:0.5;" onclick="switchSegment(this, 1)">現金流預測</button>
+          </div>
+          <div class="phone-budget-view" data-view="budget">
+            <div class="phone-balance-section">
+              <div style="font-size:13px; opacity:0.5; color:#2C3E2C; margin-bottom:4px;">即時可用餘額</div>
+              <div class="phone-balance-amount" style="font-family:'Kosugi Maru',sans-serif; color:#2C3E2C;">
+                <span style="font-size:24px; opacity:0.6;">$</span><span class="count-target" data-target="89700">0</span>
+              </div>
+              <div class="phone-balance-sub" style="color:#2C3E2C;">攤提後可用 $<span class="count-target" data-target="83900">0</span></div>
+            </div>
+            <div class="phone-card" style="background:#fff; box-shadow: 0 2px 12px rgba(77,124,74,0.08);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                <div class="phone-card-title" style="font-family:'Kosugi Maru',sans-serif; color:#2C3E2C;">日本京都</div>
+                <div style="font-size:20px;">&#9961;</div>
+              </div>
+              <div class="phone-card-subtitle" style="color:#2C3E2C;">$27,200 / $40,000</div>
+              <div class="phone-progress-bar" style="background:rgba(77,124,74,0.08);">
+                <div class="phone-progress-fill progress-animated" data-width="68" style="background:linear-gradient(90deg, #D4C5A9, #4D7C4A);"></div>
+              </div>
+              <div class="phone-progress-info" style="color:#2C3E2C;">
+                <div class="phone-progress-text">儲蓄目標</div>
+                <div class="phone-progress-pct" style="color:#4D7C4A;">68%</div>
+              </div>
+            </div>
+            <div class="phone-section-header" style="color:#2C3E2C;">今日花費</div>
+            <div class="phone-expense" style="background:rgba(212,197,169,0.15);">
+              <div class="phone-expense-icon" style="background:rgba(212,197,169,0.35);">&#127836;</div>
+              <div class="phone-expense-info" style="color:#2C3E2C;">
+                <div class="phone-expense-name">牛肉麵</div>
+                <div class="phone-expense-cat">午餐</div>
+              </div>
+              <div class="phone-expense-amt" style="font-family:'Kosugi Maru',sans-serif; color:#4D7C4A;">-$180</div>
+            </div>
+          </div>
+          <div class="phone-cashflow" data-view="cashflow">
+            <div class="cashflow-item" style="color:#2C3E2C;"><div class="cashflow-label">&#128198; 本月預計收入</div><div class="cashflow-amount" style="color:#4D7C4A;">+$52,000</div></div>
+            <div class="cashflow-item" style="color:#2C3E2C;"><div class="cashflow-label">&#128179; 本月預計支出</div><div class="cashflow-amount" style="color:#8B7355;">-$38,500</div></div>
+            <div class="cashflow-item" style="color:#2C3E2C;"><div class="cashflow-label">&#128176; 預計月底餘額</div><div class="cashflow-amount" style="color:#2C3E2C; font-size:18px;">$103,200</div></div>
+            <div class="cashflow-item" style="color:#2C3E2C;"><div class="cashflow-label">&#128200; 下月預估</div><div class="cashflow-amount" style="color:#4D7C4A;">$115,700</div></div>
+          </div>
+        </div>
+        <div class="phone-fab" style="background:#4D7C4A;">
+          <svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+        <div class="phone-tabbar" style="background:rgba(245,245,240,0.82);">
+          <div class="tab-item active" style="color:#4D7C4A;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span>首頁</span></div>
+          <div class="tab-item" style="color:#2C3E2C;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg><span>帳戶</span></div>
+          <div class="tab-item" style="color:#2C3E2C;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg><span>儲蓄目標</span></div>
+          <div class="tab-item" style="color:#2C3E2C;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span>花費</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="scheme-caption">
+    <strong>方案 6：森林小屋</strong> &nbsp;/&nbsp; iOS 樹葉飄落漸入 + 木質溫暖過渡 + 自然彈跳 &nbsp;/&nbsp; 在森林小屋裡的安心感
+  </div>
+</div>
+</section>
+
+<!-- ════════════════ Footer ════════════════ -->
+<footer class="footer">
+  My Money 設計風格預覽 &middot; 6 種 iOS 風格方案 &middot; 點擊手機畫面互動體驗
+</footer>
+
+<!-- ════════════════════════════════════════════════════════════
+     JAVASCRIPT
+     ════════════════════════════════════════════════════════════ -->
+<script>
+/* ─── Segmented Control Toggle ─── */
+function switchSegment(btn, index) {
+  const segment = btn.closest('.ios-segment');
+  const slider = segment.querySelector('.ios-segment-slider');
+  const btns = segment.querySelectorAll('.ios-segment-btn');
+  const phone = segment.closest('.phone-frame');
+
+  // Update slider position
+  slider.style.left = index === 0 ? '0' : '50%';
+
+  // Update button states
+  btns.forEach((b, i) => {
+    if (i === index) {
+      b.classList.add('active');
+      b.style.opacity = '1';
+    } else {
+      b.classList.remove('active');
+      b.style.opacity = '0.5';
+    }
+  });
+
+  // Toggle views with animation
+  const budgetView = phone.querySelector('.phone-budget-view');
+  const cashflowView = phone.querySelector('.phone-cashflow');
+
+  if (index === 0) {
+    cashflowView.style.display = 'none';
+    budgetView.style.display = 'block';
+    budgetView.style.animation = 'slideInLeft 0.35s cubic-bezier(0.34,1.56,0.64,1)';
+  } else {
+    budgetView.style.display = 'none';
+    cashflowView.style.display = 'block';
+    cashflowView.style.animation = 'slideInRight 0.35s cubic-bezier(0.34,1.56,0.64,1)';
+  }
+}
+
+/* ─── Counter Animation ─── */
+function animateCounter(el) {
+  const target = parseInt(el.getAttribute('data-target'));
+  if (!target || el.dataset.animated === 'true') return;
+  el.dataset.animated = 'true';
+
+  const duration = 1200;
+  const startTime = performance.now();
+
+  function easeOut(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const current = Math.round(easeOut(progress) * target);
+    el.textContent = current.toLocaleString();
+    if (progress < 1) requestAnimationFrame(update);
+  }
+
+  requestAnimationFrame(update);
+}
+
+/* ─── Progress Bar Animation ─── */
+function animateProgress(el) {
+  if (el.dataset.animated === 'true') return;
+  el.dataset.animated = 'true';
+  const width = el.getAttribute('data-width');
+  setTimeout(() => {
+    el.style.width = width + '%';
+  }, 200);
+}
+
+/* ─── Intersection Observer for scroll-triggered animations ─── */
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const phone = entry.target;
+      const scheme = phone.getAttribute('data-scheme');
+
+      // Animate counters
+      phone.querySelectorAll('.count-target').forEach((el, i) => {
+        setTimeout(() => animateCounter(el), i * 300);
+      });
+
+      // Animate progress bars
+      phone.querySelectorAll('.progress-animated').forEach(el => {
+        animateProgress(el);
+      });
+
+      // Scheme-specific entrance animation
+      const animations = {
+        '1': 'watercolor-in 0.8s cubic-bezier(0.34,1.56,0.64,1) forwards',
+        '2': 'warm-pour 0.7s cubic-bezier(0.25,0.46,0.45,0.94) forwards',
+        '3': 'page-flip 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards',
+        '4': 'sunshine-in 0.8s cubic-bezier(0.34,1.56,0.64,1) forwards',
+        '5': 'lavender-float 0.9s cubic-bezier(0.25,0.46,0.45,0.94) forwards',
+        '6': 'leaf-fall 0.8s cubic-bezier(0.25,0.46,0.45,0.94) forwards'
+      };
+
+      if (animations[scheme]) {
+        const cards = phone.querySelectorAll('.phone-card, .phone-expense');
+        cards.forEach((card, i) => {
+          card.style.opacity = '0';
+          setTimeout(() => {
+            card.style.animation = animations[scheme];
+          }, 400 + i * 150);
+        });
+      }
+    }
+  });
+}, { threshold: 0.3 });
+
+// Observe all phone frames
+document.querySelectorAll('.phone-frame').forEach(phone => {
+  observer.observe(phone);
+});
+
+/* ─── Slide animations (injected CSS keyframes) ─── */
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+`;
+document.head.appendChild(style);
+
+/* ─── Smooth navbar link highlighting ─── */
+const navLinks = document.querySelectorAll('.nav-link');
+const sections = document.querySelectorAll('.scheme-section');
+
+const navObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.getAttribute('id');
+      navLinks.forEach(link => {
+        link.style.background = link.getAttribute('href') === '#' + id
+          ? 'rgba(0,0,0,0.06)'
+          : '';
+      });
+    }
+  });
+}, { threshold: 0.4 });
+
+sections.forEach(section => navObserver.observe(section));
+</script>
+
+</body>
+</html>
