@@ -1,4 +1,7 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:my_money/bloc/expenses/expenses_bloc.dart';
 import 'package:my_money/theme/app_colors.dart';
 import 'package:my_money/theme/app_text_styles.dart';
 import 'package:my_money/theme/app_theme.dart';
@@ -27,8 +30,8 @@ class _ExpensesPageState extends State<ExpensesPage> {
     '訂閱',
   ];
 
-  /// Mock 交易資料
-  static const List<_MockTransaction> _transactions = [
+  /// Mock 交易資料（fallback）
+  static const List<_MockTransaction> _mockTransactions = [
     _MockTransaction(
       name: '全聯福利中心',
       icon: Icons.shopping_cart_outlined,
@@ -101,93 +104,287 @@ class _ExpensesPageState extends State<ExpensesPage> {
     ),
   ];
 
+  /// 分類對應的圖示
+  static const Map<String, IconData> _categoryIcons = {
+    '飲食': Icons.restaurant_outlined,
+    '交通': Icons.directions_car_outlined,
+    '娛樂': Icons.movie_outlined,
+    '日用品': Icons.shopping_cart_outlined,
+    '訂閱': Icons.subscriptions_outlined,
+  };
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    return SafeArea(
+      child: BlocBuilder<ExpensesBloc, ExpensesState>(
+        builder: (context, state) {
+          if (state is ExpensesLoaded) {
+            return _buildFromBloc(isDark, state);
+          }
+          // 初始 / 載入中 / 錯誤時顯示 mock 資料
+          return _buildMockContent(isDark);
+        },
+      ),
+    );
+  }
+
+  /// 從 BLoC 資料建立頁面
+  Widget _buildFromBloc(bool isDark, ExpensesLoaded state) {
+    final transactions = state.transactions;
+    final summary = state.monthlySummary;
+
     // 篩選交易
-    final filtered = _selectedCategory == null || _selectedCategory == '全部'
-        ? _transactions
-        : _transactions
+    final filtered = _selectedCategory == null
+        ? transactions
+        : transactions
               .where((t) => t.category == _selectedCategory)
               .toList();
 
-    return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-          // 大標題
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppTheme.spacingMd,
-                AppTheme.spacingLg,
-                AppTheme.spacingMd,
-                AppTheme.spacingMd,
+    return CustomScrollView(
+      slivers: [
+        // 大標題
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.spacingMd,
+              AppTheme.spacingLg,
+              AppTheme.spacingMd,
+              AppTheme.spacingMd,
+            ),
+            child: Text('花費', style: AppTextStyles.pageTitle()),
+          ),
+        ),
+
+        // 本月花費摘要（BLoC 資料）
+        SliverToBoxAdapter(
+          child: _buildMonthlySummaryFromBloc(isDark, summary),
+        ),
+
+        const SliverToBoxAdapter(
+          child: SizedBox(height: AppTheme.spacingMd),
+        ),
+
+        // 分類標籤
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacingMd,
               ),
-              child: Text('花費', style: AppTextStyles.pageTitle()),
+              itemCount: _categories.length,
+              separatorBuilder: (_, _) =>
+                  const SizedBox(width: AppTheme.spacingSm),
+              itemBuilder: (context, index) {
+                final cat = _categories[index];
+                final isSelected = (_selectedCategory == null && cat == '全部')
+                    || _selectedCategory == cat;
+                return _buildCategoryChip(cat, isSelected, isDark);
+              },
             ),
           ),
+        ),
 
-          // 本月花費摘要
-          SliverToBoxAdapter(
-            child: _buildMonthlySummary(isDark),
+        const SliverToBoxAdapter(
+          child: SizedBox(height: AppTheme.spacingMd),
+        ),
+
+        // 交易清單（BLoC 資料）
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 0),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final tx = filtered[index];
+                final icon = _categoryIcons[tx.category] ??
+                    Icons.receipt_outlined;
+                return TransactionTile(
+                  name: tx.note,
+                  icon: icon,
+                  category: tx.category,
+                  date: '${tx.date.month}/${tx.date.day}',
+                  amount: _formatAmount(Decimal.parse(tx.amount)),
+                  isExpense: tx.type == 'expense',
+                );
+              },
+              childCount: filtered.length,
+            ),
           ),
+        ),
 
-          const SliverToBoxAdapter(
-            child: SizedBox(height: AppTheme.spacingMd),
+        const SliverToBoxAdapter(
+          child: SizedBox(height: AppTheme.spacing2xl),
+        ),
+      ],
+    );
+  }
+
+  /// Mock 內容（fallback）
+  Widget _buildMockContent(bool isDark) {
+    // 篩選交易
+    final filtered = _selectedCategory == null || _selectedCategory == '全部'
+        ? _mockTransactions
+        : _mockTransactions
+              .where((t) => t.category == _selectedCategory)
+              .toList();
+
+    return CustomScrollView(
+      slivers: [
+        // 大標題
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.spacingMd,
+              AppTheme.spacingLg,
+              AppTheme.spacingMd,
+              AppTheme.spacingMd,
+            ),
+            child: Text('花費', style: AppTextStyles.pageTitle()),
           ),
+        ),
 
-          // 分類標籤
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 36,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.spacingMd,
-                ),
-                itemCount: _categories.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: AppTheme.spacingSm),
-                itemBuilder: (context, index) {
-                  final cat = _categories[index];
-                  final isSelected = (_selectedCategory == null && cat == '全部')
-                      || _selectedCategory == cat;
-                  return _buildCategoryChip(cat, isSelected, isDark);
-                },
+        // 本月花費摘要
+        SliverToBoxAdapter(
+          child: _buildMonthlySummary(isDark),
+        ),
+
+        const SliverToBoxAdapter(
+          child: SizedBox(height: AppTheme.spacingMd),
+        ),
+
+        // 分類標籤
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacingMd,
+              ),
+              itemCount: _categories.length,
+              separatorBuilder: (_, _) =>
+                  const SizedBox(width: AppTheme.spacingSm),
+              itemBuilder: (context, index) {
+                final cat = _categories[index];
+                final isSelected = (_selectedCategory == null && cat == '全部')
+                    || _selectedCategory == cat;
+                return _buildCategoryChip(cat, isSelected, isDark);
+              },
+            ),
+          ),
+        ),
+
+        const SliverToBoxAdapter(
+          child: SizedBox(height: AppTheme.spacingMd),
+        ),
+
+        // 交易清單
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 0),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final tx = filtered[index];
+                return TransactionTile(
+                  name: tx.name,
+                  icon: tx.icon,
+                  category: tx.category,
+                  date: tx.date,
+                  amount: tx.amount,
+                  isExpense: true,
+                );
+              },
+              childCount: filtered.length,
+            ),
+          ),
+        ),
+
+        const SliverToBoxAdapter(
+          child: SizedBox(height: AppTheme.spacing2xl),
+        ),
+      ],
+    );
+  }
+
+  /// 從 BLoC 月度摘要建立卡片
+  Widget _buildMonthlySummaryFromBloc(bool isDark, MonthlySummary summary) {
+    final totalSpent = summary.totalSpent;
+    final byCategory = summary.byCategory;
+    final totalForBar = totalSpent > 0 ? totalSpent : 1.0;
+
+    // 分類顏色配對
+    const categoryColors = {
+      '飲食': AppColors.accent,
+      '交通': AppColors.accentCool,
+      '娛樂': AppColors.accentWarm,
+      '日用品': AppColors.success,
+      '訂閱': AppColors.info,
+    };
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd),
+      padding: const EdgeInsets.all(AppTheme.cardPadding),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.surface,
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${DateTime.now().month} 月花費',
+            style: AppTextStyles.caption(
+              color: isDark
+                  ? AppColors.darkSecondaryText
+                  : AppColors.secondaryText,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingXs),
+          Text(
+            '\$${_formatAmountDouble(totalSpent)}',
+            style: AppTextStyles.amountLarge(
+              color: isDark
+                  ? AppColors.darkPrimaryText
+                  : AppColors.primaryText,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingMd),
+
+          // 分類比例條
+          if (byCategory.isNotEmpty)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Row(
+                children: byCategory.entries.map((entry) {
+                  final color =
+                      categoryColors[entry.key] ?? AppColors.secondaryText;
+                  final ratio = entry.value / totalForBar;
+                  return _buildCategoryBar(color, ratio);
+                }).toList(),
               ),
             ),
-          ),
 
-          const SliverToBoxAdapter(
-            child: SizedBox(height: AppTheme.spacingMd),
-          ),
+          const SizedBox(height: AppTheme.spacingSm),
 
-          // 交易清單
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 0,
-            ),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final tx = filtered[index];
-                  return TransactionTile(
-                    name: tx.name,
-                    icon: tx.icon,
-                    category: tx.category,
-                    date: tx.date,
-                    amount: tx.amount,
-                    isExpense: true,
-                  );
-                },
-                childCount: filtered.length,
-              ),
-            ),
-          ),
-
-          const SliverToBoxAdapter(
-            child: SizedBox(height: AppTheme.spacing2xl),
+          // 分類圖例
+          Wrap(
+            spacing: AppTheme.spacingMd,
+            runSpacing: AppTheme.spacingXs,
+            children: byCategory.entries.map((entry) {
+              final color =
+                  categoryColors[entry.key] ?? AppColors.secondaryText;
+              return _buildLegend(entry.key, color);
+            }).toList(),
           ),
         ],
       ),
@@ -314,9 +511,12 @@ class _ExpensesPageState extends State<ExpensesPage> {
   Widget _buildCategoryChip(String name, bool isSelected, bool isDark) {
     return GestureDetector(
       onTap: () {
+        final newCategory = name == '全部' ? null : name;
         setState(() {
-          _selectedCategory = name == '全部' ? null : name;
+          _selectedCategory = newCategory;
         });
+        // 通知 BLoC 篩選
+        context.read<ExpensesBloc>().add(FilterByCategory(newCategory));
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -349,6 +549,32 @@ class _ExpensesPageState extends State<ExpensesPage> {
         ),
       ),
     );
+  }
+
+  /// 格式化 Decimal 金額為千分位字串
+  static String _formatAmount(Decimal amount) {
+    final intPart = amount.truncate().toBigInt().abs().toString();
+    final formatted = StringBuffer();
+    for (var i = 0; i < intPart.length; i++) {
+      if (i > 0 && (intPart.length - i) % 3 == 0) {
+        formatted.write(',');
+      }
+      formatted.write(intPart[i]);
+    }
+    return formatted.toString();
+  }
+
+  /// 格式化 double 金額為千分位字串
+  static String _formatAmountDouble(double amount) {
+    final intPart = amount.truncate().abs().toString();
+    final formatted = StringBuffer();
+    for (var i = 0; i < intPart.length; i++) {
+      if (i > 0 && (intPart.length - i) % 3 == 0) {
+        formatted.write(',');
+      }
+      formatted.write(intPart[i]);
+    }
+    return formatted.toString();
   }
 }
 

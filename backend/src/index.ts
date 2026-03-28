@@ -6,6 +6,18 @@ import { handleRequest } from './router';
  * 處理 CORS 預檢請求，再將實際請求轉交給路由器
  */
 export default {
+  /** Cron Trigger 入口：排程推撥通知 */
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    _ctx: ExecutionContext
+  ): Promise<void> {
+    const { handleScheduledNotifications } = await import(
+      './handlers/notifications'
+    );
+    await handleScheduledNotifications(env);
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     // ── CORS 預檢 ──
     if (request.method === 'OPTIONS') {

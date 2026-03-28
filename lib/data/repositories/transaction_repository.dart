@@ -1,56 +1,73 @@
 import 'package:drift/drift.dart';
+import 'package:my_money/data/database.dart';
 
-import '../database.dart';
-
-/// 交易紀錄資料存取層 — 收支轉帳的 CRUD 操作
+/// 交易紀錄資料存取層 — 封裝 drift 資料庫操作
 class TransactionRepository {
   final AppDatabase _db;
 
   TransactionRepository(this._db);
 
-  /// 取得所有交易紀錄
-  Future<List<Transaction>> getAll() =>
-      _db.select(_db.transactions).get();
+  /// 取得所有交易紀錄（依日期降序）
+  Future<List<Transaction>> getAllTransactions() {
+    return (_db.select(_db.transactions)
+          ..orderBy([
+            (t) => OrderingTerm(
+                  expression: t.date,
+                  mode: OrderingMode.desc,
+                ),
+          ]))
+        .get();
+  }
 
-  /// 監聽所有交易紀錄變動
-  Stream<List<Transaction>> watchAll() =>
-      _db.select(_db.transactions).watch();
+  /// 監聽所有交易紀錄變更
+  Stream<List<Transaction>> watchAllTransactions() {
+    return (_db.select(_db.transactions)
+          ..orderBy([
+            (t) => OrderingTerm(
+                  expression: t.date,
+                  mode: OrderingMode.desc,
+                ),
+          ]))
+        .watch();
+  }
 
-  /// 根據 ID 取得單一交易紀錄
-  Future<Transaction?> getById(String id) =>
-      (_db.select(_db.transactions)..where((t) => t.id.equals(id)))
-          .getSingleOrNull();
+  /// 取得指定月份的交易紀錄
+  Future<List<Transaction>> getTransactionsByMonth(int year, int month) async {
+    final start = DateTime(year, month, 1);
+    final end = DateTime(year, month + 1, 1);
+    return (_db.select(_db.transactions)
+          ..where((t) =>
+              t.date.isBiggerOrEqualValue(start) &
+              t.date.isSmallerThanValue(end))
+          ..orderBy([
+            (t) => OrderingTerm(
+                  expression: t.date,
+                  mode: OrderingMode.desc,
+                ),
+          ]))
+        .get();
+  }
 
-  /// 根據類型篩選交易紀錄（income / expense / transfer）
-  Future<List<Transaction>> getByType(String type) =>
-      (_db.select(_db.transactions)..where((t) => t.type.equals(type))).get();
-
-  /// 根據帳戶 ID 篩選交易紀錄
-  Future<List<Transaction>> getByAccountId(String accountId) =>
-      (_db.select(_db.transactions)
-            ..where((t) => t.accountId.equals(accountId)))
-          .get();
-
-  /// 根據日期範圍篩選交易紀錄
-  Future<List<Transaction>> getByDateRange(DateTime start, DateTime end) =>
-      (_db.select(_db.transactions)
-            ..where((t) =>
-                t.date.isBiggerOrEqualValue(start) &
-                t.date.isSmallerOrEqualValue(end)))
-          .get();
+  /// 取得指定分類的交易紀錄
+  Future<List<Transaction>> getTransactionsByCategory(String category) {
+    return (_db.select(_db.transactions)
+          ..where((t) => t.category.equals(category))
+          ..orderBy([
+            (t) => OrderingTerm(
+                  expression: t.date,
+                  mode: OrderingMode.desc,
+                ),
+          ]))
+        .get();
+  }
 
   /// 新增交易紀錄
-  Future<void> insert(TransactionsCompanion entry) =>
-      _db.into(_db.transactions).insert(entry);
+  Future<void> addTransaction(TransactionsCompanion entry) {
+    return _db.into(_db.transactions).insert(entry);
+  }
 
-  /// 更新交易紀錄
-  Future<bool> update(Transaction entry) =>
-      _db.update(_db.transactions).replace(entry);
-
-  /// 根據 ID 刪除交易紀錄
-  Future<int> delete(String id) =>
-      (_db.delete(_db.transactions)..where((t) => t.id.equals(id))).go();
-
-  /// 刪除所有交易紀錄
-  Future<int> deleteAll() => _db.delete(_db.transactions).go();
+  /// 刪除交易紀錄
+  Future<void> deleteTransaction(String id) {
+    return (_db.delete(_db.transactions)..where((t) => t.id.equals(id))).go();
+  }
 }

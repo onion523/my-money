@@ -1,4 +1,8 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:my_money/bloc/accounts/accounts_bloc.dart';
+import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
 import 'package:my_money/theme/app_text_styles.dart';
 import 'package:my_money/theme/app_theme.dart';
@@ -13,22 +17,44 @@ class AccountsPage extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-          // 大標題
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppTheme.spacingMd,
-                AppTheme.spacingLg,
-                AppTheme.spacingMd,
-                AppTheme.spacingMd,
-              ),
-              child: Text('帳戶', style: AppTextStyles.pageTitle()),
-            ),
-          ),
+      child: BlocBuilder<AccountsBloc, AccountsState>(
+        builder: (context, state) {
+          if (state is AccountsLoaded && state.accounts.isNotEmpty) {
+            return _buildFromBloc(isDark, state.accounts);
+          }
+          // 初始 / 載入中 / 錯誤時顯示 mock 資料
+          return _buildMockContent(isDark);
+        },
+      ),
+    );
+  }
 
-          // 銀行帳戶區塊
+  /// 從 BLoC 資料建立頁面
+  Widget _buildFromBloc(bool isDark, List<Account> accounts) {
+    final bankAccounts = accounts.where((a) => a.type == 'bank').toList();
+    final creditCards = accounts.where((a) => a.type == 'credit_card').toList();
+
+    // 銀行帳戶與信用卡的顏色配對
+    const bankColors = [Color(0xFF4A90D9), Color(0xFF2ECC71), Color(0xFF9B59B6)];
+    const cardColors = [Color(0xFF00C300), Color(0xFF4ECDC4), Color(0xFFE74C3C)];
+
+    return CustomScrollView(
+      slivers: [
+        // 大標題
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.spacingMd,
+              AppTheme.spacingLg,
+              AppTheme.spacingMd,
+              AppTheme.spacingMd,
+            ),
+            child: Text('帳戶', style: AppTextStyles.pageTitle()),
+          ),
+        ),
+
+        // 銀行帳戶區塊
+        if (bankAccounts.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -37,44 +63,45 @@ class AccountsPage extends StatelessWidget {
               child: Text('銀行帳戶', style: AppTextStyles.cardTitle()),
             ),
           ),
-
           const SliverToBoxAdapter(
             child: SizedBox(height: AppTheme.spacingSm),
           ),
-
-          // 銀行帳戶列表
           SliverPadding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppTheme.spacingMd,
             ),
             sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _buildBankAccount(
-                  isDark: isDark,
-                  bankName: '中國信託',
-                  accountNumber: '****-3842',
-                  balance: '102,800',
-                  icon: Icons.account_balance,
-                  color: const Color(0xFF4A90D9),
-                ),
-                const SizedBox(height: AppTheme.cardGap),
-                _buildBankAccount(
-                  isDark: isDark,
-                  bankName: '國泰世華',
-                  accountNumber: '****-7156',
-                  balance: '42,800',
-                  icon: Icons.account_balance,
-                  color: const Color(0xFF2ECC71),
-                ),
-              ]),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final account = bankAccounts[index];
+                  final color = bankColors[index % bankColors.length];
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index < bankAccounts.length - 1
+                          ? AppTheme.cardGap
+                          : 0,
+                    ),
+                    child: _buildBankAccount(
+                      isDark: isDark,
+                      bankName: account.name,
+                      accountNumber: '****-${account.id.substring(account.id.length - 4)}',
+                      balance: _formatAmount(Decimal.parse(account.balance)),
+                      icon: Icons.account_balance,
+                      color: color,
+                    ),
+                  );
+                },
+                childCount: bankAccounts.length,
+              ),
             ),
           ),
-
           const SliverToBoxAdapter(
             child: SizedBox(height: AppTheme.sectionGap),
           ),
+        ],
 
-          // 信用卡區塊
+        // 信用卡區塊
+        if (creditCards.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -83,44 +110,173 @@ class AccountsPage extends StatelessWidget {
               child: Text('信用卡', style: AppTextStyles.cardTitle()),
             ),
           ),
-
           const SliverToBoxAdapter(
             child: SizedBox(height: AppTheme.spacingSm),
           ),
-
-          // 信用卡列表
           SliverPadding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppTheme.spacingMd,
             ),
             sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _buildCreditCard(
-                  isDark: isDark,
-                  cardName: '中信 LINE Pay 卡',
-                  cardNumber: '****-8821',
-                  billedAmount: '8,500',
-                  unbilledAmount: '3,200',
-                  dueDate: '4/10',
-                  color: const Color(0xFF00C300),
-                ),
-                const SizedBox(height: AppTheme.cardGap),
-                _buildCreditCard(
-                  isDark: isDark,
-                  cardName: '國泰 CUBE 卡',
-                  cardNumber: '****-5567',
-                  billedAmount: '5,200',
-                  unbilledAmount: '1,800',
-                  dueDate: '4/15',
-                  color: const Color(0xFF4ECDC4),
-                ),
-                const SizedBox(height: AppTheme.spacing2xl),
-              ]),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final card = creditCards[index];
+                  final color = cardColors[index % cardColors.length];
+                  final dueDate = card.paymentDate != null
+                      ? '${DateTime.now().month + 1}/${card.paymentDate}'
+                      : '-';
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index < creditCards.length - 1
+                          ? AppTheme.cardGap
+                          : AppTheme.spacing2xl,
+                    ),
+                    child: _buildCreditCard(
+                      isDark: isDark,
+                      cardName: card.name,
+                      cardNumber: '****-${card.id.substring(card.id.length - 4)}',
+                      billedAmount: card.billedAmount != null
+                          ? _formatAmount(Decimal.parse(card.billedAmount!))
+                          : '0',
+                      unbilledAmount: card.unbilledAmount != null
+                          ? _formatAmount(Decimal.parse(card.unbilledAmount!))
+                          : '0',
+                      dueDate: dueDate,
+                      color: color,
+                    ),
+                  );
+                },
+                childCount: creditCards.length,
+              ),
             ),
           ),
         ],
-      ),
+      ],
     );
+  }
+
+  /// Mock 內容（fallback）
+  Widget _buildMockContent(bool isDark) {
+    return CustomScrollView(
+      slivers: [
+        // 大標題
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.spacingMd,
+              AppTheme.spacingLg,
+              AppTheme.spacingMd,
+              AppTheme.spacingMd,
+            ),
+            child: Text('帳戶', style: AppTextStyles.pageTitle()),
+          ),
+        ),
+
+        // 銀行帳戶區塊
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.spacingMd,
+            ),
+            child: Text('銀行帳戶', style: AppTextStyles.cardTitle()),
+          ),
+        ),
+
+        const SliverToBoxAdapter(
+          child: SizedBox(height: AppTheme.spacingSm),
+        ),
+
+        // 銀行帳戶列表
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppTheme.spacingMd,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              _buildBankAccount(
+                isDark: isDark,
+                bankName: '中國信託',
+                accountNumber: '****-3842',
+                balance: '102,800',
+                icon: Icons.account_balance,
+                color: const Color(0xFF4A90D9),
+              ),
+              const SizedBox(height: AppTheme.cardGap),
+              _buildBankAccount(
+                isDark: isDark,
+                bankName: '國泰世華',
+                accountNumber: '****-7156',
+                balance: '42,800',
+                icon: Icons.account_balance,
+                color: const Color(0xFF2ECC71),
+              ),
+            ]),
+          ),
+        ),
+
+        const SliverToBoxAdapter(
+          child: SizedBox(height: AppTheme.sectionGap),
+        ),
+
+        // 信用卡區塊
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.spacingMd,
+            ),
+            child: Text('信用卡', style: AppTextStyles.cardTitle()),
+          ),
+        ),
+
+        const SliverToBoxAdapter(
+          child: SizedBox(height: AppTheme.spacingSm),
+        ),
+
+        // 信用卡列表
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppTheme.spacingMd,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              _buildCreditCard(
+                isDark: isDark,
+                cardName: '中信 LINE Pay 卡',
+                cardNumber: '****-8821',
+                billedAmount: '8,500',
+                unbilledAmount: '3,200',
+                dueDate: '4/10',
+                color: const Color(0xFF00C300),
+              ),
+              const SizedBox(height: AppTheme.cardGap),
+              _buildCreditCard(
+                isDark: isDark,
+                cardName: '國泰 CUBE 卡',
+                cardNumber: '****-5567',
+                billedAmount: '5,200',
+                unbilledAmount: '1,800',
+                dueDate: '4/15',
+                color: const Color(0xFF4ECDC4),
+              ),
+              const SizedBox(height: AppTheme.spacing2xl),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 格式化金額為千分位字串
+  static String _formatAmount(Decimal amount) {
+    final intPart = amount.truncate().toBigInt().abs().toString();
+    final formatted = StringBuffer();
+    for (var i = 0; i < intPart.length; i++) {
+      if (i > 0 && (intPart.length - i) % 3 == 0) {
+        formatted.write(',');
+      }
+      formatted.write(intPart[i]);
+    }
+    return formatted.toString();
   }
 
   /// 建立銀行帳戶卡片

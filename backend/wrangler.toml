@@ -6,3 +6,7 @@ compatibility_date = "2026-03-29"
 binding = "DB"
 database_name = "my-money-db"
 database_id = "placeholder-id"
+
+# 排程推撥通知：每天 UTC 00:00（台灣時間 08:00）
+[triggers]
+crons = ["0 0 * * *"]

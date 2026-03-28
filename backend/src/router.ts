@@ -29,6 +29,7 @@ import {
   deleteTransaction,
 } from './handlers/transactions';
 import { handleSync } from './handlers/sync';
+import { handleScheduledNotifications } from './handlers/notifications';
 
 /** 從 URL 路徑解析出資源 ID（例如 /api/accounts/abc123 → "abc123"） */
 function extractId(pathname: string, prefix: string): string | null {
@@ -69,6 +70,12 @@ export async function handleRequest(
     const body = await parseJsonBody(request);
     if (body instanceof Response) return body;
     return handleSync(userId, body as any, env);
+  }
+
+  // ── /api/notifications/trigger（手動觸發推撥排程，用於測試） ──
+  if (pathname === '/api/notifications/trigger' && method === 'POST') {
+    await handleScheduledNotifications(env);
+    return Response.json({ ok: true, message: '推撥排程已手動觸發' });
   }
 
   // ── /api/accounts ──
