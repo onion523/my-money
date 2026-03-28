@@ -1,0 +1,136 @@
+import { Env, SavingsGoal, ApiResponse } from '../types';
+
+/** 取得使用者所有儲蓄目標 */
+export async function listSavingsGoals(
+  userId: string,
+  env: Env
+): Promise<Response> {
+  const { results } = await env.DB.prepare(
+    'SELECT * FROM savings_goals WHERE user_id = ? ORDER BY created_at ASC'
+  )
+    .bind(userId)
+    .all<SavingsGoal>();
+
+  return Response.json({ ok: true, data: results } satisfies ApiResponse);
+}
+
+/** 取得單一儲蓄目標 */
+export async function getSavingsGoal(
+  userId: string,
+  id: string,
+  env: Env
+): Promise<Response> {
+  const row = await env.DB.prepare(
+    'SELECT * FROM savings_goals WHERE id = ? AND user_id = ?'
+  )
+    .bind(id, userId)
+    .first<SavingsGoal>();
+
+  if (!row) {
+    return Response.json(
+      { ok: false, error: '儲蓄目標不存在' } satisfies ApiResponse,
+      { status: 404 }
+    );
+  }
+
+  return Response.json({ ok: true, data: row } satisfies ApiResponse);
+}
+
+/** 新增儲蓄目標 */
+export async function createSavingsGoal(
+  userId: string,
+  body: Partial<SavingsGoal>,
+  env: Env
+): Promise<Response> {
+  const id = body.id ?? crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  await env.DB.prepare(
+    `INSERT INTO savings_goals
+       (id, user_id, name, target_amount, current_amount, deadline, note, is_completed, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      id,
+      userId,
+      body.name ?? '',
+      body.target_amount ?? 0,
+      body.current_amount ?? 0,
+      body.deadline ?? null,
+      body.note ?? null,
+      body.is_completed ?? 0,
+      now,
+      now
+    )
+    .run();
+
+  return Response.json(
+    { ok: true, data: { id } } satisfies ApiResponse,
+    { status: 201 }
+  );
+}
+
+/** 更新儲蓄目標 */
+export async function updateSavingsGoal(
+  userId: string,
+  id: string,
+  body: Partial<SavingsGoal>,
+  env: Env
+): Promise<Response> {
+  const now = new Date().toISOString();
+
+  const result = await env.DB.prepare(
+    `UPDATE savings_goals
+     SET name           = COALESCE(?, name),
+         target_amount  = COALESCE(?, target_amount),
+         current_amount = COALESCE(?, current_amount),
+         deadline       = COALESCE(?, deadline),
+         note           = COALESCE(?, note),
+         is_completed   = COALESCE(?, is_completed),
+         updated_at     = ?
+     WHERE id = ? AND user_id = ?`
+  )
+    .bind(
+      body.name ?? null,
+      body.target_amount ?? null,
+      body.current_amount ?? null,
+      body.deadline ?? null,
+      body.note ?? null,
+      body.is_completed ?? null,
+      now,
+      id,
+      userId
+    )
+    .run();
+
+  if (!result.meta.changed_db) {
+    return Response.json(
+      { ok: false, error: '儲蓄目標不存在' } satisfies ApiResponse,
+      { status: 404 }
+    );
+  }
+
+  return Response.json({ ok: true, data: { id } } satisfies ApiResponse);
+}
+
+/** 刪除儲蓄目標 */
+export async function deleteSavingsGoal(
+  userId: string,
+  id: string,
+  env: Env
+): Promise<Response> {
+  const result = await env.DB.prepare(
+    'DELETE FROM savings_goals WHERE id = ? AND user_id = ?'
+  )
+    .bind(id, userId)
+    .run();
+
+  if (!result.meta.changed_db) {
+    return Response.json(
+      { ok: false, error: '儲蓄目標不存在' } satisfies ApiResponse,
+      { status: 404 }
+    );
+  }
+
+  return Response.json({ ok: true } satisfies ApiResponse);
+}
