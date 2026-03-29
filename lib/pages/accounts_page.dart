@@ -22,11 +22,18 @@ class AccountsPage extends StatelessWidget {
     return SafeArea(
       child: BlocBuilder<AccountsBloc, AccountsState>(
         builder: (context, state) {
-          if (state is AccountsLoaded && state.accounts.isNotEmpty) {
-            return _buildFromBloc(context, isDark, state.accounts);
+          if (state is AccountsLoaded) {
+            if (state.accounts.isNotEmpty) {
+              return _buildFromBloc(context, isDark, state.accounts);
+            }
+            // 沒有帳戶時顯示空狀態
+            return _buildEmptyState(context);
           }
-          // 初始 / 載入中 / 錯誤時顯示 mock 資料
-          return _buildMockContent(isDark);
+          if (state is AccountsLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          // 錯誤或初始狀態也顯示空狀態
+          return _buildEmptyState(context);
         },
       ),
     );
@@ -196,114 +203,52 @@ class AccountsPage extends StatelessWidget {
     );
   }
 
-  /// Mock 內容（fallback）
-  Widget _buildMockContent(bool isDark) {
-    return CustomScrollView(
-      slivers: [
-        // 大標題
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppTheme.spacingMd,
-              AppTheme.spacingLg,
-              AppTheme.spacingMd,
-              AppTheme.spacingMd,
+  /// 空狀態 — 引導使用者新增第一個帳戶
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.account_balance_outlined,
+                size: 40,
+                color: AppColors.accent,
+              ),
             ),
-            child: Text('帳戶', style: AppTextStyles.pageTitle()),
-          ),
-        ),
-
-        // 銀行帳戶區塊
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spacingMd,
+            const SizedBox(height: 24),
+            Text('還沒有帳戶', style: AppTextStyles.cardTitle()),
+            const SizedBox(height: 8),
+            Text(
+              '新增你的銀行帳戶或信用卡，開始追蹤財務狀況',
+              style: AppTextStyles.body(color: AppColors.secondaryText),
+              textAlign: TextAlign.center,
             ),
-            child: Text('銀行帳戶', style: AppTextStyles.cardTitle()),
-          ),
-        ),
-
-        const SliverToBoxAdapter(
-          child: SizedBox(height: AppTheme.spacingSm),
-        ),
-
-        // 銀行帳戶列表
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppTheme.spacingMd,
-          ),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              _buildBankAccount(
-                isDark: isDark,
-                bankName: '中國信託',
-                accountNumber: '****-3842',
-                balance: '102,800',
-                icon: Icons.account_balance,
-                color: const Color(0xFF4A90D9),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => _openAddDialog(context),
+              icon: const Icon(Icons.add),
+              label: const Text('新增帳戶'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              const SizedBox(height: AppTheme.cardGap),
-              _buildBankAccount(
-                isDark: isDark,
-                bankName: '國泰世華',
-                accountNumber: '****-7156',
-                balance: '42,800',
-                icon: Icons.account_balance,
-                color: const Color(0xFF2ECC71),
-              ),
-            ]),
-          ),
-        ),
-
-        const SliverToBoxAdapter(
-          child: SizedBox(height: AppTheme.sectionGap),
-        ),
-
-        // 信用卡區塊
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spacingMd,
             ),
-            child: Text('信用卡', style: AppTextStyles.cardTitle()),
-          ),
+          ],
         ),
-
-        const SliverToBoxAdapter(
-          child: SizedBox(height: AppTheme.spacingSm),
-        ),
-
-        // 信用卡列表
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppTheme.spacingMd,
-          ),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              _buildCreditCard(
-                isDark: isDark,
-                cardName: '中信 LINE Pay 卡',
-                cardNumber: '****-8821',
-                billedAmount: '8,500',
-                unbilledAmount: '3,200',
-                dueDate: '4/10',
-                color: const Color(0xFF00C300),
-              ),
-              const SizedBox(height: AppTheme.cardGap),
-              _buildCreditCard(
-                isDark: isDark,
-                cardName: '國泰 CUBE 卡',
-                cardNumber: '****-5567',
-                billedAmount: '5,200',
-                unbilledAmount: '1,800',
-                dueDate: '4/15',
-                color: const Color(0xFF4ECDC4),
-              ),
-              const SizedBox(height: AppTheme.spacing2xl),
-            ]),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
