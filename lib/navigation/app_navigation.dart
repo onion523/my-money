@@ -4,6 +4,9 @@ import 'package:my_money/pages/expenses_page.dart';
 import 'package:my_money/pages/goals_page.dart';
 import 'package:my_money/pages/home_page.dart';
 import 'package:my_money/widgets/fab_menu.dart';
+import 'package:my_money/widgets/dialogs/add_expense_dialog.dart';
+import 'package:my_money/widgets/dialogs/add_saving_dialog.dart';
+import 'package:my_money/widgets/dialogs/update_balance_dialog.dart';
 
 /// 底部導覽列 — 4 個 tab
 /// 首頁 / 帳戶 / 儲蓄 / 花費
@@ -67,13 +70,22 @@ class _AppNavigationState extends State<AppNavigation> {
       // 浮動 + 按鈕
       floatingActionButton: FabMenu(
         onAddExpense: () {
-          // TODO: 開啟記花費頁面
+          showDialog(
+            context: context,
+            builder: (_) => const AddExpenseDialog(),
+          );
         },
         onAddSaving: () {
-          // TODO: 開啟存儲蓄頁面
+          showDialog(
+            context: context,
+            builder: (_) => const AddSavingDialog(),
+          );
         },
         onUpdateBalance: () {
-          // TODO: 開啟更新餘額頁面
+          showDialog(
+            context: context,
+            builder: (_) => const UpdateBalanceDialog(),
+          );
         },
       ),
     );

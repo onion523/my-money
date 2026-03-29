@@ -1,7 +1,3 @@
-import 'dart:io';
-
-import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:my_money/bloc/accounts/accounts_bloc.dart';
@@ -10,31 +6,28 @@ import 'package:my_money/bloc/cashflow/cashflow_bloc.dart';
 import 'package:my_money/bloc/expenses/expenses_bloc.dart';
 import 'package:my_money/bloc/goals/goals_bloc.dart';
 import 'package:my_money/data/database.dart';
+import 'package:my_money/data/connection/connection.dart' as connection;
 import 'package:my_money/data/repositories/account_repository.dart';
 import 'package:my_money/data/repositories/fixed_expense_repository.dart';
 import 'package:my_money/data/repositories/savings_goal_repository.dart';
 import 'package:my_money/data/repositories/transaction_repository.dart';
 import 'package:my_money/navigation/app_navigation.dart';
+import 'package:my_money/pages/auth/login_page.dart';
+import 'package:my_money/pages/onboarding/welcome_page.dart';
+import 'package:my_money/services/auth_service.dart';
 import 'package:my_money/theme/app_theme.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
-
-/// 建立資料庫連線 — 使用檔案型 SQLite
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'my_money.sqlite'));
-    return NativeDatabase.createInBackground(file);
-  });
-}
 
 /// 應用程式入口
 /// 柔和水彩風格的個人財務管理 App
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 初始化 Auth 服務
+  final authService = AuthService();
+  await authService.init();
+
   // 初始化資料庫
-  final database = AppDatabase(_openConnection());
+  final database = AppDatabase(connection.openConnection());
 
   // 建立所有 Repository
   final accountRepo = AccountRepository(database);
@@ -47,6 +40,7 @@ void main() {
     fixedExpenseRepository: fixedExpenseRepo,
     savingsGoalRepository: savingsGoalRepo,
     transactionRepository: transactionRepo,
+    authService: authService,
   ));
 }
 
@@ -64,12 +58,16 @@ class MyMoneyApp extends StatelessWidget {
   /// 交易紀錄 Repository
   final TransactionRepository transactionRepository;
 
+  /// Auth 服務
+  final AuthService authService;
+
   const MyMoneyApp({
     super.key,
     required this.accountRepository,
     required this.fixedExpenseRepository,
     required this.savingsGoalRepository,
     required this.transactionRepository,
+    required this.authService,
   });
 
   @override
@@ -126,11 +124,18 @@ class MyMoneyApp extends StatelessWidget {
         // 暗色主題
         darkTheme: AppTheme.darkTheme,
 
-        // 跟隨系統設定
-        themeMode: ThemeMode.system,
+        // 強制亮色模式，不受瀏覽器深色模式影響
+        themeMode: ThemeMode.light,
 
-        // 啟動時顯示底部導覽（首頁）
-        home: const AppNavigation(),
+        // 根據登入狀態決定首頁
+        home: authService.isLoggedIn
+            ? const AppNavigation()
+            : LoginPage(authService: authService),
+        routes: {
+          '/login': (context) => LoginPage(authService: authService),
+          '/onboarding': (context) => WelcomePage(authService: authService),
+          '/home': (context) => const AppNavigation(),
+        },
       ),
     );
   }
