@@ -107,7 +107,7 @@ class _FabMenuState extends State<FabMenu> with SingleTickerProviderStateMixin {
           _buildMenuItem(
             index: 0,
             icon: Icons.receipt_long_outlined,
-            label: '記花費',
+            label: '記帳',
             onTap: () {
               _toggle();
               widget.onAddExpense?.call();

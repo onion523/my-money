@@ -4,7 +4,7 @@ import 'package:my_money/pages/expenses_page.dart';
 import 'package:my_money/pages/goals_page.dart';
 import 'package:my_money/pages/home_page.dart';
 import 'package:my_money/widgets/fab_menu.dart';
-import 'package:my_money/widgets/dialogs/add_expense_dialog.dart';
+import 'package:my_money/widgets/dialogs/add_transaction_dialog.dart';
 import 'package:my_money/widgets/dialogs/add_saving_dialog.dart';
 import 'package:my_money/widgets/dialogs/update_balance_dialog.dart';
 
@@ -72,7 +72,7 @@ class _AppNavigationState extends State<AppNavigation> {
         onAddExpense: () {
           showDialog(
             context: context,
-            builder: (_) => const AddExpenseDialog(),
+            builder: (_) => const AddTransactionDialog(),
           );
         },
         onAddSaving: () {
