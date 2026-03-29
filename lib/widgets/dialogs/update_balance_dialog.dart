@@ -17,12 +17,16 @@ class UpdateBalanceDialog extends StatefulWidget {
 class _UpdateBalanceDialogState extends State<UpdateBalanceDialog> {
   final _nameController = TextEditingController();
   final _balanceController = TextEditingController();
+  final _unbilledAmountController = TextEditingController();
   String _type = 'bank';
+  int? _billingDate;
+  int? _paymentDate;
 
   @override
   void dispose() {
     _nameController.dispose();
     _balanceController.dispose();
+    _unbilledAmountController.dispose();
     super.dispose();
   }
 
@@ -80,6 +84,62 @@ class _UpdateBalanceDialogState extends State<UpdateBalanceDialog> {
                 fillColor: Colors.white,
               ),
             ),
+
+            // 信用卡額外欄位
+            if (_type == 'credit_card') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _unbilledAmountController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: '未入帳金額',
+                  prefixText: '\$ ',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                value: _billingDate,
+                decoration: InputDecoration(
+                  labelText: '結帳日',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                items: [
+                  const DropdownMenuItem<int>(value: null, child: Text('未設定')),
+                  ...List.generate(31, (i) => i + 1).map(
+                    (day) => DropdownMenuItem<int>(
+                      value: day,
+                      child: Text('每月 $day 日'),
+                    ),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _billingDate = v),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                value: _paymentDate,
+                decoration: InputDecoration(
+                  labelText: '扣繳日',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                items: [
+                  const DropdownMenuItem<int>(value: null, child: Text('未設定')),
+                  ...List.generate(31, (i) => i + 1).map(
+                    (day) => DropdownMenuItem<int>(
+                      value: day,
+                      child: Text('每月 $day 日'),
+                    ),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _paymentDate = v),
+              ),
+            ],
           ],
         ),
       ),
@@ -106,16 +166,36 @@ class _UpdateBalanceDialogState extends State<UpdateBalanceDialog> {
       return;
     }
 
-    context.read<AccountsBloc>().add(AddAccount(
-      AccountsCompanion.insert(
-        id: const Uuid().v4(),
-        name: _nameController.text,
-        type: _type,
-        balance: balance.toString(),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-    ));
+    if (_type == 'credit_card') {
+      final unbilledAmount = double.tryParse(_unbilledAmountController.text) ?? 0;
+      final totalBalance = balance + unbilledAmount;
+
+      context.read<AccountsBloc>().add(AddAccount(
+        AccountsCompanion.insert(
+          id: const Uuid().v4(),
+          name: _nameController.text,
+          type: _type,
+          balance: totalBalance.toString(),
+          billingDate: Value(_billingDate),
+          paymentDate: Value(_paymentDate),
+          billedAmount: Value(balance.toString()),
+          unbilledAmount: Value(unbilledAmount.toString()),
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      ));
+    } else {
+      context.read<AccountsBloc>().add(AddAccount(
+        AccountsCompanion.insert(
+          id: const Uuid().v4(),
+          name: _nameController.text,
+          type: _type,
+          balance: balance.toString(),
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      ));
+    }
 
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(

@@ -6,6 +6,9 @@ import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
 import 'package:my_money/theme/app_text_styles.dart';
 import 'package:my_money/theme/app_theme.dart';
+import 'package:my_money/widgets/dialogs/edit_account_dialog.dart';
+import 'package:my_money/widgets/dialogs/edit_credit_card_dialog.dart';
+import 'package:my_money/widgets/dialogs/update_balance_dialog.dart';
 
 /// 帳戶頁面
 /// 顯示銀行帳戶列表與信用卡列表
@@ -20,7 +23,7 @@ class AccountsPage extends StatelessWidget {
       child: BlocBuilder<AccountsBloc, AccountsState>(
         builder: (context, state) {
           if (state is AccountsLoaded && state.accounts.isNotEmpty) {
-            return _buildFromBloc(isDark, state.accounts);
+            return _buildFromBloc(context, isDark, state.accounts);
           }
           // 初始 / 載入中 / 錯誤時顯示 mock 資料
           return _buildMockContent(isDark);
@@ -29,8 +32,26 @@ class AccountsPage extends StatelessWidget {
     );
   }
 
+  /// 開啟對應的編輯 Dialog
+  void _openEditDialog(BuildContext context, Account account) {
+    showDialog(
+      context: context,
+      builder: (_) => account.type == 'credit_card'
+          ? EditCreditCardDialog(account: account)
+          : EditAccountDialog(account: account),
+    );
+  }
+
+  /// 開啟新增帳戶 Dialog
+  void _openAddDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => const UpdateBalanceDialog(),
+    );
+  }
+
   /// 從 BLoC 資料建立頁面
-  Widget _buildFromBloc(bool isDark, List<Account> accounts) {
+  Widget _buildFromBloc(BuildContext context, bool isDark, List<Account> accounts) {
     final bankAccounts = accounts.where((a) => a.type == 'bank').toList();
     final creditCards = accounts.where((a) => a.type == 'credit_card').toList();
 
@@ -40,7 +61,7 @@ class AccountsPage extends StatelessWidget {
 
     return CustomScrollView(
       slivers: [
-        // 大標題
+        // 大標題 + 新增帳戶按鈕
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -49,7 +70,19 @@ class AccountsPage extends StatelessWidget {
               AppTheme.spacingMd,
               AppTheme.spacingMd,
             ),
-            child: Text('帳戶', style: AppTextStyles.pageTitle()),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('帳戶', style: AppTextStyles.pageTitle()),
+                IconButton(
+                  onPressed: () => _openAddDialog(context),
+                  icon: const Icon(Icons.add_circle_outline),
+                  color: AppColors.accent,
+                  tooltip: '新增帳戶',
+                  iconSize: 28,
+                ),
+              ],
+            ),
           ),
         ),
 
@@ -81,13 +114,17 @@ class AccountsPage extends StatelessWidget {
                           ? AppTheme.cardGap
                           : 0,
                     ),
-                    child: _buildBankAccount(
-                      isDark: isDark,
-                      bankName: account.name,
-                      accountNumber: '****-${account.id.substring(account.id.length - 4)}',
-                      balance: _formatAmount(Decimal.parse(account.balance)),
-                      icon: Icons.account_balance,
-                      color: color,
+                    child: GestureDetector(
+                      onLongPress: () => _openEditDialog(context, account),
+                      child: _buildBankAccount(
+                        isDark: isDark,
+                        bankName: account.name,
+                        accountNumber: '****-${account.id.substring(account.id.length - 4)}',
+                        balance: _formatAmount(Decimal.parse(account.balance)),
+                        icon: Icons.account_balance,
+                        color: color,
+                        onEdit: () => _openEditDialog(context, account),
+                      ),
                     ),
                   );
                 },
@@ -131,18 +168,22 @@ class AccountsPage extends StatelessWidget {
                           ? AppTheme.cardGap
                           : AppTheme.spacing2xl,
                     ),
-                    child: _buildCreditCard(
-                      isDark: isDark,
-                      cardName: card.name,
-                      cardNumber: '****-${card.id.substring(card.id.length - 4)}',
-                      billedAmount: card.billedAmount != null
-                          ? _formatAmount(Decimal.parse(card.billedAmount!))
-                          : '0',
-                      unbilledAmount: card.unbilledAmount != null
-                          ? _formatAmount(Decimal.parse(card.unbilledAmount!))
-                          : '0',
-                      dueDate: dueDate,
-                      color: color,
+                    child: GestureDetector(
+                      onLongPress: () => _openEditDialog(context, card),
+                      child: _buildCreditCard(
+                        isDark: isDark,
+                        cardName: card.name,
+                        cardNumber: '****-${card.id.substring(card.id.length - 4)}',
+                        billedAmount: card.billedAmount != null
+                            ? _formatAmount(Decimal.parse(card.billedAmount!))
+                            : '0',
+                        unbilledAmount: card.unbilledAmount != null
+                            ? _formatAmount(Decimal.parse(card.unbilledAmount!))
+                            : '0',
+                        dueDate: dueDate,
+                        color: color,
+                        onEdit: () => _openEditDialog(context, card),
+                      ),
                     ),
                   );
                 },
@@ -287,6 +328,7 @@ class AccountsPage extends StatelessWidget {
     required String balance,
     required IconData icon,
     required Color color,
+    VoidCallback? onEdit,
   }) {
     return Container(
       padding: const EdgeInsets.all(AppTheme.cardPadding),
@@ -343,6 +385,22 @@ class AccountsPage extends StatelessWidget {
                   : AppColors.primaryText,
             ),
           ),
+
+          // 編輯按鈕
+          if (onEdit != null) ...[
+            const SizedBox(width: AppTheme.spacingSm),
+            IconButton(
+              onPressed: onEdit,
+              icon: Icon(
+                Icons.edit_outlined,
+                size: 20,
+                color: isDark ? AppColors.darkSecondaryText : AppColors.secondaryText,
+              ),
+              tooltip: '編輯',
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
+          ],
         ],
       ),
     );
@@ -357,6 +415,7 @@ class AccountsPage extends StatelessWidget {
     required String unbilledAmount,
     required String dueDate,
     required Color color,
+    VoidCallback? onEdit,
   }) {
     return Container(
       padding: const EdgeInsets.all(AppTheme.cardPadding),
@@ -408,6 +467,19 @@ class AccountsPage extends StatelessWidget {
                   ],
                 ),
               ),
+              // 編輯按鈕
+              if (onEdit != null)
+                IconButton(
+                  onPressed: onEdit,
+                  icon: Icon(
+                    Icons.edit_outlined,
+                    size: 20,
+                    color: isDark ? AppColors.darkSecondaryText : AppColors.secondaryText,
+                  ),
+                  tooltip: '編輯',
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  padding: EdgeInsets.zero,
+                ),
             ],
           ),
 

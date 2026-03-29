@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:my_money/bloc/accounts/accounts_bloc.dart';
+import 'package:my_money/bloc/balance/balance_bloc.dart';
+import 'package:my_money/bloc/cashflow/cashflow_bloc.dart';
+import 'package:my_money/bloc/expenses/expenses_bloc.dart';
+import 'package:my_money/bloc/goals/goals_bloc.dart';
 import 'package:my_money/navigation/app_navigation.dart';
 import 'package:my_money/theme/app_colors.dart';
 import 'package:my_money/theme/app_text_styles.dart';
@@ -49,6 +55,13 @@ class _OnboardingCompletePageState extends State<OnboardingCompletePage>
 
   /// 進入首頁並關閉所有 onboarding 路由
   void _goToHome() {
+    // 重新載入所有 BLoC 資料
+    context.read<AccountsBloc>().add(const LoadAccounts());
+    context.read<GoalsBloc>().add(const LoadGoals());
+    context.read<BalanceBloc>().add(const LoadBalance());
+    context.read<ExpensesBloc>().add(const LoadExpenses());
+    context.read<CashflowBloc>().add(const LoadCashflow());
+
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AppNavigation()),
       (route) => false,
