@@ -57,14 +57,25 @@ class CashflowBloc extends Bloc<CashflowEvent, CashflowState> {
           .where((a) => a.type == 'bank')
           .fold(Decimal.zero, (sum, a) => sum + Decimal.parse(a.balance));
 
-      // 將固定支出轉為核心引擎的現金流事件
+      // 將固定支出轉為核心引擎的現金流事件（根據週期計算未來到期日）
       final cashflowEvents = <core.CashflowEvent>[];
+      final today = DateTime.now();
+      final todayNormalized = DateTime(today.year, today.month, today.day);
+      final endDate = todayNormalized.add(const Duration(days: 30));
+
       for (final expense in fixedExpenses) {
-        cashflowEvents.add(core.CashflowEvent(
-          date: expense.dueDate,
-          description: expense.name,
-          delta: -Decimal.parse(expense.amount),
-        ));
+        final delta = expense.type == 'income'
+            ? Decimal.parse(expense.amount)
+            : -Decimal.parse(expense.amount);
+
+        // 根據週期產生未來 30 天內的所有到期日
+        for (final date in _generateDueDates(expense.dueDate, expense.cycle, todayNormalized, endDate)) {
+          cashflowEvents.add(core.CashflowEvent(
+            date: date,
+            description: expense.name,
+            delta: delta,
+          ));
+        }
       }
 
       // 模擬未來 30 天現金流
@@ -148,5 +159,65 @@ class CashflowBloc extends Bloc<CashflowEvent, CashflowState> {
     } catch (e) {
       emit(CashflowError(e.toString()));
     }
+  }
+
+  /// 根據 dueDay 和週期，產生 [start] 到 [end] 之間的所有到期日
+  static List<DateTime> _generateDueDates(
+    DateTime dueDate,
+    String cycle,
+    DateTime start,
+    DateTime end,
+  ) {
+    final dueDay = dueDate.day;
+    final results = <DateTime>[];
+
+    // 計算週期的月數間隔
+    final monthInterval = switch (cycle) {
+      'monthly' => 1,
+      'bimonthly' => 2,
+      'quarterly' => 3,
+      'semi_annual' => 6,
+      'annual' => 12,
+      _ => 1,
+    };
+
+    // 從 start 的月份開始掃描，往前多看一個月以免遺漏
+    var year = start.year;
+    var month = start.month - 1;
+    if (month < 1) {
+      month = 12;
+      year -= 1;
+    }
+
+    // 掃描每個月，檢查是否為合法的週期月份
+    for (var i = 0; i < 36; i++) {
+      // 計算這個月的實際扣款日（處理月份天數不足）
+      final lastDay = DateTime(year, month + 1, 0).day;
+      final actualDay = dueDay > lastDay ? lastDay : dueDay;
+      final date = DateTime(year, month, actualDay);
+
+      if (date.isAfter(end)) break;
+
+      if (!date.isBefore(start)) {
+        if (monthInterval == 1) {
+          // 月繳：每個月都符合
+          results.add(date);
+        } else {
+          // 非月繳：檢查與原始到期月份的間距是否為週期的倍數
+          final monthDiff = (year - dueDate.year) * 12 + (month - dueDate.month);
+          if (monthDiff % monthInterval == 0) {
+            results.add(date);
+          }
+        }
+      }
+
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+    }
+
+    return results;
   }
 }
