@@ -24,6 +24,16 @@ class AddExpense extends ExpensesEvent {
   List<Object?> get props => [transaction];
 }
 
+/// 更新花費
+class UpdateExpense extends ExpensesEvent {
+  final Transaction transaction;
+
+  const UpdateExpense(this.transaction);
+
+  @override
+  List<Object?> get props => [transaction];
+}
+
 /// 刪除花費
 class DeleteExpense extends ExpensesEvent {
   final String id;

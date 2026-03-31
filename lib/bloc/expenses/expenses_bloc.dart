@@ -21,6 +21,7 @@ class ExpensesBloc extends Bloc<ExpensesEvent, ExpensesState> {
         super(const ExpensesInitial()) {
     on<LoadExpenses>(_onLoadExpenses);
     on<AddExpense>(_onAddExpense);
+    on<UpdateExpense>(_onUpdateExpense);
     on<DeleteExpense>(_onDeleteExpense);
     on<FilterByCategory>(_onFilterByCategory);
   }
@@ -61,6 +62,24 @@ class ExpensesBloc extends Bloc<ExpensesEvent, ExpensesState> {
     }
   }
 
+  /// 處理更新花費事件
+  Future<void> _onUpdateExpense(
+    UpdateExpense event,
+    Emitter<ExpensesState> emit,
+  ) async {
+    try {
+      await _transactionRepo.updateTransaction(event.transaction);
+      _allTransactions = await _transactionRepo.getAllTransactions();
+      final summary = _calculateMonthlySummary(_allTransactions);
+      emit(ExpensesLoaded(
+        transactions: _allTransactions,
+        monthlySummary: summary,
+      ));
+    } catch (e) {
+      emit(ExpensesError(e.toString()));
+    }
+  }
+
   /// 處理刪除花費事件
   Future<void> _onDeleteExpense(
     DeleteExpense event,
@@ -79,26 +98,17 @@ class ExpensesBloc extends Bloc<ExpensesEvent, ExpensesState> {
     }
   }
 
-  /// 處理分類篩選事件
+  /// 處理分類篩選事件（只更新選中分類，不篩選 transactions）
   Future<void> _onFilterByCategory(
     FilterByCategory event,
     Emitter<ExpensesState> emit,
   ) async {
-    try {
-      final filtered = event.category == null
-          ? _allTransactions
-          : _allTransactions
-                .where((t) => t.category == event.category)
-                .toList();
-      final summary = _calculateMonthlySummary(_allTransactions);
-      emit(ExpensesLoaded(
-        transactions: filtered,
-        monthlySummary: summary,
-        selectedCategory: event.category,
-      ));
-    } catch (e) {
-      emit(ExpensesError(e.toString()));
-    }
+    final summary = _calculateMonthlySummary(_allTransactions);
+    emit(ExpensesLoaded(
+      transactions: _allTransactions,
+      monthlySummary: summary,
+      selectedCategory: event.category,
+    ));
   }
 
   /// 計算本月花費摘要
