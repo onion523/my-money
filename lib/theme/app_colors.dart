@@ -30,8 +30,8 @@ class AppColors {
 
   // ========== 語意色彩 ==========
 
-  /// 安全綠：進度正常、充裕
-  static const Color success = Color(0xFF55C595);
+  /// 天空藍：收入、進度正常、充裕
+  static const Color success = Color(0xFF5B9BD5);
 
   /// 警告橙：需加油、注意
   static const Color warning = Color(0xFFFFB347);
@@ -59,8 +59,8 @@ class AppColors {
   /// 暗色主重點色：淡化粉紅
   static const Color darkAccent = Color(0xFFFF9E9E);
 
-  /// 暗色安全綠（降低飽和度）
-  static const Color darkSuccess = Color(0xFF4DB585);
+  /// 暗色天空藍（降低飽和度）
+  static const Color darkSuccess = Color(0xFF4A87BF);
 
   /// 暗色警告橙（降低飽和度）
   static const Color darkWarning = Color(0xFFE6A040);

@@ -28,8 +28,10 @@ class AccountsBloc extends Bloc<AccountsEvent, AccountsState> {
     emit(const AccountsLoading());
     try {
       final accounts = await _accountRepo.getAllAccounts();
+
       emit(AccountsLoaded(accounts));
     } catch (e) {
+
       emit(AccountsError(e.toString()));
     }
   }
@@ -42,8 +44,10 @@ class AccountsBloc extends Bloc<AccountsEvent, AccountsState> {
     try {
       await _accountRepo.addAccount(event.account);
       final accounts = await _accountRepo.getAllAccounts();
+
       emit(AccountsLoaded(accounts));
     } catch (e) {
+
       emit(AccountsError(e.toString()));
     }
   }

@@ -1,26 +1,36 @@
 import { Env } from '../types';
+import { verifyToken } from '../handlers/auth';
 
 /**
- * TODO: 實作真正的身份驗證
- * 目前為 pass-through，從 header 取得 user_id；
- * 正式上線時應改用 JWT / Cloudflare Access 驗證。
+ * 身份驗證 middleware
+ * 支援兩種方式：
+ * 1. Authorization: Bearer <JWT> （正式）
+ * 2. X-User-Id header （開發向下相容）
  */
-export function authenticate(request: Request, _env: Env): string | null {
-  // TODO: 驗證 Authorization header（JWT / API Key）
-  // 暫時從自訂 header 取得 user_id，方便開發測試
-  const userId = request.headers.get('X-User-Id');
-
-  if (!userId) {
+export async function authenticate(
+  request: Request,
+  env: Env
+): Promise<string | null> {
+  // 優先使用 JWT
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const payload = await verifyToken(token, env);
+    if (payload) {
+      return payload.sub;
+    }
     return null;
   }
 
-  return userId;
+  // 向下相容：X-User-Id header（開發用）
+  const userId = request.headers.get('X-User-Id');
+  return userId || null;
 }
 
 /** 驗證失敗時回傳 401 回應 */
 export function unauthorizedResponse(): Response {
   return Response.json(
-    { ok: false, error: '未授權：缺少 X-User-Id header' },
+    { ok: false, error: '未授權：請先登入' },
     { status: 401 }
   );
 }

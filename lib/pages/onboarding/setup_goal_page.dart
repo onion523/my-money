@@ -27,6 +27,7 @@ class _SetupGoalPageState extends State<SetupGoalPage> {
   final _amountController = TextEditingController();
   final _emojiController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  DateTime? _selectedDeadline;
 
   @override
   void dispose() {
@@ -34,6 +35,19 @@ class _SetupGoalPageState extends State<SetupGoalPage> {
     _amountController.dispose();
     _emojiController.dispose();
     super.dispose();
+  }
+
+  /// 選擇期限日期
+  Future<void> _pickDeadline() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDeadline ?? DateTime.now().add(const Duration(days: 180)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+    );
+    if (date != null) {
+      setState(() => _selectedDeadline = date);
+    }
   }
 
   /// 新增目標到列表
@@ -47,10 +61,12 @@ class _SetupGoalPageState extends State<SetupGoalPage> {
         emoji: _emojiController.text.trim().isEmpty
             ? '🎯'
             : _emojiController.text.trim(),
+        deadline: _selectedDeadline,
       ));
       _nameController.clear();
       _amountController.clear();
       _emojiController.clear();
+      _selectedDeadline = null;
     });
   }
 
@@ -73,6 +89,7 @@ class _SetupGoalPageState extends State<SetupGoalPage> {
         targetAmount: drift.Value(goal.targetAmount),
         currentAmount: const drift.Value('0'),
         category: const drift.Value('一般'),
+        deadline: drift.Value(goal.deadline),
         monthlyReserve: const drift.Value('0'),
         emoji: drift.Value(goal.emoji),
         createdAt: drift.Value(now),
@@ -260,6 +277,32 @@ class _SetupGoalPageState extends State<SetupGoalPage> {
 
             const SizedBox(height: AppTheme.spacingMd),
 
+            // 期限選擇
+            GestureDetector(
+              onTap: _pickDeadline,
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: '目標期限（選填）',
+                  prefixIcon: Icon(
+                    Icons.calendar_today_rounded,
+                    color: AppColors.secondaryText,
+                  ),
+                ),
+                child: Text(
+                  _selectedDeadline != null
+                      ? '${_selectedDeadline!.year}/${_selectedDeadline!.month}/${_selectedDeadline!.day}'
+                      : '點選設定期限',
+                  style: AppTextStyles.body(
+                    color: _selectedDeadline != null
+                        ? AppColors.primaryText
+                        : AppColors.secondaryText,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: AppTheme.spacingMd),
+
             // 新增按鈕
             SizedBox(
               height: 44,
@@ -349,7 +392,9 @@ class _SetupGoalPageState extends State<SetupGoalPage> {
                   children: [
                     Text(goal.name, style: AppTextStyles.bodyBold()),
                     Text(
-                      '\$ ${goal.targetAmount}',
+                      goal.deadline != null
+                          ? '\$ ${goal.targetAmount}・${goal.deadline!.year}/${goal.deadline!.month}/${goal.deadline!.day}'
+                          : '\$ ${goal.targetAmount}',
                       style:
                           AppTextStyles.caption(color: AppColors.accentWarm),
                     ),
@@ -423,10 +468,12 @@ class _GoalEntry {
   final String name;
   final String targetAmount;
   final String emoji;
+  final DateTime? deadline;
 
   const _GoalEntry({
     required this.name,
     required this.targetAmount,
     required this.emoji,
+    this.deadline,
   });
 }

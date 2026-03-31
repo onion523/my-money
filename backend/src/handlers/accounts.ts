@@ -46,17 +46,20 @@ export async function createAccount(
   const now = new Date().toISOString();
 
   await env.DB.prepare(
-    `INSERT INTO accounts (id, user_id, name, type, currency, balance, note, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO accounts (id, user_id, name, type, account_number, balance, billing_date, payment_date, billed_amount, unbilled_amount, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
       userId,
       body.name ?? '',
       body.type ?? 'bank',
-      body.currency ?? 'TWD',
-      body.balance ?? 0,
-      body.note ?? null,
+      body.account_number ?? '',
+      body.balance ?? '0',
+      body.billing_date ?? null,
+      body.payment_date ?? null,
+      body.billed_amount ?? null,
+      body.unbilled_amount ?? null,
       now,
       now
     )
@@ -79,20 +82,26 @@ export async function updateAccount(
 
   const result = await env.DB.prepare(
     `UPDATE accounts
-     SET name = COALESCE(?, name),
-         type = COALESCE(?, type),
-         currency = COALESCE(?, currency),
-         balance = COALESCE(?, balance),
-         note = COALESCE(?, note),
-         updated_at = ?
+     SET name            = COALESCE(?, name),
+         type            = COALESCE(?, type),
+         account_number  = COALESCE(?, account_number),
+         balance         = COALESCE(?, balance),
+         billing_date    = COALESCE(?, billing_date),
+         payment_date    = COALESCE(?, payment_date),
+         billed_amount   = COALESCE(?, billed_amount),
+         unbilled_amount = COALESCE(?, unbilled_amount),
+         updated_at      = ?
      WHERE id = ? AND user_id = ?`
   )
     .bind(
       body.name ?? null,
       body.type ?? null,
-      body.currency ?? null,
+      body.account_number ?? null,
       body.balance ?? null,
-      body.note ?? null,
+      body.billing_date ?? null,
+      body.payment_date ?? null,
+      body.billed_amount ?? null,
+      body.unbilled_amount ?? null,
       now,
       id,
       userId

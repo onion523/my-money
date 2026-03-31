@@ -55,7 +55,7 @@ class _OnboardingCompletePageState extends State<OnboardingCompletePage>
 
   /// 進入首頁並關閉所有 onboarding 路由
   void _goToHome() {
-    // 重新載入所有 BLoC 資料
+    // 重新載入所有 BLoC 資料（資料已透過 API 寫入後端）
     context.read<AccountsBloc>().add(const LoadAccounts());
     context.read<GoalsBloc>().add(const LoadGoals());
     context.read<BalanceBloc>().add(const LoadBalance());

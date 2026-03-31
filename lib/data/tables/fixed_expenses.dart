@@ -1,12 +1,15 @@
 import 'package:drift/drift.dart';
 
-/// 固定支出資料表 — 定期扣款項目
+/// 固定收支資料表 — 定期扣款/收入項目
 class FixedExpenses extends Table {
   /// 唯一識別碼（UUID）
   TextColumn get id => text()();
 
-  /// 支出名稱
+  /// 名稱
   TextColumn get name => text()();
+
+  /// 類型：expense（支出）或 income（收入）
+  TextColumn get type => text().withDefault(const Constant('expense'))();
 
   /// 金額（Decimal 字串）
   TextColumn get amount => text()();
@@ -17,7 +20,7 @@ class FixedExpenses extends Table {
   /// 到期日
   DateTimeColumn get dueDate => dateTime()();
 
-  /// 付款方式（關聯帳戶名稱或描述）
+  /// 付款/收款方式（關聯帳戶名稱或描述）
   TextColumn get paymentMethod => text()();
 
   /// 已預留金額（Decimal 字串）

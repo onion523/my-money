@@ -35,6 +35,18 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _accountNumberMeta = const VerificationMeta(
+    'accountNumber',
+  );
+  @override
+  late final GeneratedColumn<String> accountNumber = GeneratedColumn<String>(
+    'account_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _balanceMeta = const VerificationMeta(
     'balance',
   );
@@ -117,6 +129,7 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     id,
     name,
     type,
+    accountNumber,
     balance,
     billingDate,
     paymentDate,
@@ -157,6 +170,15 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
       );
     } else if (isInserting) {
       context.missing(_typeMeta);
+    }
+    if (data.containsKey('account_number')) {
+      context.handle(
+        _accountNumberMeta,
+        accountNumber.isAcceptableOrUnknown(
+          data['account_number']!,
+          _accountNumberMeta,
+        ),
+      );
     }
     if (data.containsKey('balance')) {
       context.handle(
@@ -239,6 +261,10 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         DriftSqlType.string,
         data['${effectivePrefix}type'],
       )!,
+      accountNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_number'],
+      )!,
       balance: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}balance'],
@@ -286,6 +312,9 @@ class Account extends DataClass implements Insertable<Account> {
   /// 帳戶類型：bank（銀行）或 credit_card（信用卡）
   final String type;
 
+  /// 帳號（完整銀行帳號或信用卡卡號）
+  final String accountNumber;
+
   /// 餘額（Decimal 字串）
   final String balance;
 
@@ -310,6 +339,7 @@ class Account extends DataClass implements Insertable<Account> {
     required this.id,
     required this.name,
     required this.type,
+    required this.accountNumber,
     required this.balance,
     this.billingDate,
     this.paymentDate,
@@ -324,6 +354,7 @@ class Account extends DataClass implements Insertable<Account> {
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['type'] = Variable<String>(type);
+    map['account_number'] = Variable<String>(accountNumber);
     map['balance'] = Variable<String>(balance);
     if (!nullToAbsent || billingDate != null) {
       map['billing_date'] = Variable<int>(billingDate);
@@ -347,6 +378,7 @@ class Account extends DataClass implements Insertable<Account> {
       id: Value(id),
       name: Value(name),
       type: Value(type),
+      accountNumber: Value(accountNumber),
       balance: Value(balance),
       billingDate: billingDate == null && nullToAbsent
           ? const Value.absent()
@@ -374,6 +406,7 @@ class Account extends DataClass implements Insertable<Account> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       type: serializer.fromJson<String>(json['type']),
+      accountNumber: serializer.fromJson<String>(json['accountNumber']),
       balance: serializer.fromJson<String>(json['balance']),
       billingDate: serializer.fromJson<int?>(json['billingDate']),
       paymentDate: serializer.fromJson<int?>(json['paymentDate']),
@@ -390,6 +423,7 @@ class Account extends DataClass implements Insertable<Account> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'type': serializer.toJson<String>(type),
+      'accountNumber': serializer.toJson<String>(accountNumber),
       'balance': serializer.toJson<String>(balance),
       'billingDate': serializer.toJson<int?>(billingDate),
       'paymentDate': serializer.toJson<int?>(paymentDate),
@@ -404,6 +438,7 @@ class Account extends DataClass implements Insertable<Account> {
     String? id,
     String? name,
     String? type,
+    String? accountNumber,
     String? balance,
     Value<int?> billingDate = const Value.absent(),
     Value<int?> paymentDate = const Value.absent(),
@@ -415,6 +450,7 @@ class Account extends DataClass implements Insertable<Account> {
     id: id ?? this.id,
     name: name ?? this.name,
     type: type ?? this.type,
+    accountNumber: accountNumber ?? this.accountNumber,
     balance: balance ?? this.balance,
     billingDate: billingDate.present ? billingDate.value : this.billingDate,
     paymentDate: paymentDate.present ? paymentDate.value : this.paymentDate,
@@ -430,6 +466,9 @@ class Account extends DataClass implements Insertable<Account> {
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       type: data.type.present ? data.type.value : this.type,
+      accountNumber: data.accountNumber.present
+          ? data.accountNumber.value
+          : this.accountNumber,
       balance: data.balance.present ? data.balance.value : this.balance,
       billingDate: data.billingDate.present
           ? data.billingDate.value
@@ -454,6 +493,7 @@ class Account extends DataClass implements Insertable<Account> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('type: $type, ')
+          ..write('accountNumber: $accountNumber, ')
           ..write('balance: $balance, ')
           ..write('billingDate: $billingDate, ')
           ..write('paymentDate: $paymentDate, ')
@@ -470,6 +510,7 @@ class Account extends DataClass implements Insertable<Account> {
     id,
     name,
     type,
+    accountNumber,
     balance,
     billingDate,
     paymentDate,
@@ -485,6 +526,7 @@ class Account extends DataClass implements Insertable<Account> {
           other.id == this.id &&
           other.name == this.name &&
           other.type == this.type &&
+          other.accountNumber == this.accountNumber &&
           other.balance == this.balance &&
           other.billingDate == this.billingDate &&
           other.paymentDate == this.paymentDate &&
@@ -498,6 +540,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
   final Value<String> id;
   final Value<String> name;
   final Value<String> type;
+  final Value<String> accountNumber;
   final Value<String> balance;
   final Value<int?> billingDate;
   final Value<int?> paymentDate;
@@ -510,6 +553,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.type = const Value.absent(),
+    this.accountNumber = const Value.absent(),
     this.balance = const Value.absent(),
     this.billingDate = const Value.absent(),
     this.paymentDate = const Value.absent(),
@@ -523,6 +567,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     required String id,
     required String name,
     required String type,
+    this.accountNumber = const Value.absent(),
     required String balance,
     this.billingDate = const Value.absent(),
     this.paymentDate = const Value.absent(),
@@ -541,6 +586,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? type,
+    Expression<String>? accountNumber,
     Expression<String>? balance,
     Expression<int>? billingDate,
     Expression<int>? paymentDate,
@@ -554,6 +600,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (type != null) 'type': type,
+      if (accountNumber != null) 'account_number': accountNumber,
       if (balance != null) 'balance': balance,
       if (billingDate != null) 'billing_date': billingDate,
       if (paymentDate != null) 'payment_date': paymentDate,
@@ -569,6 +616,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Value<String>? id,
     Value<String>? name,
     Value<String>? type,
+    Value<String>? accountNumber,
     Value<String>? balance,
     Value<int?>? billingDate,
     Value<int?>? paymentDate,
@@ -582,6 +630,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       id: id ?? this.id,
       name: name ?? this.name,
       type: type ?? this.type,
+      accountNumber: accountNumber ?? this.accountNumber,
       balance: balance ?? this.balance,
       billingDate: billingDate ?? this.billingDate,
       paymentDate: paymentDate ?? this.paymentDate,
@@ -604,6 +653,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     }
     if (type.present) {
       map['type'] = Variable<String>(type.value);
+    }
+    if (accountNumber.present) {
+      map['account_number'] = Variable<String>(accountNumber.value);
     }
     if (balance.present) {
       map['balance'] = Variable<String>(balance.value);
@@ -638,6 +690,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('type: $type, ')
+          ..write('accountNumber: $accountNumber, ')
           ..write('balance: $balance, ')
           ..write('billingDate: $billingDate, ')
           ..write('paymentDate: $paymentDate, ')
@@ -674,6 +727,16 @@ class $FixedExpensesTable extends FixedExpenses
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+  );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('expense'),
   );
   static const VerificationMeta _amountMeta = const VerificationMeta('amount');
   @override
@@ -752,6 +815,7 @@ class $FixedExpensesTable extends FixedExpenses
   List<GeneratedColumn> get $columns => [
     id,
     name,
+    type,
     amount,
     cycle,
     dueDate,
@@ -784,6 +848,12 @@ class $FixedExpensesTable extends FixedExpenses
       );
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
     }
     if (data.containsKey('amount')) {
       context.handle(
@@ -864,6 +934,10 @@ class $FixedExpensesTable extends FixedExpenses
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
       amount: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}amount'],
@@ -905,8 +979,11 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
   /// 唯一識別碼（UUID）
   final String id;
 
-  /// 支出名稱
+  /// 名稱
   final String name;
+
+  /// 類型：expense（支出）或 income（收入）
+  final String type;
 
   /// 金額（Decimal 字串）
   final String amount;
@@ -917,7 +994,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
   /// 到期日
   final DateTime dueDate;
 
-  /// 付款方式（關聯帳戶名稱或描述）
+  /// 付款/收款方式（關聯帳戶名稱或描述）
   final String paymentMethod;
 
   /// 已預留金額（Decimal 字串）
@@ -931,6 +1008,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
   const FixedExpense({
     required this.id,
     required this.name,
+    required this.type,
     required this.amount,
     required this.cycle,
     required this.dueDate,
@@ -944,6 +1022,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
+    map['type'] = Variable<String>(type);
     map['amount'] = Variable<String>(amount);
     map['cycle'] = Variable<String>(cycle);
     map['due_date'] = Variable<DateTime>(dueDate);
@@ -958,6 +1037,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
     return FixedExpensesCompanion(
       id: Value(id),
       name: Value(name),
+      type: Value(type),
       amount: Value(amount),
       cycle: Value(cycle),
       dueDate: Value(dueDate),
@@ -976,6 +1056,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
     return FixedExpense(
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      type: serializer.fromJson<String>(json['type']),
       amount: serializer.fromJson<String>(json['amount']),
       cycle: serializer.fromJson<String>(json['cycle']),
       dueDate: serializer.fromJson<DateTime>(json['dueDate']),
@@ -991,6 +1072,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
+      'type': serializer.toJson<String>(type),
       'amount': serializer.toJson<String>(amount),
       'cycle': serializer.toJson<String>(cycle),
       'dueDate': serializer.toJson<DateTime>(dueDate),
@@ -1004,6 +1086,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
   FixedExpense copyWith({
     String? id,
     String? name,
+    String? type,
     String? amount,
     String? cycle,
     DateTime? dueDate,
@@ -1014,6 +1097,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
   }) => FixedExpense(
     id: id ?? this.id,
     name: name ?? this.name,
+    type: type ?? this.type,
     amount: amount ?? this.amount,
     cycle: cycle ?? this.cycle,
     dueDate: dueDate ?? this.dueDate,
@@ -1026,6 +1110,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
     return FixedExpense(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      type: data.type.present ? data.type.value : this.type,
       amount: data.amount.present ? data.amount.value : this.amount,
       cycle: data.cycle.present ? data.cycle.value : this.cycle,
       dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
@@ -1045,6 +1130,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
     return (StringBuffer('FixedExpense(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('type: $type, ')
           ..write('amount: $amount, ')
           ..write('cycle: $cycle, ')
           ..write('dueDate: $dueDate, ')
@@ -1060,6 +1146,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
   int get hashCode => Object.hash(
     id,
     name,
+    type,
     amount,
     cycle,
     dueDate,
@@ -1074,6 +1161,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
       (other is FixedExpense &&
           other.id == this.id &&
           other.name == this.name &&
+          other.type == this.type &&
           other.amount == this.amount &&
           other.cycle == this.cycle &&
           other.dueDate == this.dueDate &&
@@ -1086,6 +1174,7 @@ class FixedExpense extends DataClass implements Insertable<FixedExpense> {
 class FixedExpensesCompanion extends UpdateCompanion<FixedExpense> {
   final Value<String> id;
   final Value<String> name;
+  final Value<String> type;
   final Value<String> amount;
   final Value<String> cycle;
   final Value<DateTime> dueDate;
@@ -1097,6 +1186,7 @@ class FixedExpensesCompanion extends UpdateCompanion<FixedExpense> {
   const FixedExpensesCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.type = const Value.absent(),
     this.amount = const Value.absent(),
     this.cycle = const Value.absent(),
     this.dueDate = const Value.absent(),
@@ -1109,6 +1199,7 @@ class FixedExpensesCompanion extends UpdateCompanion<FixedExpense> {
   FixedExpensesCompanion.insert({
     required String id,
     required String name,
+    this.type = const Value.absent(),
     required String amount,
     required String cycle,
     required DateTime dueDate,
@@ -1129,6 +1220,7 @@ class FixedExpensesCompanion extends UpdateCompanion<FixedExpense> {
   static Insertable<FixedExpense> custom({
     Expression<String>? id,
     Expression<String>? name,
+    Expression<String>? type,
     Expression<String>? amount,
     Expression<String>? cycle,
     Expression<DateTime>? dueDate,
@@ -1141,6 +1233,7 @@ class FixedExpensesCompanion extends UpdateCompanion<FixedExpense> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (type != null) 'type': type,
       if (amount != null) 'amount': amount,
       if (cycle != null) 'cycle': cycle,
       if (dueDate != null) 'due_date': dueDate,
@@ -1155,6 +1248,7 @@ class FixedExpensesCompanion extends UpdateCompanion<FixedExpense> {
   FixedExpensesCompanion copyWith({
     Value<String>? id,
     Value<String>? name,
+    Value<String>? type,
     Value<String>? amount,
     Value<String>? cycle,
     Value<DateTime>? dueDate,
@@ -1167,6 +1261,7 @@ class FixedExpensesCompanion extends UpdateCompanion<FixedExpense> {
     return FixedExpensesCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      type: type ?? this.type,
       amount: amount ?? this.amount,
       cycle: cycle ?? this.cycle,
       dueDate: dueDate ?? this.dueDate,
@@ -1186,6 +1281,9 @@ class FixedExpensesCompanion extends UpdateCompanion<FixedExpense> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
     }
     if (amount.present) {
       map['amount'] = Variable<String>(amount.value);
@@ -1219,6 +1317,7 @@ class FixedExpensesCompanion extends UpdateCompanion<FixedExpense> {
     return (StringBuffer('FixedExpensesCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('type: $type, ')
           ..write('amount: $amount, ')
           ..write('cycle: $cycle, ')
           ..write('dueDate: $dueDate, ')
@@ -2407,6 +2506,7 @@ typedef $$AccountsTableCreateCompanionBuilder =
       required String id,
       required String name,
       required String type,
+      Value<String> accountNumber,
       required String balance,
       Value<int?> billingDate,
       Value<int?> paymentDate,
@@ -2421,6 +2521,7 @@ typedef $$AccountsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<String> type,
+      Value<String> accountNumber,
       Value<String> balance,
       Value<int?> billingDate,
       Value<int?> paymentDate,
@@ -2452,6 +2553,11 @@ class $$AccountsTableFilterComposer
 
   ColumnFilters<String> get type => $composableBuilder(
     column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accountNumber => $composableBuilder(
+    column: $table.accountNumber,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2515,6 +2621,11 @@ class $$AccountsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get accountNumber => $composableBuilder(
+    column: $table.accountNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get balance => $composableBuilder(
     column: $table.balance,
     builder: (column) => ColumnOrderings(column),
@@ -2568,6 +2679,11 @@ class $$AccountsTableAnnotationComposer
 
   GeneratedColumn<String> get type =>
       $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<String> get accountNumber => $composableBuilder(
+    column: $table.accountNumber,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get balance =>
       $composableBuilder(column: $table.balance, builder: (column) => column);
@@ -2630,6 +2746,7 @@ class $$AccountsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> type = const Value.absent(),
+                Value<String> accountNumber = const Value.absent(),
                 Value<String> balance = const Value.absent(),
                 Value<int?> billingDate = const Value.absent(),
                 Value<int?> paymentDate = const Value.absent(),
@@ -2642,6 +2759,7 @@ class $$AccountsTableTableManager
                 id: id,
                 name: name,
                 type: type,
+                accountNumber: accountNumber,
                 balance: balance,
                 billingDate: billingDate,
                 paymentDate: paymentDate,
@@ -2656,6 +2774,7 @@ class $$AccountsTableTableManager
                 required String id,
                 required String name,
                 required String type,
+                Value<String> accountNumber = const Value.absent(),
                 required String balance,
                 Value<int?> billingDate = const Value.absent(),
                 Value<int?> paymentDate = const Value.absent(),
@@ -2668,6 +2787,7 @@ class $$AccountsTableTableManager
                 id: id,
                 name: name,
                 type: type,
+                accountNumber: accountNumber,
                 balance: balance,
                 billingDate: billingDate,
                 paymentDate: paymentDate,
@@ -2703,6 +2823,7 @@ typedef $$FixedExpensesTableCreateCompanionBuilder =
     FixedExpensesCompanion Function({
       required String id,
       required String name,
+      Value<String> type,
       required String amount,
       required String cycle,
       required DateTime dueDate,
@@ -2716,6 +2837,7 @@ typedef $$FixedExpensesTableUpdateCompanionBuilder =
     FixedExpensesCompanion Function({
       Value<String> id,
       Value<String> name,
+      Value<String> type,
       Value<String> amount,
       Value<String> cycle,
       Value<DateTime> dueDate,
@@ -2742,6 +2864,11 @@ class $$FixedExpensesTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2800,6 +2927,11 @@ class $$FixedExpensesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get amount => $composableBuilder(
     column: $table.amount,
     builder: (column) => ColumnOrderings(column),
@@ -2850,6 +2982,9 @@ class $$FixedExpensesTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
 
   GeneratedColumn<String> get amount =>
       $composableBuilder(column: $table.amount, builder: (column) => column);
@@ -2910,6 +3045,7 @@ class $$FixedExpensesTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
+                Value<String> type = const Value.absent(),
                 Value<String> amount = const Value.absent(),
                 Value<String> cycle = const Value.absent(),
                 Value<DateTime> dueDate = const Value.absent(),
@@ -2921,6 +3057,7 @@ class $$FixedExpensesTableTableManager
               }) => FixedExpensesCompanion(
                 id: id,
                 name: name,
+                type: type,
                 amount: amount,
                 cycle: cycle,
                 dueDate: dueDate,
@@ -2934,6 +3071,7 @@ class $$FixedExpensesTableTableManager
               ({
                 required String id,
                 required String name,
+                Value<String> type = const Value.absent(),
                 required String amount,
                 required String cycle,
                 required DateTime dueDate,
@@ -2945,6 +3083,7 @@ class $$FixedExpensesTableTableManager
               }) => FixedExpensesCompanion.insert(
                 id: id,
                 name: name,
+                type: type,
                 amount: amount,
                 cycle: cycle,
                 dueDate: dueDate,

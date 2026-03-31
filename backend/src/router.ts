@@ -1,5 +1,6 @@
 import { Env } from './types';
 import { authenticate, unauthorizedResponse } from './middleware/auth';
+import { handleRegister, handleLogin } from './handlers/auth';
 import {
   listAccounts,
   getAccount,
@@ -59,8 +60,20 @@ export async function handleRequest(
   const { pathname } = url;
   const method = request.method;
 
+  // ── 公開路由（不需驗證） ──
+  if (pathname === '/api/auth/register' && method === 'POST') {
+    const body = await parseJsonBody(request);
+    if (body instanceof Response) return body;
+    return handleRegister(body as any, env);
+  }
+  if (pathname === '/api/auth/login' && method === 'POST') {
+    const body = await parseJsonBody(request);
+    if (body instanceof Response) return body;
+    return handleLogin(body as any, env);
+  }
+
   // ── 身份驗證 ──
-  const userId = authenticate(request, env);
+  const userId = await authenticate(request, env);
   if (!userId) {
     return unauthorizedResponse();
   }

@@ -42,7 +42,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
     setState(() => _isLoading = true);
 
-    final success = await widget.authService.register(
+    final result = await widget.authService.register(
       _emailController.text.trim(),
       _passwordController.text,
       _nameController.text.trim(),
@@ -51,7 +51,7 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (success) {
+    if (result.success) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (_) => WelcomePage(authService: widget.authService),
@@ -62,7 +62,7 @@ class _RegisterPageState extends State<RegisterPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '註冊失敗，請稍後再試',
+            result.error ?? '註冊失敗，請稍後再試',
             style: AppTextStyles.caption(color: Colors.white),
           ),
           backgroundColor: AppColors.error,

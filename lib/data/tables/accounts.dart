@@ -11,6 +11,9 @@ class Accounts extends Table {
   /// 帳戶類型：bank（銀行）或 credit_card（信用卡）
   TextColumn get type => text()();
 
+  /// 帳號（完整銀行帳號或信用卡卡號）
+  TextColumn get accountNumber => text().withDefault(const Constant(''))();
+
   /// 餘額（Decimal 字串）
   TextColumn get balance => text()();
 

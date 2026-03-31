@@ -47,18 +47,19 @@ export async function createSavingsGoal(
 
   await env.DB.prepare(
     `INSERT INTO savings_goals
-       (id, user_id, name, target_amount, current_amount, deadline, note, is_completed, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, user_id, name, target_amount, current_amount, category, deadline, monthly_reserve, emoji, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
       userId,
       body.name ?? '',
-      body.target_amount ?? 0,
-      body.current_amount ?? 0,
+      body.target_amount ?? '0',
+      body.current_amount ?? '0',
+      body.category ?? '',
       body.deadline ?? null,
-      body.note ?? null,
-      body.is_completed ?? 0,
+      body.monthly_reserve ?? '0',
+      body.emoji ?? '🎯',
       now,
       now
     )
@@ -81,22 +82,24 @@ export async function updateSavingsGoal(
 
   const result = await env.DB.prepare(
     `UPDATE savings_goals
-     SET name           = COALESCE(?, name),
-         target_amount  = COALESCE(?, target_amount),
-         current_amount = COALESCE(?, current_amount),
-         deadline       = COALESCE(?, deadline),
-         note           = COALESCE(?, note),
-         is_completed   = COALESCE(?, is_completed),
-         updated_at     = ?
+     SET name            = COALESCE(?, name),
+         target_amount   = COALESCE(?, target_amount),
+         current_amount  = COALESCE(?, current_amount),
+         category        = COALESCE(?, category),
+         deadline        = COALESCE(?, deadline),
+         monthly_reserve = COALESCE(?, monthly_reserve),
+         emoji           = COALESCE(?, emoji),
+         updated_at      = ?
      WHERE id = ? AND user_id = ?`
   )
     .bind(
       body.name ?? null,
       body.target_amount ?? null,
       body.current_amount ?? null,
+      body.category ?? null,
       body.deadline ?? null,
-      body.note ?? null,
-      body.is_completed ?? null,
+      body.monthly_reserve ?? null,
+      body.emoji ?? null,
       now,
       id,
       userId

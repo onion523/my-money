@@ -12,6 +12,7 @@ class SyncService {
   final http.Client _client;
   final String _baseUrl;
   final String _userId;
+  final String? _token;
 
   /// 需要同步的資料表清單
   static const List<String> syncTables = [
@@ -24,10 +25,19 @@ class SyncService {
   SyncService({
     required String baseUrl,
     required String userId,
+    String? token,
     http.Client? client,
   })  : _baseUrl = baseUrl,
         _userId = userId,
+        _token = token,
         _client = client ?? http.Client();
+
+  /// 建構含認證的 headers
+  Map<String, String> get _authHeaders => {
+        'Content-Type': 'application/json',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+        'X-User-Id': _userId,
+      };
 
   /// 執行全量同步
   ///
@@ -78,10 +88,7 @@ class SyncService {
 
     final response = await _client.post(
       uri,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': _userId,
-      },
+      headers: _authHeaders,
       body: jsonEncode({
         'table': table,
         'records': records,
@@ -116,9 +123,7 @@ class SyncService {
 
       final response = await _client.get(
         uri,
-        headers: {
-          'X-User-Id': _userId,
-        },
+        headers: _authHeaders,
       );
 
       if (response.statusCode != 200) {

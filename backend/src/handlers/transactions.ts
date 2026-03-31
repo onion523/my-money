@@ -66,21 +66,18 @@ export async function createTransaction(
 
   await env.DB.prepare(
     `INSERT INTO transactions
-       (id, user_id, account_id, type, amount, category, description, date, related_account_id, note, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, user_id, type, amount, date, note, category, account_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
       userId,
-      body.account_id ?? '',
       body.type ?? 'expense',
-      body.amount ?? 0,
-      body.category ?? '',
-      body.description ?? null,
+      body.amount ?? '0',
       body.date ?? now.slice(0, 10),
-      body.related_account_id ?? null,
-      body.note ?? null,
-      now,
+      body.note ?? '',
+      body.category ?? '',
+      body.account_id ?? null,
       now
     )
     .run();
@@ -98,31 +95,23 @@ export async function updateTransaction(
   body: Partial<Transaction>,
   env: Env
 ): Promise<Response> {
-  const now = new Date().toISOString();
-
   const result = await env.DB.prepare(
     `UPDATE transactions
-     SET account_id         = COALESCE(?, account_id),
-         type               = COALESCE(?, type),
-         amount             = COALESCE(?, amount),
-         category           = COALESCE(?, category),
-         description        = COALESCE(?, description),
-         date               = COALESCE(?, date),
-         related_account_id = COALESCE(?, related_account_id),
-         note               = COALESCE(?, note),
-         updated_at         = ?
+     SET type       = COALESCE(?, type),
+         amount     = COALESCE(?, amount),
+         date       = COALESCE(?, date),
+         note       = COALESCE(?, note),
+         category   = COALESCE(?, category),
+         account_id = COALESCE(?, account_id)
      WHERE id = ? AND user_id = ?`
   )
     .bind(
-      body.account_id ?? null,
       body.type ?? null,
       body.amount ?? null,
-      body.category ?? null,
-      body.description ?? null,
       body.date ?? null,
-      body.related_account_id ?? null,
       body.note ?? null,
-      now,
+      body.category ?? null,
+      body.account_id ?? null,
       id,
       userId
     )

@@ -1,6 +1,7 @@
 /** Cloudflare Workers 環境變數綁定 */
 export interface Env {
   DB: D1Database;
+  JWT_SECRET?: string;
 }
 
 /** 帳戶 — 對應銀行帳戶或信用卡 */
@@ -8,26 +9,33 @@ export interface Account {
   id: string;
   user_id: string;
   name: string;
-  type: string;         // 'bank' | 'credit_card' | 'cash' | 'investment'
-  currency: string;     // 'TWD' | 'USD' ...
-  balance: number;
-  note: string | null;
+  type: string;                    // 'bank' | 'credit_card'
+  account_number: string;          // 帳號後幾碼
+  balance: string;                 // Decimal stored as TEXT
+  billing_date: number | null;     // 信用卡帳單日
+  payment_date: number | null;     // 信用卡繳款日
+  billed_amount: string | null;    // 已出帳金額
+  unbilled_amount: string | null;  // 未出帳金額
   created_at: string;
   updated_at: string;
 }
 
-/** 固定支出 — 每月/每年固定扣款項目 */
+/** 固定收支 — 定期扣款/收入項目 */
 export interface FixedExpense {
   id: string;
   user_id: string;
   name: string;
-  amount: number;
-  frequency: string;    // 'monthly' | 'yearly'
-  due_day: number;      // 每月幾號扣款（1-31）
+  type: string;              // 'expense' | 'income'
+  amount: string;            // Decimal stored as TEXT
+  cycle: string;             // 'monthly' | 'bimonthly' | 'quarterly' | 'semi_annual' | 'annual'
+  due_date: string | null;   // ISO date（下次到期日）
+  due_day: number;           // 每月幾號（1-31）
+  payment_method: string;    // 付款/收款方式描述
   account_id: string;
   category: string;
   note: string | null;
-  is_active: number;    // 0 或 1（SQLite 無布林值）
+  reserved_amount: string;   // 已預留金額
+  is_active: number;         // 0 或 1
   created_at: string;
   updated_at: string;
 }
@@ -37,11 +45,12 @@ export interface SavingsGoal {
   id: string;
   user_id: string;
   name: string;
-  target_amount: number;
-  current_amount: number;
-  deadline: string | null;
-  note: string | null;
-  is_completed: number; // 0 或 1
+  target_amount: string;           // Decimal stored as TEXT
+  current_amount: string;          // Decimal stored as TEXT
+  category: string;
+  deadline: string | null;         // ISO date
+  monthly_reserve: string;         // Decimal stored as TEXT
+  emoji: string;
   created_at: string;
   updated_at: string;
 }
@@ -50,16 +59,13 @@ export interface SavingsGoal {
 export interface Transaction {
   id: string;
   user_id: string;
-  account_id: string;
-  type: string;         // 'income' | 'expense' | 'transfer'
-  amount: number;
+  type: string;                    // 'income' | 'expense'
+  amount: string;                  // Decimal stored as TEXT
+  date: string;                    // YYYY-MM-DD
+  note: string;
   category: string;
-  description: string | null;
-  date: string;         // YYYY-MM-DD
-  related_account_id: string | null; // 轉帳目標帳戶
-  note: string | null;
+  account_id: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 /** 同步請求：客戶端上傳的一個表格的變更 */

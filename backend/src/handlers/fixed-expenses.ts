@@ -1,6 +1,6 @@
 import { Env, FixedExpense, ApiResponse } from '../types';
 
-/** 取得使用者所有固定支出 */
+/** 取得使用者所有固定收支 */
 export async function listFixedExpenses(
   userId: string,
   env: Env
@@ -14,7 +14,7 @@ export async function listFixedExpenses(
   return Response.json({ ok: true, data: results } satisfies ApiResponse);
 }
 
-/** 取得單一固定支出 */
+/** 取得單一固定收支 */
 export async function getFixedExpense(
   userId: string,
   id: string,
@@ -28,7 +28,7 @@ export async function getFixedExpense(
 
   if (!row) {
     return Response.json(
-      { ok: false, error: '固定支出不存在' } satisfies ApiResponse,
+      { ok: false, error: '固定收支不存在' } satisfies ApiResponse,
       { status: 404 }
     );
   }
@@ -36,7 +36,7 @@ export async function getFixedExpense(
   return Response.json({ ok: true, data: row } satisfies ApiResponse);
 }
 
-/** 新增固定支出 */
+/** 新增固定收支 */
 export async function createFixedExpense(
   userId: string,
   body: Partial<FixedExpense>,
@@ -47,19 +47,23 @@ export async function createFixedExpense(
 
   await env.DB.prepare(
     `INSERT INTO fixed_expenses
-       (id, user_id, name, amount, frequency, due_day, account_id, category, note, is_active, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, user_id, name, type, amount, cycle, due_date, due_day, payment_method, account_id, category, note, reserved_amount, is_active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
       userId,
       body.name ?? '',
-      body.amount ?? 0,
-      body.frequency ?? 'monthly',
+      body.type ?? 'expense',
+      body.amount ?? '0',
+      body.cycle ?? 'monthly',
+      body.due_date ?? null,
       body.due_day ?? 1,
+      body.payment_method ?? '',
       body.account_id ?? '',
       body.category ?? '',
       body.note ?? null,
+      body.reserved_amount ?? '0',
       body.is_active ?? 1,
       now,
       now
@@ -72,7 +76,7 @@ export async function createFixedExpense(
   );
 }
 
-/** 更新固定支出 */
+/** 更新固定收支 */
 export async function updateFixedExpense(
   userId: string,
   id: string,
@@ -83,25 +87,33 @@ export async function updateFixedExpense(
 
   const result = await env.DB.prepare(
     `UPDATE fixed_expenses
-     SET name       = COALESCE(?, name),
-         amount     = COALESCE(?, amount),
-         frequency  = COALESCE(?, frequency),
-         due_day    = COALESCE(?, due_day),
-         account_id = COALESCE(?, account_id),
-         category   = COALESCE(?, category),
-         note       = COALESCE(?, note),
-         is_active  = COALESCE(?, is_active),
-         updated_at = ?
+     SET name            = COALESCE(?, name),
+         type            = COALESCE(?, type),
+         amount          = COALESCE(?, amount),
+         cycle           = COALESCE(?, cycle),
+         due_date        = COALESCE(?, due_date),
+         due_day         = COALESCE(?, due_day),
+         payment_method  = COALESCE(?, payment_method),
+         account_id      = COALESCE(?, account_id),
+         category        = COALESCE(?, category),
+         note            = COALESCE(?, note),
+         reserved_amount = COALESCE(?, reserved_amount),
+         is_active       = COALESCE(?, is_active),
+         updated_at      = ?
      WHERE id = ? AND user_id = ?`
   )
     .bind(
       body.name ?? null,
+      body.type ?? null,
       body.amount ?? null,
-      body.frequency ?? null,
+      body.cycle ?? null,
+      body.due_date ?? null,
       body.due_day ?? null,
+      body.payment_method ?? null,
       body.account_id ?? null,
       body.category ?? null,
       body.note ?? null,
+      body.reserved_amount ?? null,
       body.is_active ?? null,
       now,
       id,
@@ -111,7 +123,7 @@ export async function updateFixedExpense(
 
   if (!result.meta.changed_db) {
     return Response.json(
-      { ok: false, error: '固定支出不存在' } satisfies ApiResponse,
+      { ok: false, error: '固定收支不存在' } satisfies ApiResponse,
       { status: 404 }
     );
   }
@@ -119,7 +131,7 @@ export async function updateFixedExpense(
   return Response.json({ ok: true, data: { id } } satisfies ApiResponse);
 }
 
-/** 刪除固定支出 */
+/** 刪除固定收支 */
 export async function deleteFixedExpense(
   userId: string,
   id: string,
@@ -133,7 +145,7 @@ export async function deleteFixedExpense(
 
   if (!result.meta.changed_db) {
     return Response.json(
-      { ok: false, error: '固定支出不存在' } satisfies ApiResponse,
+      { ok: false, error: '固定收支不存在' } satisfies ApiResponse,
       { status: 404 }
     );
   }

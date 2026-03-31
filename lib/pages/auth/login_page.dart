@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:my_money/bloc/accounts/accounts_bloc.dart';
+import 'package:my_money/bloc/balance/balance_bloc.dart';
+import 'package:my_money/bloc/cashflow/cashflow_bloc.dart';
+import 'package:my_money/bloc/expenses/expenses_bloc.dart';
+import 'package:my_money/bloc/goals/goals_bloc.dart';
+import 'package:my_money/navigation/app_navigation.dart';
 import 'package:my_money/pages/auth/register_page.dart';
 import 'package:my_money/pages/onboarding/welcome_page.dart';
 import 'package:my_money/services/auth_service.dart';
@@ -38,7 +45,7 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _isLoading = true);
 
-    final success = await widget.authService.login(
+    final result = await widget.authService.login(
       _emailController.text.trim(),
       _passwordController.text,
     );
@@ -46,17 +53,38 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (success) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => WelcomePage(authService: widget.authService),
-        ),
-      );
+    if (result.success) {
+      // 檢查是否已有帳戶（判斷是否需要 onboarding）
+      final accounts = await widget.authService.apiClient?.get('/api/accounts');
+      final hasAccounts = accounts != null &&
+          (accounts['data'] as List<dynamic>?)?.isNotEmpty == true;
+
+      if (!mounted) return;
+
+      if (hasAccounts) {
+        // 已有資料，直接進首頁
+        context.read<AccountsBloc>().add(const LoadAccounts());
+        context.read<GoalsBloc>().add(const LoadGoals());
+        context.read<BalanceBloc>().add(const LoadBalance());
+        context.read<ExpensesBloc>().add(const LoadExpenses());
+        context.read<CashflowBloc>().add(const LoadCashflow());
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AppNavigation()),
+          (route) => false,
+        );
+      } else {
+        // 第一次登入，進 onboarding
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => WelcomePage(authService: widget.authService),
+          ),
+        );
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '登入失敗，請檢查帳號密碼',
+            result.error ?? '登入失敗，請檢查帳號密碼',
             style: AppTextStyles.caption(color: Colors.white),
           ),
           backgroundColor: AppColors.error,

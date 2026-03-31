@@ -6,9 +6,9 @@ import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
 import 'package:my_money/theme/app_text_styles.dart';
 import 'package:my_money/theme/app_theme.dart';
+import 'package:my_money/widgets/dialogs/add_account_dialog.dart';
 import 'package:my_money/widgets/dialogs/edit_account_dialog.dart';
 import 'package:my_money/widgets/dialogs/edit_credit_card_dialog.dart';
-import 'package:my_money/widgets/dialogs/update_balance_dialog.dart';
 
 /// 帳戶頁面
 /// 顯示銀行帳戶列表與信用卡列表
@@ -39,13 +39,38 @@ class AccountsPage extends StatelessWidget {
     );
   }
 
+  /// 確認刪除帳戶
+  void _confirmDelete(BuildContext context, Account account) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('確認刪除'),
+        content: Text('確定要刪除「${account.name}」嗎？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              context.read<AccountsBloc>().add(DeleteAccount(account.id));
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('已刪除：${account.name}')),
+              );
+            },
+            child: Text('刪除', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 開啟對應的編輯 Dialog
   void _openEditDialog(BuildContext context, Account account) {
     showDialog(
       context: context,
-      builder: (_) => account.type == 'credit_card'
-          ? EditCreditCardDialog(account: account)
-          : EditAccountDialog(account: account),
+      builder: (_) => EditAccountDialog(account: account),
     );
   }
 
@@ -53,7 +78,7 @@ class AccountsPage extends StatelessWidget {
   void _openAddDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (_) => const UpdateBalanceDialog(),
+      builder: (_) => const AddAccountDialog(),
     );
   }
 
@@ -126,11 +151,12 @@ class AccountsPage extends StatelessWidget {
                       child: _buildBankAccount(
                         isDark: isDark,
                         bankName: account.name,
-                        accountNumber: '****-${account.id.substring(account.id.length - 4)}',
                         balance: _formatAmount(Decimal.parse(account.balance)),
                         icon: Icons.account_balance,
                         color: color,
+                        accountNumber: account.accountNumber,
                         onEdit: () => _openEditDialog(context, account),
+                        onDelete: () => _confirmDelete(context, account),
                       ),
                     ),
                   );
@@ -180,7 +206,7 @@ class AccountsPage extends StatelessWidget {
                       child: _buildCreditCard(
                         isDark: isDark,
                         cardName: card.name,
-                        cardNumber: '****-${card.id.substring(card.id.length - 4)}',
+                        accountNumber: card.accountNumber,
                         billedAmount: card.billedAmount != null
                             ? _formatAmount(Decimal.parse(card.billedAmount!))
                             : '0',
@@ -190,6 +216,7 @@ class AccountsPage extends StatelessWidget {
                         dueDate: dueDate,
                         color: color,
                         onEdit: () => _openEditDialog(context, card),
+                        onDelete: () => _confirmDelete(context, card),
                       ),
                     ),
                   );
@@ -252,6 +279,13 @@ class AccountsPage extends StatelessWidget {
     );
   }
 
+  /// 遮罩帳號/卡號，只顯示末 4 碼，其餘用星號
+  static String _maskNumber(String number) {
+    if (number.length <= 4) return number;
+    final masked = '*' * (number.length - 4);
+    return '$masked${number.substring(number.length - 4)}';
+  }
+
   /// 格式化金額為千分位字串
   static String _formatAmount(Decimal amount) {
     final intPart = amount.truncate().toBigInt().abs().toString();
@@ -269,11 +303,12 @@ class AccountsPage extends StatelessWidget {
   Widget _buildBankAccount({
     required bool isDark,
     required String bankName,
-    required String accountNumber,
     required String balance,
     required IconData icon,
     required Color color,
+    String? accountNumber,
     VoidCallback? onEdit,
+    VoidCallback? onDelete,
   }) {
     return Container(
       padding: const EdgeInsets.all(AppTheme.cardPadding),
@@ -308,15 +343,15 @@ class AccountsPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(bankName, style: AppTextStyles.bodyBold()),
-                const SizedBox(height: 2),
-                Text(
-                  accountNumber,
-                  style: AppTextStyles.label(
-                    color: isDark
-                        ? AppColors.darkSecondaryText
-                        : AppColors.secondaryText,
+                if (accountNumber != null && accountNumber.isNotEmpty)
+                  Text(
+                    '帳號 ${_maskNumber(accountNumber)}',
+                    style: AppTextStyles.label(
+                      color: isDark
+                          ? AppColors.darkSecondaryText
+                          : AppColors.secondaryText,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -346,6 +381,18 @@ class AccountsPage extends StatelessWidget {
               padding: EdgeInsets.zero,
             ),
           ],
+          if (onDelete != null)
+            IconButton(
+              onPressed: onDelete,
+              icon: Icon(
+                Icons.delete_outline,
+                size: 20,
+                color: AppColors.error.withValues(alpha: 0.7),
+              ),
+              tooltip: '刪除',
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              padding: EdgeInsets.zero,
+            ),
         ],
       ),
     );
@@ -355,12 +402,13 @@ class AccountsPage extends StatelessWidget {
   Widget _buildCreditCard({
     required bool isDark,
     required String cardName,
-    required String cardNumber,
     required String billedAmount,
     required String unbilledAmount,
     required String dueDate,
     required Color color,
+    String? accountNumber,
     VoidCallback? onEdit,
+    VoidCallback? onDelete,
   }) {
     return Container(
       padding: const EdgeInsets.all(AppTheme.cardPadding),
@@ -400,15 +448,15 @@ class AccountsPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(cardName, style: AppTextStyles.bodyBold()),
-                    const SizedBox(height: 2),
-                    Text(
-                      cardNumber,
-                      style: AppTextStyles.label(
-                        color: isDark
-                            ? AppColors.darkSecondaryText
-                            : AppColors.secondaryText,
+                    if (accountNumber != null && accountNumber.isNotEmpty)
+                      Text(
+                        '卡號 ${_maskNumber(accountNumber)}',
+                        style: AppTextStyles.label(
+                          color: isDark
+                              ? AppColors.darkSecondaryText
+                              : AppColors.secondaryText,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -422,6 +470,18 @@ class AccountsPage extends StatelessWidget {
                     color: isDark ? AppColors.darkSecondaryText : AppColors.secondaryText,
                   ),
                   tooltip: '編輯',
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  padding: EdgeInsets.zero,
+                ),
+              if (onDelete != null)
+                IconButton(
+                  onPressed: onDelete,
+                  icon: Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: AppColors.error.withValues(alpha: 0.7),
+                  ),
+                  tooltip: '刪除',
                   constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                   padding: EdgeInsets.zero,
                 ),
