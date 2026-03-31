@@ -1,9 +1,14 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:my_money/bloc/expenses/expenses_bloc.dart';
+import 'package:my_money/bloc/goals/goals_bloc.dart';
+import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
 import 'package:my_money/theme/app_text_styles.dart';
 import 'package:my_money/theme/app_theme.dart';
 
-/// 月報表分類資料
+/// 分類資料（顯示用）
 class _CategoryData {
   final String name;
   final String emoji;
@@ -19,101 +24,136 @@ class _CategoryData {
 }
 
 /// 月報表元件
-/// 本月 vs 上月花費比較、各分類佔比、儲蓄目標進度、文字摘要
+/// 本月 vs 上月花費比較、各分類佔比、儲蓄目標進度
 class MonthlyReport extends StatelessWidget {
   const MonthlyReport({super.key});
 
-  // ========== Mock 資料 ==========
+  static const _categoryEmojis = {
+    '餐飲': '\u{1F35C}',
+    '交通': '\u{1F68C}',
+    '娛樂': '\u{1F3AE}',
+    '購物': '\u{1F6D2}',
+    '生活': '\u{1F3E0}',
+    '醫療': '\u{1F3E5}',
+    '教育': '\u{1F4DA}',
+    '其他': '\u{1F4E6}',
+  };
 
-  /// 本月花費
-  static const _thisMonthTotal = 18500.0;
-
-  /// 上月花費
-  static const _lastMonthTotal = 16200.0;
-
-  /// 本月 vs 上月差額
-  static const _difference = _thisMonthTotal - _lastMonthTotal;
-
-  /// 儲蓄目標進度
-  static const _savingsProgress = 0.68;
-  static const _savingsGoalName = '日本旅遊基金';
-
-  /// 各分類花費 Mock 資料
-  static const _categories = [
-    _CategoryData(
-      name: '餐飲',
-      emoji: '\u{1F35C}',
-      amount: 6500,
-      color: AppColors.accent,
-    ),
-    _CategoryData(
-      name: '交通',
-      emoji: '\u{1F68C}',
-      amount: 3200,
-      color: AppColors.accentCool,
-    ),
-    _CategoryData(
-      name: '娛樂',
-      emoji: '\u{1F3AE}',
-      amount: 4100,
-      color: AppColors.accentWarm,
-    ),
-    _CategoryData(
-      name: '日用品',
-      emoji: '\u{1F6D2}',
-      amount: 2800,
-      color: AppColors.success,
-    ),
-    _CategoryData(
-      name: '其他',
-      emoji: '\u{1F4E6}',
-      amount: 1900,
-      color: AppColors.warning,
-    ),
+  static const _categoryColors = [
+    AppColors.accent,
+    AppColors.accentCool,
+    AppColors.accentWarm,
+    AppColors.success,
+    AppColors.warning,
+    Color(0xFF9B59B6),
+    Color(0xFF3498DB),
+    Color(0xFF95A5A6),
   ];
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppTheme.spacingMd),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ========== 文字摘要 ==========
-          _buildSummaryCard(isDark),
+    return BlocBuilder<ExpensesBloc, ExpensesState>(
+      builder: (context, expensesState) {
+        return BlocBuilder<GoalsBloc, GoalsState>(
+          builder: (context, goalsState) {
+            final transactions = expensesState is ExpensesLoaded
+                ? expensesState.transactions
+                : <Transaction>[];
+            final goals =
+                goalsState is GoalsLoaded ? goalsState.goals : <SavingsGoal>[];
 
-          const SizedBox(height: AppTheme.sectionGap),
+            final now = DateTime.now();
 
-          // ========== 本月 vs 上月比較 ==========
-          _buildSectionTitle(isDark, '\u{1F4CA}', '本月 vs 上月花費'),
-          const SizedBox(height: AppTheme.spacingSm),
-          _buildComparisonChart(isDark),
+            // 本月支出
+            final thisMonthExpenses = transactions.where((t) =>
+                t.type == 'expense' &&
+                t.date.year == now.year &&
+                t.date.month == now.month);
+            final thisMonthTotal = thisMonthExpenses.fold(
+                0.0, (sum, t) => sum + Decimal.parse(t.amount).toDouble());
 
-          const SizedBox(height: AppTheme.sectionGap),
+            // 上月支出
+            final lastMonth =
+                now.month == 1 ? DateTime(now.year - 1, 12) : DateTime(now.year, now.month - 1);
+            final lastMonthExpenses = transactions.where((t) =>
+                t.type == 'expense' &&
+                t.date.year == lastMonth.year &&
+                t.date.month == lastMonth.month);
+            final lastMonthTotal = lastMonthExpenses.fold(
+                0.0, (sum, t) => sum + Decimal.parse(t.amount).toDouble());
 
-          // ========== 各分類佔比 ==========
-          _buildSectionTitle(isDark, '\u{1F4C8}', '各分類佔比'),
-          const SizedBox(height: AppTheme.spacingSm),
-          _buildCategoryBreakdown(isDark),
+            // 分類統計
+            final categoryTotals = <String, double>{};
+            for (final tx in thisMonthExpenses) {
+              categoryTotals[tx.category] =
+                  (categoryTotals[tx.category] ?? 0) +
+                      Decimal.parse(tx.amount).toDouble();
+            }
+            final sortedCategories = categoryTotals.entries.toList()
+              ..sort((a, b) => b.value.compareTo(a.value));
 
-          const SizedBox(height: AppTheme.sectionGap),
+            final categories = <_CategoryData>[];
+            for (var i = 0; i < sortedCategories.length; i++) {
+              final entry = sortedCategories[i];
+              categories.add(_CategoryData(
+                name: entry.key,
+                emoji: _categoryEmojis[entry.key] ?? '\u{1F4E6}',
+                amount: entry.value,
+                color: _categoryColors[i % _categoryColors.length],
+              ));
+            }
 
-          // ========== 儲蓄目標進度 ==========
-          _buildSectionTitle(isDark, '\u{1F3AF}', '儲蓄目標進度'),
-          const SizedBox(height: AppTheme.spacingSm),
-          _buildSavingsProgress(isDark),
+            final difference = thisMonthTotal - lastMonthTotal;
 
-          const SizedBox(height: AppTheme.spacing2xl),
-        ],
-      ),
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(AppTheme.spacingMd),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSummaryCard(
+                      isDark, thisMonthTotal, difference),
+                  const SizedBox(height: AppTheme.sectionGap),
+                  _buildSectionTitle(isDark, '\u{1F4CA}', '本月 vs 上月花費'),
+                  const SizedBox(height: AppTheme.spacingSm),
+                  _buildComparisonChart(
+                      isDark, thisMonthTotal, lastMonthTotal),
+                  const SizedBox(height: AppTheme.sectionGap),
+                  if (categories.isNotEmpty) ...[
+                    _buildSectionTitle(isDark, '\u{1F4C8}', '各分類佔比'),
+                    const SizedBox(height: AppTheme.spacingSm),
+                    _buildCategoryBreakdown(
+                        isDark, categories, thisMonthTotal),
+                    const SizedBox(height: AppTheme.sectionGap),
+                  ],
+                  if (goals.isNotEmpty) ...[
+                    _buildSectionTitle(isDark, '\u{1F3AF}', '儲蓄目標進度'),
+                    const SizedBox(height: AppTheme.spacingSm),
+                    ...goals.map(
+                        (g) => _buildSavingsProgress(isDark, g)),
+                  ],
+                  if (transactions.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppTheme.spacing2xl),
+                        child: Text('尚無交易紀錄，開始記帳後將顯示月報表',
+                            style: AppTextStyles.caption()),
+                      ),
+                    ),
+                  const SizedBox(height: AppTheme.spacing2xl),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
-  /// 文字摘要卡片
-  Widget _buildSummaryCard(bool isDark) {
-    final isMore = _difference > 0;
+  Widget _buildSummaryCard(
+      bool isDark, double thisMonthTotal, double difference) {
+    final isMore = difference > 0;
     final diffColor = isMore ? AppColors.error : AppColors.success;
     final diffText = isMore ? '多' : '少';
 
@@ -121,9 +161,8 @@ class MonthlyReport extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(AppTheme.cardPadding),
       decoration: BoxDecoration(
-        gradient: isDark
-            ? AppColors.darkBalanceGradient
-            : AppColors.balanceGradient,
+        gradient:
+            isDark ? AppColors.darkBalanceGradient : AppColors.balanceGradient,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         boxShadow: [
           BoxShadow(
@@ -136,14 +175,12 @@ class MonthlyReport extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '本月花費摘要',
-            style: AppTextStyles.bodyBold(
-              color: isDark
-                  ? AppColors.darkPrimaryText
-                  : AppColors.primaryText,
-            ),
-          ),
+          Text('本月花費摘要',
+              style: AppTextStyles.bodyBold(
+                color: isDark
+                    ? AppColors.darkPrimaryText
+                    : AppColors.primaryText,
+              )),
           const SizedBox(height: AppTheme.spacingSm),
           RichText(
             text: TextSpan(
@@ -155,17 +192,19 @@ class MonthlyReport extends StatelessWidget {
               children: [
                 const TextSpan(text: '本月你花了 '),
                 TextSpan(
-                  text: '\$${_formatNumber(_thisMonthTotal)}',
+                  text: '\$${_formatNumber(thisMonthTotal)}',
                   style: AppTextStyles.amountMedium(
                     color: isDark ? AppColors.darkAccent : AppColors.accent,
                   ),
                 ),
-                const TextSpan(text: '，比上月'),
-                TextSpan(
-                  text: '$diffText \$${_formatNumber(_difference.abs())}',
-                  style: AppTextStyles.bodyBold(color: diffColor),
-                ),
-                const TextSpan(text: '。'),
+                if (difference.abs() > 0) ...[
+                  const TextSpan(text: '，比上月'),
+                  TextSpan(
+                    text: '$diffText \$${_formatNumber(difference.abs())}',
+                    style: AppTextStyles.bodyBold(color: diffColor),
+                  ),
+                  const TextSpan(text: '。'),
+                ],
               ],
             ),
           ),
@@ -174,28 +213,36 @@ class MonthlyReport extends StatelessWidget {
     );
   }
 
-  /// 區塊標題
   Widget _buildSectionTitle(bool isDark, String emoji, String title) {
     return Row(
       children: [
         Text(emoji, style: const TextStyle(fontSize: 20)),
         const SizedBox(width: AppTheme.spacingSm),
-        Text(
-          title,
-          style: AppTextStyles.cardTitle(
-            color: isDark
-                ? AppColors.darkPrimaryText
-                : AppColors.primaryText,
-          ),
-        ),
+        Text(title,
+            style: AppTextStyles.cardTitle(
+              color: isDark
+                  ? AppColors.darkPrimaryText
+                  : AppColors.primaryText,
+            )),
       ],
     );
   }
 
-  /// 本月 vs 上月比較柱狀圖（用 Row + Container 模擬）
-  Widget _buildComparisonChart(bool isDark) {
+  Widget _buildComparisonChart(
+      bool isDark, double thisMonthTotal, double lastMonthTotal) {
     final maxAmount =
-        _thisMonthTotal > _lastMonthTotal ? _thisMonthTotal : _lastMonthTotal;
+        thisMonthTotal > lastMonthTotal ? thisMonthTotal : lastMonthTotal;
+    if (maxAmount == 0) {
+      return Container(
+        padding: const EdgeInsets.all(AppTheme.cardPadding),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        ),
+        child: Center(
+            child: Text('尚無花費資料', style: AppTextStyles.caption())),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(AppTheme.cardPadding),
@@ -212,22 +259,18 @@ class MonthlyReport extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // 上月
           _buildBarRow(
             isDark: isDark,
             label: '上月',
-            amount: _lastMonthTotal,
+            amount: lastMonthTotal,
             maxAmount: maxAmount,
             color: AppColors.accentCool,
           ),
-
           const SizedBox(height: AppTheme.spacingMd),
-
-          // 本月
           _buildBarRow(
             isDark: isDark,
             label: '本月',
-            amount: _thisMonthTotal,
+            amount: thisMonthTotal,
             maxAmount: maxAmount,
             color: isDark ? AppColors.darkAccent : AppColors.accent,
           ),
@@ -236,7 +279,6 @@ class MonthlyReport extends StatelessWidget {
     );
   }
 
-  /// 單一柱狀列
   Widget _buildBarRow({
     required bool isDark,
     required String label,
@@ -250,14 +292,12 @@ class MonthlyReport extends StatelessWidget {
       children: [
         SizedBox(
           width: 36,
-          child: Text(
-            label,
-            style: AppTextStyles.caption(
-              color: isDark
-                  ? AppColors.darkSecondaryText
-                  : AppColors.secondaryText,
-            ),
-          ),
+          child: Text(label,
+              style: AppTextStyles.caption(
+                color: isDark
+                    ? AppColors.darkSecondaryText
+                    : AppColors.secondaryText,
+              )),
         ),
         const SizedBox(width: AppTheme.spacingSm),
         Expanded(
@@ -265,7 +305,6 @@ class MonthlyReport extends StatelessWidget {
             builder: (context, constraints) {
               return Stack(
                 children: [
-                  // 背景
                   Container(
                     height: 28,
                     decoration: BoxDecoration(
@@ -273,7 +312,6 @@ class MonthlyReport extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
-                  // 實際值
                   Container(
                     height: 28,
                     width: constraints.maxWidth * ratio,
@@ -301,8 +339,24 @@ class MonthlyReport extends StatelessWidget {
     );
   }
 
-  /// 各分類佔比區塊（模擬圓餅圖 + 清單）
-  Widget _buildCategoryBreakdown(bool isDark) {
+  Widget _buildCategoryBreakdown(
+      bool isDark, List<_CategoryData> categories, double total) {
+    if (total == 0) return const SizedBox.shrink();
+
+    // 計算圓餅圖 stops
+    final stops = <double>[0.0];
+    final colors = <Color>[];
+    for (final cat in categories) {
+      final ratio = cat.amount / total;
+      colors.add(cat.color);
+      colors.add(cat.color);
+      stops.add(stops.last);
+      stops.add(stops.last + ratio);
+    }
+    // 確保最後一個 stop 是 1.0
+    if (stops.last < 1.0) stops.add(1.0);
+    if (colors.length < stops.length) colors.add(colors.last);
+
     return Container(
       padding: const EdgeInsets.all(AppTheme.cardPadding),
       decoration: BoxDecoration(
@@ -318,21 +372,51 @@ class MonthlyReport extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // 模擬圓餅圖：用一個圓形 + 分色環
-          _buildMockPieChart(isDark),
-
+          // 圓餅圖
+          SizedBox(
+            width: 140,
+            height: 140,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 140,
+                  height: 140,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: SweepGradient(
+                      colors: colors,
+                      stops: stops.length == colors.length ? stops : null,
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkSurface : AppColors.surface,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '\$${_formatNumber(total)}',
+                    style: AppTextStyles.bodyBold(
+                      color: isDark
+                          ? AppColors.darkPrimaryText
+                          : AppColors.primaryText,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: AppTheme.spacingMd),
-
-          // 分類清單
-          ..._categories.map((cat) {
-            final percentage = (cat.amount / _thisMonthTotal * 100).toInt();
+          ...categories.map((cat) {
+            final percentage = (cat.amount / total * 100).toInt();
             return Padding(
-              padding: const EdgeInsets.symmetric(
-                vertical: AppTheme.spacingXs,
-              ),
+              padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingXs),
               child: Row(
                 children: [
-                  // 色塊
                   Container(
                     width: 12,
                     height: 12,
@@ -342,40 +426,32 @@ class MonthlyReport extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppTheme.spacingSm),
-                  // emoji + 分類名
                   Text(cat.emoji, style: const TextStyle(fontSize: 16)),
                   const SizedBox(width: AppTheme.spacingXs),
                   Expanded(
-                    child: Text(
-                      cat.name,
-                      style: AppTextStyles.body(
+                    child: Text(cat.name,
+                        style: AppTextStyles.body(
+                          color: isDark
+                              ? AppColors.darkPrimaryText
+                              : AppColors.primaryText,
+                        )),
+                  ),
+                  Text('\$${_formatNumber(cat.amount)}',
+                      style: AppTextStyles.bodyBold(
                         color: isDark
                             ? AppColors.darkPrimaryText
                             : AppColors.primaryText,
-                      ),
-                    ),
-                  ),
-                  // 金額 + 百分比
-                  Text(
-                    '\$${_formatNumber(cat.amount)}',
-                    style: AppTextStyles.bodyBold(
-                      color: isDark
-                          ? AppColors.darkPrimaryText
-                          : AppColors.primaryText,
-                    ),
-                  ),
+                      )),
                   const SizedBox(width: AppTheme.spacingSm),
                   SizedBox(
                     width: 40,
-                    child: Text(
-                      '$percentage%',
-                      textAlign: TextAlign.end,
-                      style: AppTextStyles.caption(
-                        color: isDark
-                            ? AppColors.darkSecondaryText
-                            : AppColors.secondaryText,
-                      ),
-                    ),
+                    child: Text('$percentage%',
+                        textAlign: TextAlign.end,
+                        style: AppTextStyles.caption(
+                          color: isDark
+                              ? AppColors.darkSecondaryText
+                              : AppColors.secondaryText,
+                        )),
                   ),
                 ],
               ),
@@ -386,159 +462,84 @@ class MonthlyReport extends StatelessWidget {
     );
   }
 
-  /// 用圓形 Container 模擬圓餅圖
-  Widget _buildMockPieChart(bool isDark) {
-    return SizedBox(
-      width: 140,
-      height: 140,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // 外圈：用多個弧形容器堆疊模擬
-          Container(
-            width: 140,
-            height: 140,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: SweepGradient(
-                colors: [
-                  _categories[0].color, // 餐飲
-                  _categories[0].color,
-                  _categories[1].color, // 交通
-                  _categories[1].color,
-                  _categories[2].color, // 娛樂
-                  _categories[2].color,
-                  _categories[3].color, // 日用品
-                  _categories[3].color,
-                  _categories[4].color, // 其他
-                  _categories[4].color,
-                  _categories[0].color,
-                ],
-                stops: const [
-                  0.0,
-                  0.35, // 餐飲 35%
-                  0.35,
-                  0.52, // 交通 17%
-                  0.52,
-                  0.74, // 娛樂 22%
-                  0.74,
-                  0.89, // 日用品 15%
-                  0.89,
-                  1.0, // 其他 11%
-                  1.0,
-                ],
-              ),
-            ),
-          ),
-          // 中心白圓
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.surface,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '\$${_formatNumber(_thisMonthTotal)}',
-              style: AppTextStyles.bodyBold(
-                color: isDark
-                    ? AppColors.darkPrimaryText
-                    : AppColors.primaryText,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildSavingsProgress(bool isDark, SavingsGoal goal) {
+    final target = Decimal.parse(goal.targetAmount);
+    final current = Decimal.parse(goal.currentAmount);
+    final progress =
+        target > Decimal.zero ? (current / target).toDouble() : 0.0;
 
-  /// 儲蓄目標進度摘要
-  Widget _buildSavingsProgress(bool isDark) {
-    final progressColor = _savingsProgress >= 0.7
+    final progressColor = progress >= 0.7
         ? AppColors.success
-        : _savingsProgress >= 0.4
+        : progress >= 0.4
             ? AppColors.warning
             : AppColors.accent;
 
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.cardPadding),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 目標名稱 + 百分比
-          Row(
-            children: [
-              const Text('\u{2708}\u{FE0F}', style: TextStyle(fontSize: 20)),
-              const SizedBox(width: AppTheme.spacingSm),
-              Expanded(
-                child: Text(
-                  _savingsGoalName,
-                  style: AppTextStyles.bodyBold(
-                    color: isDark
-                        ? AppColors.darkPrimaryText
-                        : AppColors.primaryText,
-                  ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppTheme.cardGap),
+      child: Container(
+        padding: const EdgeInsets.all(AppTheme.cardPadding),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(goal.emoji, style: const TextStyle(fontSize: 20)),
+                const SizedBox(width: AppTheme.spacingSm),
+                Expanded(
+                  child: Text(goal.name,
+                      style: AppTextStyles.bodyBold(
+                        color: isDark
+                            ? AppColors.darkPrimaryText
+                            : AppColors.primaryText,
+                      )),
                 ),
-              ),
-              Text(
-                '${(_savingsProgress * 100).toInt()}%',
-                style: AppTextStyles.bodyBold(color: progressColor),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: AppTheme.spacingSm),
-
-          // 進度條
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: _savingsProgress,
-              backgroundColor: progressColor.withValues(alpha: 0.15),
-              valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-              minHeight: 8,
+                Text('${(progress * 100).toInt()}%',
+                    style: AppTextStyles.bodyBold(color: progressColor)),
+              ],
             ),
-          ),
-
-          const SizedBox(height: AppTheme.spacingSm),
-
-          Text(
-            '按照目前進度，預計再 3 個月可達成目標',
-            style: AppTextStyles.caption(
-              color: isDark
-                  ? AppColors.darkSecondaryText
-                  : AppColors.secondaryText,
+            const SizedBox(height: AppTheme.spacingSm),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: progressColor.withValues(alpha: 0.15),
+                valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                minHeight: 8,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: AppTheme.spacingSm),
+            Text(
+              '\$${_formatNumber(current.toDouble())} / \$${_formatNumber(target.toDouble())}',
+              style: AppTextStyles.caption(
+                color: isDark
+                    ? AppColors.darkSecondaryText
+                    : AppColors.secondaryText,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// 格式化數字（加入千分位逗號）
   static String _formatNumber(double value) {
     final intPart = value.toInt().toString();
     final buffer = StringBuffer();
-
     for (var i = 0; i < intPart.length; i++) {
-      if (i > 0 && (intPart.length - i) % 3 == 0) {
-        buffer.write(',');
-      }
+      if (i > 0 && (intPart.length - i) % 3 == 0) buffer.write(',');
       buffer.write(intPart[i]);
     }
-
     return buffer.toString();
   }
 }

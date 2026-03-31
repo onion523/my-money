@@ -3,15 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:my_money/bloc/balance/balance_bloc.dart';
 import 'package:my_money/bloc/cashflow/cashflow_bloc.dart';
+import 'package:my_money/bloc/expenses/expenses_bloc.dart';
 import 'package:my_money/bloc/goals/goals_bloc.dart';
 import 'package:my_money/core/cashflow_forecast.dart';
 import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
 import 'package:my_money/theme/app_text_styles.dart';
 import 'package:my_money/theme/app_theme.dart';
+import 'package:my_money/widgets/ai_insights_section.dart';
 import 'package:my_money/widgets/balance_card.dart';
 import 'package:my_money/widgets/cashflow_row.dart';
 import 'package:my_money/widgets/goal_card.dart';
+import 'package:my_money/widgets/monthly_report.dart';
+import 'package:my_money/navigation/app_navigation.dart';
 import 'package:my_money/widgets/segmented_control.dart';
 
 /// 首頁
@@ -28,31 +32,7 @@ class _HomePageState extends State<HomePage> {
   /// 分段控制器目前選中的索引
   int _segmentIndex = 0;
 
-  // ========== Mock 資料（BLoC 錯誤時的 fallback）==========
-
-  /// Mock 餘額
-  static const _mockBalance = '89,700';
-  static const _mockFreeToSpend = '62,350';
-
-  /// Mock 儲蓄目標
-  static const _mockGoals = [
-    _MockGoal(
-      emoji: '\u{1F3EF}',
-      name: '京都旅遊',
-      currentAmount: '34,000',
-      targetAmount: '50,000',
-      progress: 0.68,
-      deadline: '2026 年 10 月',
-    ),
-    _MockGoal(
-      emoji: '\u{1F334}',
-      name: '曼谷自由行',
-      currentAmount: '10,500',
-      targetAmount: '30,000',
-      progress: 0.35,
-      deadline: '2026 年 12 月',
-    ),
-  ];
+  // ========== 預設值（BLoC 尚未載入時）==========
 
   @override
   Widget build(BuildContext context) {
@@ -82,12 +62,13 @@ class _HomePageState extends State<HomePage> {
                   return BalanceCard(
                     balance: _formatAmount(state.available),
                     freeToSpend: _formatAmount(state.afterAllocation),
+                    unbilled: _formatAmount(state.unbilledTotal),
                   );
                 }
-                // 初始 / 載入中 / 錯誤時顯示 mock 資料
+                // 初始 / 載入中 / 錯誤時顯示 0
                 return const BalanceCard(
-                  balance: _mockBalance,
-                  freeToSpend: _mockFreeToSpend,
+                  balance: '0',
+                  freeToSpend: '0',
                 );
               },
             ),
@@ -100,7 +81,7 @@ class _HomePageState extends State<HomePage> {
           // 分段控制器
           SliverToBoxAdapter(
             child: SegmentedControl(
-              segments: const ['月預算總覽', '現金流���測'],
+              segments: const ['月預算總覽', '現金流預測', '月報表'],
               selectedIndex: _segmentIndex,
               onChanged: (index) {
                 setState(() => _segmentIndex = index);
@@ -118,15 +99,25 @@ class _HomePageState extends State<HomePage> {
               duration: const Duration(milliseconds: 300),
               child: _segmentIndex == 0
                   ? _buildBudgetOverview(isDark)
-                  : _buildCashflowForecastSection(isDark),
+                  : _segmentIndex == 1
+                      ? _buildCashflowForecastSection(isDark)
+                      : const MonthlyReport(),
             ),
+          ),
+
+          // AI 智慧建議
+          const SliverToBoxAdapter(
+            child: SizedBox(height: AppTheme.sectionGap),
+          ),
+          const SliverToBoxAdapter(
+            child: AiInsightsSection(),
           ),
 
           const SliverToBoxAdapter(
             child: SizedBox(height: AppTheme.sectionGap),
           ),
 
-          // 儲蓄目標摘���
+          // 儲蓄目標摘要
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -137,7 +128,9 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Text('儲蓄目標', style: AppTextStyles.cardTitle()),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      context.findAncestorStateOfType<AppNavigationState>()?.switchToTab(2);
+                    },
                     child: const Text('查看全部'),
                   ),
                 ],
@@ -155,8 +148,18 @@ class _HomePageState extends State<HomePage> {
                 if (state is GoalsLoaded && state.goals.isNotEmpty) {
                   return _buildGoalsList(state.goals);
                 }
-                // 初始 / 載入中 / 錯誤時顯示 mock 資料
-                return _buildMockGoalsList();
+                // 無資料時顯示空狀態
+                return SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppTheme.spacingLg),
+                    child: Center(
+                      child: Text(
+                        '尚未設定儲蓄目標',
+                        style: AppTextStyles.caption(),
+                      ),
+                    ),
+                  ),
+                );
               },
             ),
           ),
@@ -182,7 +185,7 @@ class _HomePageState extends State<HomePage> {
         targetAmount: _formatAmount(target),
         progress: progress,
         deadline: goal.deadline != null
-            ? '${goal.deadline!.year} 年 ${goal.deadline!.month} ���'
+            ? '${goal.deadline!.year} 年 ${goal.deadline!.month} 月'
             : null,
       ));
       if (i < goals.length - 1) {
@@ -193,115 +196,91 @@ class _HomePageState extends State<HomePage> {
     return SliverList(delegate: SliverChildListDelegate(children));
   }
 
-  /// Mock 儲蓄目標列表（fallback）
-  Widget _buildMockGoalsList() {
-    return SliverList(
-      delegate: SliverChildListDelegate([
-        for (var i = 0; i < _mockGoals.length; i++) ...[
-          GoalCard(
-            emoji: _mockGoals[i].emoji,
-            name: _mockGoals[i].name,
-            currentAmount: _mockGoals[i].currentAmount,
-            targetAmount: _mockGoals[i].targetAmount,
-            progress: _mockGoals[i].progress,
-            deadline: _mockGoals[i].deadline,
-          ),
-          if (i < _mockGoals.length - 1)
-            const SizedBox(height: AppTheme.cardGap),
-        ],
-        const SizedBox(height: AppTheme.spacing2xl),
-      ]),
-    );
-  }
-
-  /// 月預算總覽區塊
+  /// 月預算總覽區塊（BLoC 驅動）
   Widget _buildBudgetOverview(bool isDark) {
-    return Container(
-      key: const ValueKey('budget'),
-      margin: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd),
-      padding: const EdgeInsets.all(AppTheme.cardPadding),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('本月預算', style: AppTextStyles.bodyBold()),
-          const SizedBox(height: AppTheme.spacingMd),
+    return BlocBuilder<ExpensesBloc, ExpensesState>(
+      builder: (context, state) {
+        final summary = state is ExpensesLoaded ? state.monthlySummary : null;
+        final categories = summary?.byCategory.entries.toList() ?? [];
 
-          // 預算進度
-          _buildBudgetItem('飲食', 8500, 12000, isDark),
-          const SizedBox(height: AppTheme.spacingSm + AppTheme.spacingXs),
-          _buildBudgetItem('交通', 2800, 4000, isDark),
-          const SizedBox(height: AppTheme.spacingSm + AppTheme.spacingXs),
-          _buildBudgetItem('娛樂', 3200, 5000, isDark),
-          const SizedBox(height: AppTheme.spacingSm + AppTheme.spacingXs),
-          _buildBudgetItem('日用品', 1500, 3000, isDark),
-
-          const SizedBox(height: AppTheme.spacingMd),
-          const Divider(),
-          const SizedBox(height: AppTheme.spacingSm),
-
-          // 總計
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('已花費', style: AppTextStyles.caption()),
-              Text(
-                '\$16,000 / \$24,000',
-                style: AppTextStyles.bodyBold(color: AppColors.accent),
+        return Container(
+          key: const ValueKey('budget'),
+          margin: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd),
+          padding: const EdgeInsets.all(AppTheme.cardPadding),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : AppColors.surface,
+            borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('本月花費', style: AppTextStyles.bodyBold()),
+              const SizedBox(height: AppTheme.spacingMd),
+
+              if (categories.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppTheme.spacingLg),
+                    child: Text(
+                      '本月尚未記錄花費',
+                      style: AppTextStyles.caption(),
+                    ),
+                  ),
+                )
+              else ...[
+                for (var i = 0; i < categories.length; i++) ...[
+                  _buildBudgetItem(
+                    categories[i].key,
+                    categories[i].value.toInt(),
+                    0,
+                    isDark,
+                  ),
+                  if (i < categories.length - 1)
+                    const SizedBox(
+                        height: AppTheme.spacingSm + AppTheme.spacingXs),
+                ],
+                const SizedBox(height: AppTheme.spacingMd),
+                const Divider(),
+                const SizedBox(height: AppTheme.spacingSm),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('本月已花費', style: AppTextStyles.caption()),
+                    Text(
+                      '\$${summary!.totalSpent.toInt()}',
+                      style: AppTextStyles.bodyBold(color: AppColors.accent),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
-  /// 預算項目行
+  /// 花費分類項目行
   Widget _buildBudgetItem(
     String category,
     int spent,
-    int budget,
+    int _,
     bool isDark,
   ) {
-    final progress = spent / budget;
-    final progressColor = progress > 0.8
-        ? AppColors.error
-        : progress > 0.6
-            ? AppColors.warning
-            : AppColors.success;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(category, style: AppTextStyles.caption()),
-            Text(
-              '\$$spent / \$$budget',
-              style: AppTextStyles.label(),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: LinearProgressIndicator(
-            value: progress.clamp(0.0, 1.0),
-            backgroundColor: progressColor.withValues(alpha: 0.12),
-            valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-            minHeight: 5,
-          ),
+        Text(category, style: AppTextStyles.caption()),
+        Text(
+          '\$$spent',
+          style: AppTextStyles.label(),
         ),
       ],
     );
@@ -383,43 +362,14 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CashflowRow(
-            date: '4/1',
-            name: '薪資入帳',
-            amount: '52,000',
-            isIncome: true,
-            isFirst: true,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppTheme.spacingLg),
+          child: Text(
+            '新增固定支出後將顯示現金流預測',
+            style: AppTextStyles.caption(),
           ),
-          CashflowRow(
-            date: '4/5',
-            name: '房��',
-            amount: '12,000',
-          ),
-          CashflowRow(
-            date: '4/10',
-            name: '中信卡帳單',
-            amount: '8,500',
-          ),
-          CashflowRow(
-            date: '4/15',
-            name: '國泰卡帳單',
-            amount: '5,200',
-          ),
-          CashflowRow(
-            date: '4/20',
-            name: 'Netflix + Spotify',
-            amount: '480',
-          ),
-          CashflowRow(
-            date: '4/25',
-            name: '電話費',
-            amount: '699',
-            isLast: true,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -436,23 +386,4 @@ class _HomePageState extends State<HomePage> {
     }
     return formatted.toString();
   }
-}
-
-/// Mock 儲蓄目標資料結構
-class _MockGoal {
-  final String emoji;
-  final String name;
-  final String currentAmount;
-  final String targetAmount;
-  final double progress;
-  final String? deadline;
-
-  const _MockGoal({
-    required this.emoji,
-    required this.name,
-    required this.currentAmount,
-    required this.targetAmount,
-    required this.progress,
-    this.deadline,
-  });
 }
