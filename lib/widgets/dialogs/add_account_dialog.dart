@@ -5,46 +5,24 @@ import 'package:my_money/bloc/accounts/accounts_bloc.dart';
 import 'package:my_money/bloc/balance/balance_bloc.dart';
 import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
+import 'package:uuid/uuid.dart';
 
-/// 編輯帳戶 Dialog — 銀行帳戶與信用卡通用
-class EditAccountDialog extends StatefulWidget {
-  final Account account;
-
-  const EditAccountDialog({super.key, required this.account});
+/// 新增帳戶 Dialog — 銀行帳戶或信用卡
+class AddAccountDialog extends StatefulWidget {
+  const AddAccountDialog({super.key});
 
   @override
-  State<EditAccountDialog> createState() => _EditAccountDialogState();
+  State<AddAccountDialog> createState() => _AddAccountDialogState();
 }
 
-class _EditAccountDialogState extends State<EditAccountDialog> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _accountNumberController;
-  late final TextEditingController _balanceController;
-  late final TextEditingController _unbilledAmountController;
-  late String _type;
-  late int? _billingDate;
-  late int? _paymentDate;
-
-  @override
-  void initState() {
-    super.initState();
-    final a = widget.account;
-    _nameController = TextEditingController(text: a.name);
-    _accountNumberController = TextEditingController(text: a.accountNumber);
-    _type = a.type;
-    _billingDate = a.billingDate;
-    _paymentDate = a.paymentDate;
-
-    if (a.type == 'credit_card') {
-      _balanceController =
-          TextEditingController(text: a.billedAmount ?? a.balance);
-      _unbilledAmountController =
-          TextEditingController(text: a.unbilledAmount ?? '0');
-    } else {
-      _balanceController = TextEditingController(text: a.balance);
-      _unbilledAmountController = TextEditingController();
-    }
-  }
+class _AddAccountDialogState extends State<AddAccountDialog> {
+  final _nameController = TextEditingController();
+  final _accountNumberController = TextEditingController();
+  final _balanceController = TextEditingController();
+  final _unbilledAmountController = TextEditingController();
+  String _type = 'bank';
+  int? _billingDate;
+  int? _paymentDate;
 
   @override
   void dispose() {
@@ -61,12 +39,12 @@ class _EditAccountDialogState extends State<EditAccountDialog> {
       backgroundColor: const Color(0xFFFFF5F5),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title:
-          const Text('編輯帳戶', style: TextStyle(fontWeight: FontWeight.w700)),
+          const Text('新增帳戶', style: TextStyle(fontWeight: FontWeight.w700)),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 類型
+            // 帳戶類型
             Row(
               children: [
                 Expanded(
@@ -95,11 +73,13 @@ class _EditAccountDialogState extends State<EditAccountDialog> {
               controller: _nameController,
               decoration: InputDecoration(
                 labelText: _type == 'bank' ? '銀行名稱' : '信用卡名稱',
+                hintText: _type == 'bank' ? '例如：中國信託' : '例如：LINE Pay 卡',
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12)),
                 filled: true,
                 fillColor: Colors.white,
               ),
+              autofocus: true,
             ),
             const SizedBox(height: 12),
 
@@ -193,19 +173,13 @@ class _EditAccountDialogState extends State<EditAccountDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _confirmDelete,
-          style: TextButton.styleFrom(foregroundColor: AppColors.error),
-          child: const Text('刪除'),
-        ),
-        const Spacer(),
-        TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
         FilledButton(
           onPressed: _submit,
           style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
-          child: const Text('儲存'),
+          child: const Text('新增'),
         ),
       ],
     );
@@ -215,68 +189,49 @@ class _EditAccountDialogState extends State<EditAccountDialog> {
     final balance = double.tryParse(_balanceController.text);
     if (_nameController.text.isEmpty || balance == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('請填寫名稱和有效金額')),
+        const SnackBar(content: Text('請填寫名稱和金額')),
       );
       return;
     }
 
-    Account updated;
     if (_type == 'credit_card') {
       final unbilled =
           double.tryParse(_unbilledAmountController.text) ?? 0;
       final total = balance + unbilled;
-      updated = widget.account.copyWith(
-        name: _nameController.text,
-        type: _type,
-        accountNumber: _accountNumberController.text,
-        balance: total.toString(),
-        billingDate: Value(_billingDate),
-        paymentDate: Value(_paymentDate),
-        billedAmount: Value(balance.toString()),
-        unbilledAmount: Value(unbilled.toString()),
-        updatedAt: DateTime.now(),
-      );
+      context.read<AccountsBloc>().add(AddAccount(
+            AccountsCompanion.insert(
+              id: const Uuid().v4(),
+              name: _nameController.text,
+              type: _type,
+              accountNumber: Value(_accountNumberController.text),
+              balance: total.toString(),
+              billingDate: Value(_billingDate),
+              paymentDate: Value(_paymentDate),
+              billedAmount: Value(balance.toString()),
+              unbilledAmount: Value(unbilled.toString()),
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          ));
     } else {
-      updated = widget.account.copyWith(
-        name: _nameController.text,
-        type: _type,
-        accountNumber: _accountNumberController.text,
-        balance: balance.toString(),
-        updatedAt: DateTime.now(),
-      );
+      context.read<AccountsBloc>().add(AddAccount(
+            AccountsCompanion.insert(
+              id: const Uuid().v4(),
+              name: _nameController.text,
+              type: _type,
+              accountNumber: Value(_accountNumberController.text),
+              balance: balance.toString(),
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          ));
     }
 
-    context.read<AccountsBloc>().add(UpdateAccount(updated));
     context.read<BalanceBloc>().add(const RefreshBalance());
+
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已更新：${_nameController.text}')),
-    );
-  }
-
-  void _confirmDelete() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('確認刪除'),
-        content: Text('確定要刪除「${widget.account.name}」嗎？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              context
-                  .read<AccountsBloc>()
-                  .add(DeleteAccount(widget.account.id));
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-            },
-            child: Text('刪除', style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
+      SnackBar(content: Text('已新增：${_nameController.text}')),
     );
   }
 }

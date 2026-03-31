@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:my_money/bloc/accounts/accounts_bloc.dart';
 import 'package:my_money/bloc/expenses/expenses_bloc.dart';
 import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
@@ -25,6 +26,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   final _noteController = TextEditingController();
   late String _type;
   String _category = '餐飲';
+  String? _selectedAccountId; // null = 現金
 
   final _expenseCategories = ['餐飲', '交通', '娛樂', '購物', '生活', '醫療', '教育', '其他'];
   final _incomeCategories = ['薪水', '獎金', '兼職', '投資', '退款', '其他'];
@@ -143,6 +145,43 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
             ),
             const SizedBox(height: 12),
 
+            // 帳戶選擇
+            BlocBuilder<AccountsBloc, AccountsState>(
+              builder: (context, state) {
+                final accounts =
+                    state is AccountsLoaded ? state.accounts : <Account>[];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedAccountId,
+                    decoration: InputDecoration(
+                      labelText: isIncome ? '入帳帳戶' : '付款方式',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('💵 現金'),
+                      ),
+                      ...accounts.map((a) {
+                        final icon =
+                            a.type == 'credit_card' ? '💳' : '🏦';
+                        return DropdownMenuItem(
+                          value: a.id,
+                          child: Text('$icon ${a.name}'),
+                        );
+                      }),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => _selectedAccountId = v),
+                  ),
+                );
+              },
+            ),
+
             // 備註
             TextField(
               controller: _noteController,
@@ -158,7 +197,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
             // 分類
             Wrap(
               spacing: 8,
-              runSpacing: 4,
+              runSpacing: 8,
               children: _currentCategories.map((cat) {
                 final selected = _category == cat;
                 return ChoiceChip(
@@ -208,6 +247,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         date: DateTime.now(),
         note: note,
         category: _category,
+        accountId: Value(_selectedAccountId),
         createdAt: DateTime.now(),
       ),
     ));

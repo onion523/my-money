@@ -4,33 +4,44 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:my_money/bloc/goals/goals_bloc.dart';
 import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
-import 'package:uuid/uuid.dart';
 
-/// 存入儲蓄目標 Dialog
-class AddSavingDialog extends StatefulWidget {
-  const AddSavingDialog({super.key});
+class EditGoalDialog extends StatefulWidget {
+  final SavingsGoal goal;
+  const EditGoalDialog({super.key, required this.goal});
 
   @override
-  State<AddSavingDialog> createState() => _AddSavingDialogState();
+  State<EditGoalDialog> createState() => _EditGoalDialogState();
 }
 
-class _AddSavingDialogState extends State<AddSavingDialog> {
-  final _nameController = TextEditingController();
-  final _emojiController = TextEditingController();
-  final _targetController = TextEditingController();
-  final _currentController = TextEditingController();
-  String _category = '儲蓄';
-  bool _hasDeadline = true;
-  DateTime _deadline = DateTime.now().add(const Duration(days: 180));
+class _EditGoalDialogState extends State<EditGoalDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _targetController;
+  late final TextEditingController _currentController;
+  late final TextEditingController _emojiController;
+  late String _category;
+  late bool _hasDeadline;
+  late DateTime _deadline;
 
   final _categories = ['旅遊', '購物', '儲蓄', '教育', '其他'];
 
   @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.goal.name);
+    _targetController = TextEditingController(text: widget.goal.targetAmount);
+    _currentController = TextEditingController(text: widget.goal.currentAmount);
+    _emojiController = TextEditingController(text: widget.goal.emoji);
+    _category = widget.goal.category.isEmpty ? '儲蓄' : widget.goal.category;
+    _hasDeadline = widget.goal.deadline != null;
+    _deadline = widget.goal.deadline ?? DateTime.now().add(const Duration(days: 180));
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
-    _emojiController.dispose();
     _targetController.dispose();
     _currentController.dispose();
+    _emojiController.dispose();
     super.dispose();
   }
 
@@ -39,7 +50,7 @@ class _AddSavingDialogState extends State<AddSavingDialog> {
     return AlertDialog(
       backgroundColor: const Color(0xFFFFF5F5),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('新增儲蓄目標', style: TextStyle(fontWeight: FontWeight.w700)),
+      title: const Text('編輯儲蓄目標', style: TextStyle(fontWeight: FontWeight.w700)),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -52,7 +63,6 @@ class _AddSavingDialogState extends State<AddSavingDialog> {
                 filled: true,
                 fillColor: Colors.white,
               ),
-              autofocus: true,
             ),
             const SizedBox(height: 12),
             TextField(
@@ -137,7 +147,7 @@ class _AddSavingDialogState extends State<AddSavingDialog> {
         FilledButton(
           onPressed: _submit,
           style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
-          child: const Text('建立'),
+          child: const Text('儲存'),
         ),
       ],
     );
@@ -145,6 +155,7 @@ class _AddSavingDialogState extends State<AddSavingDialog> {
 
   void _submit() {
     final target = double.tryParse(_targetController.text);
+    final current = double.tryParse(_currentController.text);
     if (_nameController.text.isEmpty || target == null || target <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('請填寫名稱和有效金額')),
@@ -152,26 +163,22 @@ class _AddSavingDialogState extends State<AddSavingDialog> {
       return;
     }
 
-    final current = double.tryParse(_currentController.text) ?? 0;
-    final emoji = _emojiController.text.isEmpty ? '🎯' : _emojiController.text;
-    context.read<GoalsBloc>().add(AddGoal(
-      SavingsGoalsCompanion.insert(
-        id: const Uuid().v4(),
-        name: _nameController.text,
-        targetAmount: target.toString(),
-        currentAmount: current.toString(),
-        category: _category,
-        deadline: Value(_hasDeadline ? _deadline : null),
-        monthlyReserve: '0',
-        emoji: emoji,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-    ));
+    final updated = widget.goal.copyWith(
+      name: _nameController.text,
+      targetAmount: target.toString(),
+      currentAmount: (current ?? 0).toString(),
+      category: _category,
+      emoji: _emojiController.text.isEmpty ? '🎯' : _emojiController.text,
+      deadline: Value(_hasDeadline ? _deadline : null),
+      monthlyReserve: widget.goal.monthlyReserve,
+      updatedAt: DateTime.now(),
+    );
+
+    context.read<GoalsBloc>().add(UpdateGoal(updated));
 
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已建立目標：${_nameController.text}')),
+      SnackBar(content: Text('已更新：${_nameController.text}')),
     );
   }
 }

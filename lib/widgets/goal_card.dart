@@ -27,6 +27,12 @@ class GoalCard extends StatelessWidget {
   /// 點擊回調
   final VoidCallback? onTap;
 
+  /// 編輯回調
+  final VoidCallback? onEdit;
+
+  /// 刪除回調
+  final VoidCallback? onDelete;
+
   const GoalCard({
     super.key,
     required this.emoji,
@@ -36,6 +42,8 @@ class GoalCard extends StatelessWidget {
     required this.progress,
     this.deadline,
     this.onTap,
+    this.onEdit,
+    this.onDelete,
   });
 
   @override
@@ -94,6 +102,26 @@ class GoalCard extends StatelessWidget {
                   '${(progress * 100).toInt()}%',
                   style: AppTextStyles.bodyBold(color: progressColor),
                 ),
+
+                // 編輯 / 刪除按鈕
+                if (onEdit != null)
+                  IconButton(
+                    onPressed: onEdit,
+                    icon: Icon(Icons.edit_outlined, size: 18,
+                      color: isDark ? AppColors.darkSecondaryText : AppColors.secondaryText),
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                    tooltip: '編輯',
+                  ),
+                if (onDelete != null)
+                  IconButton(
+                    onPressed: onDelete,
+                    icon: Icon(Icons.delete_outline, size: 18,
+                      color: AppColors.error.withValues(alpha: 0.6)),
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                    tooltip: '刪除',
+                  ),
               ],
             ),
 

@@ -1,12 +1,13 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:my_money/bloc/accounts/accounts_bloc.dart';
 import 'package:my_money/bloc/expenses/expenses_bloc.dart';
 import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
 import 'package:uuid/uuid.dart';
 
-/// 記花費 Dialog
+/// 記花費 Dialog — 可選擇付款帳戶/信用卡/現金
 class AddExpenseDialog extends StatefulWidget {
   const AddExpenseDialog({super.key});
 
@@ -18,6 +19,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
   String _category = '餐飲';
+  String? _selectedAccountId; // null = 現金
 
   final _categories = ['餐飲', '交通', '娛樂', '購物', '生活', '其他'];
 
@@ -33,36 +35,78 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     return AlertDialog(
       backgroundColor: const Color(0xFFFFF5F5),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('記一筆花費', style: TextStyle(fontWeight: FontWeight.w700)),
+      title:
+          const Text('記一筆花費', style: TextStyle(fontWeight: FontWeight.w700)),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 金額
             TextField(
               controller: _amountController,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 labelText: '金額',
                 prefixText: '\$ ',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 filled: true,
                 fillColor: Colors.white,
               ),
               autofocus: true,
             ),
             const SizedBox(height: 12),
+
+            // 付款方式
+            BlocBuilder<AccountsBloc, AccountsState>(
+              builder: (context, state) {
+                final accounts =
+                    state is AccountsLoaded ? state.accounts : <Account>[];
+                return DropdownButtonFormField<String>(
+                  value: _selectedAccountId,
+                  decoration: InputDecoration(
+                    labelText: '付款方式',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('💵 現金'),
+                    ),
+                    ...accounts.map((a) {
+                      final icon = a.type == 'credit_card' ? '💳' : '🏦';
+                      return DropdownMenuItem(
+                        value: a.id,
+                        child: Text('$icon ${a.name}'),
+                      );
+                    }),
+                  ],
+                  onChanged: (v) => setState(() => _selectedAccountId = v),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // 備註
             TextField(
               controller: _noteController,
               decoration: InputDecoration(
                 labelText: '備註（例如：午餐牛肉麵）',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 filled: true,
                 fillColor: Colors.white,
               ),
             ),
             const SizedBox(height: 12),
+
+            // 分類
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: _categories.map((cat) {
                 final selected = _category == cat;
                 return ChoiceChip(
@@ -98,19 +142,21 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
       );
       return;
     }
-    final note = _noteController.text.isEmpty ? _category : _noteController.text;
+    final note =
+        _noteController.text.isEmpty ? _category : _noteController.text;
 
     context.read<ExpensesBloc>().add(AddExpense(
-      TransactionsCompanion.insert(
-        id: const Uuid().v4(),
-        type: 'expense',
-        amount: amount.toString(),
-        date: DateTime.now(),
-        note: note,
-        category: _category,
-        createdAt: DateTime.now(),
-      ),
-    ));
+          TransactionsCompanion.insert(
+            id: const Uuid().v4(),
+            type: 'expense',
+            amount: amount.toString(),
+            date: DateTime.now(),
+            note: note,
+            category: _category,
+            accountId: Value(_selectedAccountId),
+            createdAt: DateTime.now(),
+          ),
+        ));
 
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(

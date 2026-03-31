@@ -2,11 +2,11 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:my_money/bloc/accounts/accounts_bloc.dart';
+import 'package:my_money/bloc/balance/balance_bloc.dart';
 import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
-import 'package:uuid/uuid.dart';
 
-/// 更新帳戶餘額 / 新增帳戶 Dialog
+/// 更新帳戶餘額 Dialog — 選擇現有帳戶更新餘額
 class UpdateBalanceDialog extends StatefulWidget {
   const UpdateBalanceDialog({super.key});
 
@@ -15,16 +15,12 @@ class UpdateBalanceDialog extends StatefulWidget {
 }
 
 class _UpdateBalanceDialogState extends State<UpdateBalanceDialog> {
-  final _nameController = TextEditingController();
   final _balanceController = TextEditingController();
   final _unbilledAmountController = TextEditingController();
-  String _type = 'bank';
-  int? _billingDate;
-  int? _paymentDate;
+  Account? _selectedAccount;
 
   @override
   void dispose() {
-    _nameController.dispose();
     _balanceController.dispose();
     _unbilledAmountController.dispose();
     super.dispose();
@@ -35,113 +31,96 @@ class _UpdateBalanceDialogState extends State<UpdateBalanceDialog> {
     return AlertDialog(
       backgroundColor: const Color(0xFFFFF5F5),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('新增/更新帳戶', style: TextStyle(fontWeight: FontWeight.w700)),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
+      title: const Text('更新餘額',
+          style: TextStyle(fontWeight: FontWeight.w700)),
+      content: BlocBuilder<AccountsBloc, AccountsState>(
+        builder: (context, state) {
+          final accounts =
+              state is AccountsLoaded ? state.accounts : <Account>[];
+
+          if (accounts.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Text('尚未建立帳戶，請先到帳戶頁面新增。'),
+            );
+          }
+
+          return SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Text('銀行帳戶'),
-                    selected: _type == 'bank',
-                    selectedColor: AppColors.accent.withValues(alpha: 0.2),
-                    onSelected: (v) => setState(() => _type = 'bank'),
+                // 選擇帳戶
+                DropdownButtonFormField<String>(
+                  value: _selectedAccount?.id,
+                  decoration: InputDecoration(
+                    labelText: '選擇帳戶',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    filled: true,
+                    fillColor: Colors.white,
                   ),
+                  items: accounts.map((a) {
+                    final label = a.type == 'credit_card'
+                        ? '💳 ${a.name}'
+                        : '🏦 ${a.name}';
+                    return DropdownMenuItem(value: a.id, child: Text(label));
+                  }).toList(),
+                  onChanged: (id) {
+                    final account = accounts.firstWhere((a) => a.id == id);
+                    setState(() {
+                      _selectedAccount = account;
+                      if (account.type == 'credit_card') {
+                        _balanceController.text =
+                            account.billedAmount ?? account.balance;
+                        _unbilledAmountController.text =
+                            account.unbilledAmount ?? '0';
+                      } else {
+                        _balanceController.text = account.balance;
+                      }
+                    });
+                  },
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Text('信用卡'),
-                    selected: _type == 'credit_card',
-                    selectedColor: AppColors.accent.withValues(alpha: 0.2),
-                    onSelected: (v) => setState(() => _type = 'credit_card'),
+
+                if (_selectedAccount != null) ...[
+                  const SizedBox(height: 16),
+
+                  // 餘額 / 已出帳金額
+                  TextField(
+                    controller: _balanceController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: _selectedAccount!.type == 'credit_card'
+                          ? '已出帳金額'
+                          : '目前餘額',
+                      prefixText: '\$ ',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
                   ),
-                ),
+
+                  // 信用卡額外：未出帳金額
+                  if (_selectedAccount!.type == 'credit_card') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _unbilledAmountController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: '未出帳金額',
+                        prefixText: '\$ ',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ],
               ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _nameController,
-              decoration: InputDecoration(
-                labelText: _type == 'bank' ? '銀行名稱（例如：中國信託）' : '信用卡名稱（例如：LINE Pay 卡）',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-              autofocus: true,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _balanceController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: _type == 'bank' ? '目前餘額' : '已出帳金額',
-                prefixText: '\$ ',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-            ),
-
-            // 信用卡額外欄位
-            if (_type == 'credit_card') ...[
-              const SizedBox(height: 12),
-              TextField(
-                controller: _unbilledAmountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: '未入帳金額',
-                  prefixText: '\$ ',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                value: _billingDate,
-                decoration: InputDecoration(
-                  labelText: '結帳日',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                items: [
-                  const DropdownMenuItem<int>(value: null, child: Text('未設定')),
-                  ...List.generate(31, (i) => i + 1).map(
-                    (day) => DropdownMenuItem<int>(
-                      value: day,
-                      child: Text('每月 $day 日'),
-                    ),
-                  ),
-                ],
-                onChanged: (v) => setState(() => _billingDate = v),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                value: _paymentDate,
-                decoration: InputDecoration(
-                  labelText: '扣繳日',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                items: [
-                  const DropdownMenuItem<int>(value: null, child: Text('未設定')),
-                  ...List.generate(31, (i) => i + 1).map(
-                    (day) => DropdownMenuItem<int>(
-                      value: day,
-                      child: Text('每月 $day 日'),
-                    ),
-                  ),
-                ],
-                onChanged: (v) => setState(() => _paymentDate = v),
-              ),
-            ],
-          ],
-        ),
+          );
+        },
       ),
       actions: [
         TextButton(
@@ -149,57 +128,50 @@ class _UpdateBalanceDialogState extends State<UpdateBalanceDialog> {
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: _submit,
+          onPressed: _selectedAccount == null ? null : _submit,
           style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
-          child: const Text('儲存'),
+          child: const Text('更新'),
         ),
       ],
     );
   }
 
   void _submit() {
+    if (_selectedAccount == null) return;
+
     final balance = double.tryParse(_balanceController.text);
-    if (_nameController.text.isEmpty || balance == null) {
+    if (balance == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('請填寫名稱和金額')),
+        const SnackBar(content: Text('請輸入有效金額')),
       );
       return;
     }
 
-    if (_type == 'credit_card') {
-      final unbilledAmount = double.tryParse(_unbilledAmountController.text) ?? 0;
-      final totalBalance = balance + unbilledAmount;
+    final account = _selectedAccount!;
 
-      context.read<AccountsBloc>().add(AddAccount(
-        AccountsCompanion.insert(
-          id: const Uuid().v4(),
-          name: _nameController.text,
-          type: _type,
-          balance: totalBalance.toString(),
-          billingDate: Value(_billingDate),
-          paymentDate: Value(_paymentDate),
-          billedAmount: Value(balance.toString()),
-          unbilledAmount: Value(unbilledAmount.toString()),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
-      ));
+    if (account.type == 'credit_card') {
+      final unbilled =
+          double.tryParse(_unbilledAmountController.text) ?? 0;
+      final total = balance + unbilled;
+      context.read<AccountsBloc>().add(UpdateAccount(
+            account.copyWith(
+              balance: total.toString(),
+              billedAmount: Value(balance.toString()),
+              unbilledAmount: Value(unbilled.toString()),
+            ),
+          ));
     } else {
-      context.read<AccountsBloc>().add(AddAccount(
-        AccountsCompanion.insert(
-          id: const Uuid().v4(),
-          name: _nameController.text,
-          type: _type,
-          balance: balance.toString(),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
-      ));
+      context.read<AccountsBloc>().add(UpdateAccount(
+            account.copyWith(balance: balance.toString()),
+          ));
     }
+
+    // 更新餘額 BLoC
+    context.read<BalanceBloc>().add(const RefreshBalance());
 
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已新增：${_nameController.text}')),
+      SnackBar(content: Text('已更新：${account.name}')),
     );
   }
 }

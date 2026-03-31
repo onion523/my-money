@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:my_money/bloc/goals/goals_bloc.dart';
 import 'package:my_money/data/database.dart';
+import 'package:my_money/theme/app_colors.dart';
 import 'package:my_money/theme/app_text_styles.dart';
 import 'package:my_money/theme/app_theme.dart';
+import 'package:my_money/widgets/dialogs/add_saving_dialog.dart';
+import 'package:my_money/widgets/dialogs/edit_goal_dialog.dart';
 import 'package:my_money/widgets/goal_card.dart';
 
-/// 儲蓄目標頁面
-/// 分為有期限目標與無期限目標兩區
+/// 儲蓄目標頁面 — 新刪修查
 class GoalsPage extends StatelessWidget {
   const GoalsPage({super.key});
 
@@ -17,27 +19,26 @@ class GoalsPage extends StatelessWidget {
     return SafeArea(
       child: BlocBuilder<GoalsBloc, GoalsState>(
         builder: (context, state) {
-          if (state is GoalsLoaded && state.goals.isNotEmpty) {
-            return _buildFromBloc(state.goals);
+          final goals =
+              state is GoalsLoaded ? state.goals : <SavingsGoal>[];
+
+          if (goals.isEmpty) {
+            return _buildEmptyState(context);
           }
-          // 初始 / 載入中 / 錯誤時顯示 mock 資料
-          return _buildMockContent();
+          return _buildFromBloc(context, goals);
         },
       ),
     );
   }
 
   /// 從 BLoC 資料建立頁面
-  Widget _buildFromBloc(List<SavingsGoal> goals) {
-    // 依期限分組
-    final withDeadline =
-        goals.where((g) => g.deadline != null).toList();
-    final withoutDeadline =
-        goals.where((g) => g.deadline == null).toList();
+  Widget _buildFromBloc(BuildContext context, List<SavingsGoal> goals) {
+    final withDeadline = goals.where((g) => g.deadline != null).toList();
+    final withoutDeadline = goals.where((g) => g.deadline == null).toList();
 
     return CustomScrollView(
       slivers: [
-        // 大標題
+        // 大標題 + 新增按鈕
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -46,11 +47,23 @@ class GoalsPage extends StatelessWidget {
               AppTheme.spacingMd,
               AppTheme.spacingMd,
             ),
-            child: Text('儲蓄目標', style: AppTextStyles.pageTitle()),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('儲蓄目標', style: AppTextStyles.pageTitle()),
+                IconButton(
+                  onPressed: () => _openAddDialog(context),
+                  icon: const Icon(Icons.add_circle_outline),
+                  color: AppColors.accent,
+                  tooltip: '新增目標',
+                  iconSize: 28,
+                ),
+              ],
+            ),
           ),
         ),
 
-        // ========== 有期限區 ==========
+        // 有期限區
         if (withDeadline.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Padding(
@@ -75,7 +88,7 @@ class GoalsPage extends StatelessWidget {
             ),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, index) {
+                (ctx, index) {
                   final goal = withDeadline[index];
                   return Padding(
                     padding: EdgeInsets.only(
@@ -83,7 +96,7 @@ class GoalsPage extends StatelessWidget {
                           ? AppTheme.cardGap
                           : 0,
                     ),
-                    child: _buildGoalCard(goal),
+                    child: _buildGoalCard(ctx, goal),
                   );
                 },
                 childCount: withDeadline.length,
@@ -95,7 +108,7 @@ class GoalsPage extends StatelessWidget {
           ),
         ],
 
-        // ========== 無期限區 ==========
+        // 無期限區
         if (withoutDeadline.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Padding(
@@ -120,7 +133,7 @@ class GoalsPage extends StatelessWidget {
             ),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, index) {
+                (ctx, index) {
                   final goal = withoutDeadline[index];
                   return Padding(
                     padding: EdgeInsets.only(
@@ -128,7 +141,7 @@ class GoalsPage extends StatelessWidget {
                           ? AppTheme.cardGap
                           : AppTheme.spacing2xl,
                     ),
-                    child: _buildGoalCard(goal),
+                    child: _buildGoalCard(ctx, goal),
                   );
                 },
                 childCount: withoutDeadline.length,
@@ -140,19 +153,17 @@ class GoalsPage extends StatelessWidget {
     );
   }
 
-  /// 從 SavingsGoal 資料建立 GoalCard
-  Widget _buildGoalCard(SavingsGoal goal) {
+  /// 建立目標卡片（含編輯/刪除按鈕）
+  Widget _buildGoalCard(BuildContext context, SavingsGoal goal) {
     final target = Decimal.parse(goal.targetAmount);
     final current = Decimal.parse(goal.currentAmount);
     final progress =
         target > Decimal.zero ? (current / target).toDouble() : 0.0;
 
-    // 計算剩餘月數
     String? deadlineText;
     if (goal.deadline != null) {
       final now = DateTime.now();
-      final monthsLeft =
-          (goal.deadline!.year - now.year) * 12 +
+      final monthsLeft = (goal.deadline!.year - now.year) * 12 +
           (goal.deadline!.month - now.month);
       deadlineText =
           '${goal.deadline!.year} 年 ${goal.deadline!.month} 月 — 還剩 $monthsLeft 個月';
@@ -165,127 +176,97 @@ class GoalsPage extends StatelessWidget {
       targetAmount: _formatAmount(target),
       progress: progress,
       deadline: deadlineText,
+      onEdit: () => showDialog(
+        context: context,
+        builder: (_) => EditGoalDialog(goal: goal),
+      ),
+      onDelete: () => _confirmDelete(context, goal),
     );
   }
 
-  /// Mock 內容（fallback）
-  Widget _buildMockContent() {
-    return CustomScrollView(
-      slivers: [
-        // 大標題
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppTheme.spacingMd,
-              AppTheme.spacingLg,
-              AppTheme.spacingMd,
-              AppTheme.spacingMd,
-            ),
-            child: Text('儲蓄目標', style: AppTextStyles.pageTitle()),
-          ),
-        ),
-
-        // ========== 有期限區 ==========
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spacingMd,
-            ),
-            child: Row(
-              children: [
-                const Text('\u{23F3}', style: TextStyle(fontSize: 20)),
-                const SizedBox(width: AppTheme.spacingSm),
-                Text('有期限目標', style: AppTextStyles.cardTitle()),
-              ],
-            ),
-          ),
-        ),
-
-        const SliverToBoxAdapter(
-          child: SizedBox(height: AppTheme.spacingSm),
-        ),
-
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppTheme.spacingMd,
-          ),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              const GoalCard(
-                emoji: '\u{1F3EF}',
-                name: '京都旅遊',
-                currentAmount: '34,000',
-                targetAmount: '50,000',
-                progress: 0.68,
-                deadline: '2026 年 10 月 — 還剩 6 個月',
+  /// 空狀態
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: AppTheme.cardGap),
-              const GoalCard(
-                emoji: '\u{1F334}',
-                name: '曼谷自由行',
-                currentAmount: '10,500',
-                targetAmount: '30,000',
-                progress: 0.35,
-                deadline: '2026 年 12 月 — 還剩 8 個月',
+              child: const Icon(
+                Icons.savings_outlined,
+                size: 40,
+                color: AppColors.accent,
               ),
-            ]),
-          ),
-        ),
-
-        const SliverToBoxAdapter(
-          child: SizedBox(height: AppTheme.sectionGap),
-        ),
-
-        // ========== 無期限區 ==========
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spacingMd,
             ),
-            child: Row(
-              children: [
-                const Text('\u{2728}', style: TextStyle(fontSize: 20)),
-                const SizedBox(width: AppTheme.spacingSm),
-                Text('無期限目標', style: AppTextStyles.cardTitle()),
-              ],
+            const SizedBox(height: 24),
+            Text('還沒有儲蓄目標', style: AppTextStyles.cardTitle()),
+            const SizedBox(height: 8),
+            Text(
+              '設定一個目標，開始存錢吧',
+              style: AppTextStyles.body(color: AppColors.secondaryText),
+              textAlign: TextAlign.center,
             ),
-          ),
-        ),
-
-        const SliverToBoxAdapter(
-          child: SizedBox(height: AppTheme.spacingSm),
-        ),
-
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppTheme.spacingMd,
-          ),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              const GoalCard(
-                emoji: '\u{1F4BB}',
-                name: 'MacBook Pro',
-                currentAmount: '28,000',
-                targetAmount: '65,000',
-                progress: 0.43,
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => _openAddDialog(context),
+              icon: const Icon(Icons.add),
+              label: const Text('新增目標'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              const SizedBox(height: AppTheme.cardGap),
-              const GoalCard(
-                emoji: '\u{1F6E1}',
-                name: '緊急預備金',
-                currentAmount: '45,000',
-                targetAmount: '100,000',
-                progress: 0.45,
-              ),
-              const SizedBox(height: AppTheme.spacing2xl),
-            ]),
-          ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  /// 格式化金額為千分位字串
+  void _openAddDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => const AddSavingDialog(),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, SavingsGoal goal) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('確認刪除'),
+        content: Text('確定要刪除「${goal.name}」嗎？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              context.read<GoalsBloc>().add(DeleteGoal(goal.id));
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('已刪除：${goal.name}')),
+              );
+            },
+            child: Text('刪除', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+  }
+
   static String _formatAmount(Decimal amount) {
     final intPart = amount.truncate().toBigInt().abs().toString();
     final formatted = StringBuffer();
