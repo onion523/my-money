@@ -12,6 +12,9 @@ class BalanceCard extends StatelessWidget {
   /// 攤提後可自由花用金額
   final String? freeToSpend;
 
+  /// 信用卡未出帳總額
+  final String? unbilled;
+
   /// 餘額標籤
   final String label;
 
@@ -19,6 +22,7 @@ class BalanceCard extends StatelessWidget {
     super.key,
     required this.balance,
     this.freeToSpend,
+    this.unbilled,
     this.label = '即時可用餘額',
   });
 
@@ -69,25 +73,49 @@ class BalanceCard extends StatelessWidget {
             ),
           ),
 
-          // 攤提後可自由花用
-          if (freeToSpend != null) ...[
+          // 攤提後可自由花用 + 未出帳
+          if (freeToSpend != null || unbilled != null) ...[
             const SizedBox(height: AppTheme.spacingSm),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingSm + AppTheme.spacingXs,
-                vertical: AppTheme.spacingXs,
-              ),
-              decoration: BoxDecoration(
-                color: (isDark ? AppColors.darkAccent : AppColors.accent)
-                    .withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
-              ),
-              child: Text(
-                '攤提後可自由花用 \$$freeToSpend',
-                style: AppTextStyles.label(
-                  color: isDark ? AppColors.darkAccent : AppColors.accent,
-                ),
-              ),
+            Wrap(
+              spacing: AppTheme.spacingSm,
+              runSpacing: AppTheme.spacingXs,
+              children: [
+                if (freeToSpend != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.spacingSm + AppTheme.spacingXs,
+                      vertical: AppTheme.spacingXs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: (isDark ? AppColors.darkAccent : AppColors.accent)
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+                    ),
+                    child: Text(
+                      '攤提後可自由花用 \$$freeToSpend',
+                      style: AppTextStyles.label(
+                        color: isDark ? AppColors.darkAccent : AppColors.accent,
+                      ),
+                    ),
+                  ),
+                if (unbilled != null && unbilled != '0')
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.spacingSm + AppTheme.spacingXs,
+                      vertical: AppTheme.spacingXs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+                    ),
+                    child: Text(
+                      '信用卡未出帳 \$$unbilled',
+                      style: AppTextStyles.label(
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
         ],

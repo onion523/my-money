@@ -4,6 +4,7 @@ import 'package:my_money/core/balance_calculator.dart';
 import 'package:my_money/data/repositories/account_repository.dart';
 import 'package:my_money/data/repositories/fixed_expense_repository.dart';
 import 'package:my_money/data/repositories/savings_goal_repository.dart';
+import 'package:my_money/data/repositories/transaction_repository.dart';
 
 import 'balance_event.dart';
 import 'balance_state.dart';
@@ -16,14 +17,17 @@ class BalanceBloc extends Bloc<BalanceEvent, BalanceState> {
   final AccountRepository _accountRepo;
   final FixedExpenseRepository _fixedExpenseRepo;
   final SavingsGoalRepository _savingsGoalRepo;
+  final TransactionRepository _transactionRepo;
 
   BalanceBloc({
     required AccountRepository accountRepository,
     required FixedExpenseRepository fixedExpenseRepository,
     required SavingsGoalRepository savingsGoalRepository,
+    required TransactionRepository transactionRepository,
   })  : _accountRepo = accountRepository,
         _fixedExpenseRepo = fixedExpenseRepository,
         _savingsGoalRepo = savingsGoalRepository,
+        _transactionRepo = transactionRepository,
         super(const BalanceInitial()) {
     on<LoadBalance>(_onLoadBalance);
     on<RefreshBalance>(_onRefreshBalance);
@@ -49,10 +53,11 @@ class BalanceBloc extends Bloc<BalanceEvent, BalanceState> {
   /// 從資料庫取得資料並計算餘額
   Future<void> _calculateAndEmit(Emitter<BalanceState> emit) async {
     try {
-      // 從資料庫取得帳戶、固定支出、儲蓄目標
+      // 從資料庫取得帳戶、固定支出、儲蓄目標、交易紀錄
       final accounts = await _accountRepo.getAllAccounts();
       final fixedExpenses = await _fixedExpenseRepo.getAllFixedExpenses();
       final savingsGoals = await _savingsGoalRepo.getAllGoals();
+      final transactions = await _transactionRepo.getAllTransactions();
 
       // 將 drift 資料模型轉換為核心引擎的資料模型
       final accountDataList = accounts.map((a) => AccountData(
@@ -84,18 +89,36 @@ class BalanceBloc extends Bloc<BalanceEvent, BalanceState> {
             monthlyReserve: Decimal.parse(g.monthlyReserve),
           )).toList();
 
+      // 計算當月交易淨額（收入 - 支出）
+      final now = DateTime.now();
+      var monthlyIncome = Decimal.zero;
+      var monthlyExpense = Decimal.zero;
+      for (final tx in transactions) {
+        if (tx.date.year == now.year && tx.date.month == now.month) {
+          final amount = Decimal.parse(tx.amount);
+          if (tx.type == 'income') {
+            monthlyIncome += amount;
+          } else {
+            monthlyExpense += amount;
+          }
+        }
+      }
+
       // 呼叫核心計算引擎
       final result = BalanceCalculator.calculateAvailableBalance(
         accounts: accountDataList,
         fixedExpenses: fixedExpenseDataList,
         savingsGoals: savingsGoalDataList,
-        today: DateTime.now(),
+        today: now,
+        monthlyIncome: monthlyIncome,
+        monthlyExpense: monthlyExpense,
       );
 
       emit(BalanceLoaded(
         available: result.available,
         afterAllocation: result.afterAllocation,
         pending: result.pendingAllocation,
+        unbilledTotal: result.unbilledTotal,
       ));
     } catch (e) {
       emit(BalanceError(e.toString()));

@@ -52,8 +52,9 @@ void main() {
           today: today,
         );
 
-        // 100000 - 15000 - 5000 = 80000
-        expect(result.available, equals(Decimal.parse('80000')));
+        // 100000 - 15000 = 85000（未出帳不扣除）
+        expect(result.available, equals(Decimal.parse('85000')));
+        expect(result.unbilledTotal, equals(Decimal.parse('5000')));
       });
 
       test('完整情境：銀行 - 信用卡 - 固定支出預留 - 儲蓄', () {
@@ -102,14 +103,15 @@ void main() {
           today: today,
         );
 
-        // 第一層：200000 - 20000 - 8000 - 6000 - 10000 = 156000
-        expect(result.available, equals(Decimal.parse('156000')));
+        // 第一層：200000 - 20000 = 180000（未出帳不扣除）
+        expect(result.available, equals(Decimal.parse('180000')));
+        expect(result.unbilledTotal, equals(Decimal.parse('8000')));
 
         // 待攤提：房租月攤提 12000 - 已預留 6000 = 6000，儲蓄 5000 => 共 11000
         expect(result.pendingAllocation, equals(Decimal.parse('11000')));
 
-        // 第二層：156000 - 11000 = 145000
-        expect(result.afterAllocation, equals(Decimal.parse('145000')));
+        // 第二層：180000 - 11000 = 169000
+        expect(result.afterAllocation, equals(Decimal.parse('169000')));
       });
 
       test('多個銀行帳戶和多張信用卡', () {
@@ -151,8 +153,9 @@ void main() {
           today: today,
         );
 
-        // (80000 + 30000) - (10000 + 5000) - (3000 + 2000) = 90000
-        expect(result.available, equals(Decimal.parse('90000')));
+        // (80000 + 30000) - (10000 + 5000) = 95000（未出帳不扣除）
+        expect(result.available, equals(Decimal.parse('95000')));
+        expect(result.unbilledTotal, equals(Decimal.parse('5000')));
       });
     });
 
@@ -194,13 +197,13 @@ void main() {
     });
 
     group('calculateAvailableBalance — 邊界值', () {
-      test('餘額剛好等於所有扣除額', () {
+      test('餘額剛好等於已出帳', () {
         final accounts = [
           AccountData(
             id: '1',
             name: '帳戶',
             type: 'bank',
-            balance: Decimal.parse('10000'),
+            balance: Decimal.parse('5000'),
           ),
           AccountData(
             id: '2',
@@ -208,7 +211,7 @@ void main() {
             type: 'credit_card',
             balance: Decimal.parse('0'),
             billedAmount: Decimal.parse('5000'),
-            unbilledAmount: Decimal.parse('5000'),
+            unbilledAmount: Decimal.parse('3000'),
           ),
         ];
 
@@ -220,6 +223,7 @@ void main() {
         );
 
         expect(result.available, equals(Decimal.zero));
+        expect(result.unbilledTotal, equals(Decimal.parse('3000')));
       });
 
       test('信用卡無已出帳和未出帳金額（null）', () {
@@ -308,8 +312,9 @@ void main() {
           today: today,
         );
 
-        // 5000 - 8000 - 2000 = -5000
-        expect(result.available, equals(Decimal.parse('-5000')));
+        // 5000 - 8000 = -3000（未出帳不扣除）
+        expect(result.available, equals(Decimal.parse('-3000')));
+        expect(result.unbilledTotal, equals(Decimal.parse('2000')));
       });
 
       test('銀行帳戶為負餘額（透支）', () {
@@ -359,8 +364,9 @@ void main() {
           today: today,
         );
 
-        // 100000.50 - 33333.17 - 16666.83 = 50000.50
-        expect(result.available, equals(Decimal.parse('50000.50')));
+        // 100000.50 - 33333.17 = 66667.33（未出帳不扣除）
+        expect(result.available, equals(Decimal.parse('66667.33')));
+        expect(result.unbilledTotal, equals(Decimal.parse('16666.83')));
       });
 
       test('極小金額精度', () {
@@ -386,34 +392,16 @@ void main() {
   });
 
   group('BalanceResult', () {
-    test('Equatable 相等比較', () {
-      final a = BalanceResult(
+    test('包含未出帳欄位', () {
+      final result = BalanceResult(
         available: Decimal.parse('1000'),
         afterAllocation: Decimal.parse('500'),
         pendingAllocation: Decimal.parse('500'),
-      );
-      final b = BalanceResult(
-        available: Decimal.parse('1000'),
-        afterAllocation: Decimal.parse('500'),
-        pendingAllocation: Decimal.parse('500'),
+        unbilledTotal: Decimal.parse('3000'),
       );
 
-      expect(a, equals(b));
-    });
-
-    test('Equatable 不相等比較', () {
-      final a = BalanceResult(
-        available: Decimal.parse('1000'),
-        afterAllocation: Decimal.parse('500'),
-        pendingAllocation: Decimal.parse('500'),
-      );
-      final b = BalanceResult(
-        available: Decimal.parse('2000'),
-        afterAllocation: Decimal.parse('500'),
-        pendingAllocation: Decimal.parse('500'),
-      );
-
-      expect(a, isNot(equals(b)));
+      expect(result.available, equals(Decimal.parse('1000')));
+      expect(result.unbilledTotal, equals(Decimal.parse('3000')));
     });
   });
 }

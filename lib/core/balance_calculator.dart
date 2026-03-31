@@ -1,9 +1,8 @@
 import 'package:decimal/decimal.dart';
-import 'package:equatable/equatable.dart';
 
 /// 餘額計算結果
-class BalanceResult extends Equatable {
-  /// 即時可用餘額（銀行總額 - 信用卡已出帳 - 未入帳 - 月繳剩餘 - 預留已標記 - 儲蓄已標記）
+class BalanceResult {
+  /// 即時可用餘額（銀行總額 - 信用卡已出帳）
   final Decimal available;
 
   /// 攤提後可自由花用（即時可用 - 待攤提）
@@ -12,14 +11,15 @@ class BalanceResult extends Equatable {
   /// 待攤提金額
   final Decimal pendingAllocation;
 
+  /// 信用卡未出帳總額（另外顯示，不扣除）
+  final Decimal unbilledTotal;
+
   const BalanceResult({
     required this.available,
     required this.afterAllocation,
     required this.pendingAllocation,
+    required this.unbilledTotal,
   });
-
-  @override
-  List<Object?> get props => [available, afterAllocation, pendingAllocation];
 }
 
 /// 帳戶資料（計算用，與資料庫模型解耦）
@@ -107,6 +107,8 @@ class BalanceCalculator {
     required List<FixedExpenseData> fixedExpenses,
     required List<SavingsGoalData> savingsGoals,
     required DateTime today,
+    Decimal? monthlyIncome,
+    Decimal? monthlyExpense,
   }) {
     // 銀行帳戶總額
     final bankTotal = accounts
@@ -121,7 +123,7 @@ class BalanceCalculator {
           (sum, a) => sum + (a.billedAmount ?? Decimal.zero),
         );
 
-    // 信用卡未出帳總額
+    // 信用卡未出帳總額（不扣除，另外顯示）
     final unbilledTotal = accounts
         .where((a) => a.type == 'credit_card')
         .fold(
@@ -129,21 +131,10 @@ class BalanceCalculator {
           (sum, a) => sum + (a.unbilledAmount ?? Decimal.zero),
         );
 
-    // 固定支出已預留總額
-    final reservedTotal = fixedExpenses.fold(
-      Decimal.zero,
-      (sum, e) => sum + e.reservedAmount,
-    );
-
-    // 儲蓄目標已存總額（以每月預留累計為「已標記」）
-    final savingsReservedTotal = savingsGoals.fold(
-      Decimal.zero,
-      (sum, g) => sum + g.currentAmount,
-    );
-
-    // 第一層：即時可用 = 銀行總額 - 已出帳 - 未出帳 - 固定支出預留 - 儲蓄已標記
-    final available =
-        bankTotal - billedTotal - unbilledTotal - reservedTotal - savingsReservedTotal;
+    // 第一層：即時可用 = 銀行總額 - 已出帳 + 當月收入 - 當月支出
+    final income = monthlyIncome ?? Decimal.zero;
+    final expense = monthlyExpense ?? Decimal.zero;
+    final available = bankTotal - billedTotal + income - expense;
 
     // 計算待攤提：本月還需要為固定支出和儲蓄目標預留的金額
     final pendingFixedAllocation = _calculatePendingFixedAllocation(
@@ -163,6 +154,7 @@ class BalanceCalculator {
       available: available,
       afterAllocation: afterAllocation,
       pendingAllocation: pendingAllocation,
+      unbilledTotal: unbilledTotal,
     );
   }
 
