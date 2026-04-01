@@ -23,16 +23,6 @@ import {
   deleteSavingsGoal,
 } from './handlers/savings-goals';
 import {
-  listSharedGoals,
-  getSharedGoal,
-  createSharedGoal,
-  updateSharedGoal,
-  deleteSharedGoal,
-  joinSharedGoal,
-  updateMemberContribution,
-  removeMember,
-} from './handlers/shared-goals';
-import {
   listTransactions,
   getTransaction,
   createTransaction,
@@ -159,44 +149,6 @@ export async function handleRequest(
       return updateSavingsGoal(userId, savingsGoalId, body as any, env);
     }
     if (method === 'DELETE') return deleteSavingsGoal(userId, savingsGoalId, env);
-  }
-
-  // ── /api/shared-goals ──
-  if (pathname === '/api/shared-goals') {
-    if (method === 'GET') return listSharedGoals(userId, env);
-    if (method === 'POST') {
-      const body = await parseJsonBody(request);
-      if (body instanceof Response) return body;
-      return createSharedGoal(userId, body as any, env);
-    }
-  }
-  if (pathname === '/api/shared-goals/join' && method === 'POST') {
-    const body = await parseJsonBody(request);
-    if (body instanceof Response) return body;
-    return joinSharedGoal(userId, body as any, env);
-  }
-  // /api/shared-goals/:id/members/:memberId
-  const sharedMemberMatch = pathname.match(
-    /^\/api\/shared-goals\/([^/]+)\/members\/([^/]+)$/
-  );
-  if (sharedMemberMatch) {
-    const [, sgId, mId] = sharedMemberMatch;
-    if (method === 'PUT') {
-      const body = await parseJsonBody(request);
-      if (body instanceof Response) return body;
-      return updateMemberContribution(userId, sgId, mId, body as any, env);
-    }
-    if (method === 'DELETE') return removeMember(userId, sgId, mId, env);
-  }
-  const sharedGoalId = extractId(pathname, '/api/shared-goals');
-  if (sharedGoalId) {
-    if (method === 'GET') return getSharedGoal(userId, sharedGoalId, env);
-    if (method === 'PUT') {
-      const body = await parseJsonBody(request);
-      if (body instanceof Response) return body;
-      return updateSharedGoal(userId, sharedGoalId, body as any, env);
-    }
-    if (method === 'DELETE') return deleteSharedGoal(userId, sharedGoalId, env);
   }
 
   // ── /api/transactions ──

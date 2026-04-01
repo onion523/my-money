@@ -68,28 +68,6 @@ export interface Transaction {
   created_at: string;
 }
 
-/** 共同儲蓄目標 */
-export interface SharedGoal {
-  id: string;
-  creator_id: string;
-  name: string;
-  target_amount: string;
-  emoji: string;
-  invite_code: string;
-  created_at: string;
-  updated_at: string;
-}
-
-/** 共同儲蓄目標成員 */
-export interface SharedGoalMember {
-  id: string;
-  goal_id: string;
-  user_id: string;
-  user_name: string;
-  contributed_amount: string;
-  joined_at: string;
-}
-
 /** 同步請求：客戶端上傳的一個表格的變更 */
 export interface SyncRequest {
   table: 'accounts' | 'fixed_expenses' | 'savings_goals' | 'transactions';
