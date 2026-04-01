@@ -27,7 +27,8 @@ class AuthService {
   static const String _keyLoggedIn = 'auth_logged_in';
 
   /// 後端 API 基礎 URL
-  static const String _baseUrl = 'http://localhost:8787';
+  /// 後端 API 基礎 URL（正式環境用 Cloudflare Workers）
+  static const String _baseUrl = 'https://my-money-api.onion523.workers.dev';
 
   User? _currentUser;
   String? _token;
