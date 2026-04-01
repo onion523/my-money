@@ -122,18 +122,18 @@ class SharedGoalRepository {
   }
 
   /// 建立共同儲蓄目標
-  Future<SharedGoalWithMembers?> createSharedGoal({
+  Future<void> createSharedGoal({
     required String name,
     required String targetAmount,
     required String emoji,
+    String? userName,
   }) async {
-    final res = await _api.post('/api/shared-goals', {
+    await _api.post('/api/shared-goals', {
       'name': name,
       'target_amount': targetAmount,
       'emoji': emoji,
+      if (userName != null) 'user_name': userName,
     });
-    final data = res['data'] as Map<String, dynamic>;
-    return _fromJson(data);
   }
 
   /// 更新共同儲蓄目標
@@ -156,16 +156,14 @@ class SharedGoalRepository {
   }
 
   /// 透過邀請碼加入共同儲蓄目標
-  Future<SharedGoalWithMembers?> joinByInviteCode(
+  Future<void> joinByInviteCode(
     String inviteCode,
     String userName,
   ) async {
-    final res = await _api.post('/api/shared-goals/join', {
+    await _api.post('/api/shared-goals/join', {
       'invite_code': inviteCode,
       'user_name': userName,
     });
-    final data = res['data'] as Map<String, dynamic>;
-    return _fromJson(data);
   }
 
   /// 更新成員貢獻金額

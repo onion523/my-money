@@ -404,10 +404,12 @@ class _SharedGoalPageState extends State<SharedGoalPage> {
 
                     Navigator.of(ctx).pop();
                     try {
+                      final auth = context.read<AuthService>();
                       await _repo.createSharedGoal(
                         name: name,
                         targetAmount: amount,
                         emoji: selectedEmoji,
+                        userName: auth.currentUser?.name,
                       );
                       _loadGoals();
                       if (!mounted) return;
