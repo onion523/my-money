@@ -366,7 +366,7 @@ class _EditFixedExpenseDialogState extends State<EditFixedExpenseDialog> {
               ),
             ),
             const SizedBox(height: 12),
-            _buildDayDropdown('每次扣款日'),
+            _buildDayDropdown('每次扣款/入帳日'),
           ],
         );
     }
