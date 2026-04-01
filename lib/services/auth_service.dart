@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:my_money/services/api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,9 +27,26 @@ class AuthService {
   static const String _keyToken = 'auth_token';
   static const String _keyLoggedIn = 'auth_logged_in';
 
-  /// 後端 API 基礎 URL
-  /// 後端 API 基礎 URL（正式環境用 Cloudflare Workers）
-  static const String _baseUrl = 'https://my-money-api.onion523.workers.dev';
+  /// 根據執行環境自動選擇 API URL
+  /// - localhost → 本機 wrangler dev（local D1）
+  /// - preview Pages（*.my-money-web.pages.dev）→ staging Worker（staging D1）
+  /// - production Pages（my-money-web.pages.dev）→ production Worker（production D1）
+  static String get _baseUrl {
+    if (kIsWeb) {
+      final host = Uri.base.host;
+      if (host == 'localhost' || host == '127.0.0.1') {
+        return 'http://localhost:8787';
+      }
+      if (host == 'my-money-web.pages.dev') {
+        return 'https://my-money-api.onion523.workers.dev';
+      }
+      // preview deployments: <hash>.my-money-web.pages.dev
+      if (host.endsWith('.my-money-web.pages.dev')) {
+        return 'https://my-money-api-staging.onion523.workers.dev';
+      }
+    }
+    return 'https://my-money-api.onion523.workers.dev';
+  }
 
   User? _currentUser;
   String? _token;

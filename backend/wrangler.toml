@@ -2,11 +2,20 @@ name = "my-money-api"
 main = "src/index.ts"
 compatibility_date = "2026-03-29"
 
+# === Production（預設）===
 [[d1_databases]]
 binding = "DB"
 database_name = "my-money-db"
 database_id = "b4486e74-b114-47ad-8999-ccb17e405d58"
 
-# 排程推撥通知：每天 UTC 00:00（台灣時間 08:00）
 [triggers]
 crons = ["0 0 * * *"]
+
+# === Staging 環境 ===
+[env.staging]
+name = "my-money-api-staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "my-money-db-staging"
+database_id = "f102c50f-dddd-4fb0-9a95-3a13899d834e"
