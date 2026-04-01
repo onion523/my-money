@@ -6,6 +6,7 @@ import 'package:my_money/data/database.dart';
 import 'package:my_money/theme/app_colors.dart';
 import 'package:my_money/theme/app_text_styles.dart';
 import 'package:my_money/theme/app_theme.dart';
+import 'package:my_money/pages/shared_goal_page.dart';
 import 'package:my_money/widgets/dialogs/add_saving_dialog.dart';
 import 'package:my_money/widgets/dialogs/edit_goal_dialog.dart';
 import 'package:my_money/widgets/goal_card.dart';
@@ -61,6 +62,33 @@ class GoalsPage extends StatelessWidget {
               ],
             ),
           ),
+        ),
+
+        // 共同目標入口
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd),
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SharedGoalPage()),
+                );
+              },
+              icon: const Icon(Icons.group_outlined),
+              label: const Text('共同目標'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.accent,
+                side: BorderSide(color: AppColors.accent.withValues(alpha: 0.4)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SliverToBoxAdapter(
+          child: SizedBox(height: AppTheme.sectionGap),
         ),
 
         // 有期限區
@@ -223,6 +251,24 @@ class GoalsPage extends StatelessWidget {
                 foregroundColor: Colors.white,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SharedGoalPage()),
+                );
+              },
+              icon: const Icon(Icons.group_outlined),
+              label: const Text('共同目標'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.accent,
+                side: BorderSide(color: AppColors.accent.withValues(alpha: 0.4)),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
