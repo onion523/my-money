@@ -1,180 +1,161 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:my_money/data/repositories/shared_goal_repository.dart';
+import 'package:my_money/pages/shared_goal_detail_page.dart';
+import 'package:my_money/services/auth_service.dart';
 import 'package:my_money/theme/app_colors.dart';
 import 'package:my_money/theme/app_text_styles.dart';
 import 'package:my_money/theme/app_theme.dart';
-import 'package:my_money/widgets/ai_suggestion_card.dart';
-import 'package:my_money/widgets/member_progress.dart';
 
-/// 共同儲蓄目標成員資料（頁面用）
-class _MemberData {
-  final String name;
-  final Decimal contributed;
-
-  const _MemberData({required this.name, required this.contributed});
-}
-
-/// 共同儲蓄目標頁面
-/// 顯示成員列表、個人/總進度、AI 建議、邀請連結
-/// 使用 mock 資料：你 $12,000、小明 $8,200、小美 $7,000
-class SharedGoalPage extends StatelessWidget {
+/// 共同儲蓄目標列表頁面
+/// 顯示所有共同目標、空狀態、建立/加入按鈕
+class SharedGoalPage extends StatefulWidget {
   const SharedGoalPage({super.key});
 
-  /// 目標名稱
-  static const _goalName = '泰國旅遊基金';
+  @override
+  State<SharedGoalPage> createState() => _SharedGoalPageState();
+}
 
-  /// 目標金額
-  static final _targetAmount = Decimal.parse('50000');
+class _SharedGoalPageState extends State<SharedGoalPage> {
+  late final SharedGoalRepository _repo;
+  List<SharedGoalWithMembers> _goals = [];
+  bool _loading = true;
 
-  /// Mock 成員資料
-  static final _members = [
-    _MemberData(name: '你', contributed: Decimal.parse('12000')),
-    _MemberData(name: '小明', contributed: Decimal.parse('8200')),
-    _MemberData(name: '小美', contributed: Decimal.parse('7000')),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _repo = SharedGoalRepository(context.read<AuthService>());
+    _loadGoals();
+  }
+
+  Future<void> _loadGoals() async {
+    setState(() => _loading = true);
+    final goals = await _repo.getAllSharedGoals();
+    if (!mounted) return;
+    setState(() {
+      _goals = goals;
+      _loading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // 計算總進度
-    final totalContributed = _members.fold(
-      Decimal.zero,
-      (sum, m) => sum + m.contributed,
-    );
-    final totalProgress =
-        (totalContributed / _targetAmount).toDouble().clamp(0.0, 1.0);
-
     return Scaffold(
       backgroundColor:
           isDark ? AppColors.darkBackground : AppColors.background,
       appBar: AppBar(
-        title: Text(_goalName),
+        title: const Text('共同儲蓄'),
         backgroundColor:
             isDark ? AppColors.darkBackground : AppColors.background,
         elevation: 0,
+        actions: [
+          IconButton(
+            onPressed: () => _showJoinDialog(context),
+            icon: const Icon(Icons.group_add_outlined),
+            tooltip: '加入共同目標',
+          ),
+        ],
       ),
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            // ========== 總進度卡片 ==========
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppTheme.spacingMd,
-                  AppTheme.spacingSm,
-                  AppTheme.spacingMd,
-                  AppTheme.spacingMd,
-                ),
-                child: _buildTotalProgressCard(
-                  isDark,
-                  totalContributed,
-                  totalProgress,
-                ),
-              ),
-            ),
-
-            // ========== 成員進度區 ==========
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.spacingMd,
-                ),
-                child: Row(
-                  children: [
-                    const Text('\u{1F46B}', style: TextStyle(fontSize: 20)),
-                    const SizedBox(width: AppTheme.spacingSm),
-                    Text('成員進度', style: AppTextStyles.cardTitle()),
-                  ],
-                ),
-              ),
-            ),
-
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingMd,
-              ),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final member = _members[index];
-                    // 個人進度 = 個人貢獻 / 目標金額
-                    final memberProgress =
-                        (member.contributed / _targetAmount)
-                            .toDouble()
-                            .clamp(0.0, 1.0);
-
-                    return MemberProgress(
-                      name: member.name,
-                      amount: _formatAmount(member.contributed),
-                      progress: memberProgress,
-                    );
-                  },
-                  childCount: _members.length,
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(
-              child: SizedBox(height: AppTheme.sectionGap),
-            ),
-
-            // ========== AI 建議區 ==========
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.spacingMd,
-                ),
-                child: Row(
-                  children: [
-                    const Text('\u{1F4A1}', style: TextStyle(fontSize: 20)),
-                    const SizedBox(width: AppTheme.spacingSm),
-                    Text('AI 建議', style: AppTextStyles.cardTitle()),
-                  ],
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(
-              child: SizedBox(height: AppTheme.spacingSm),
-            ),
-
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingMd,
-              ),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  const AiSuggestionCard(
-                    text: '每週少喝 2 杯咖啡（省 \$300），泰國旅費可提早 1 個月存滿',
-                    impactAmount: '\$300',
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _goals.isEmpty
+                ? _buildEmptyState(context, isDark)
+                : RefreshIndicator(
+                    onRefresh: _loadGoals,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(AppTheme.spacingMd),
+                      itemCount: _goals.length,
+                      itemBuilder: (ctx, index) {
+                        final goal = _goals[index];
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index < _goals.length - 1
+                                ? AppTheme.cardGap
+                                : 0,
+                          ),
+                          child: _buildGoalCard(ctx, goal, isDark),
+                        );
+                      },
+                    ),
                   ),
-                  const SizedBox(height: AppTheme.cardGap),
-                  const AiSuggestionCard(
-                    text: '照目前速度，泰國旅遊基金預計 8 月中能存滿',
-                    icon: Icons.timeline,
-                    iconColor: AppColors.accentCool,
-                  ),
-                ]),
+      ),
+      floatingActionButton: _goals.isNotEmpty
+          ? FloatingActionButton(
+              onPressed: () => _showCreateDialog(context),
+              backgroundColor:
+                  isDark ? AppColors.darkAccent : AppColors.accent,
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
+    );
+  }
+
+  /// 空狀態
+  Widget _buildEmptyState(BuildContext context, bool isDark) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.group_outlined,
+                size: 40,
+                color: AppColors.accent,
               ),
             ),
-
-            const SliverToBoxAdapter(
-              child: SizedBox(height: AppTheme.sectionGap),
+            const SizedBox(height: 24),
+            Text('還沒有共同儲蓄目標', style: AppTextStyles.cardTitle()),
+            const SizedBox(height: 8),
+            Text(
+              '和朋友一起存錢，達成共同目標',
+              style: AppTextStyles.body(color: AppColors.secondaryText),
+              textAlign: TextAlign.center,
             ),
-
-            // ========== 邀請連結 ==========
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.spacingMd,
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => _showCreateDialog(context),
+              icon: const Icon(Icons.add),
+              label: const Text('建立共同目標'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: _buildInviteButton(isDark),
               ),
             ),
-
-            const SliverToBoxAdapter(
-              child: SizedBox(height: AppTheme.spacing2xl),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => _showJoinDialog(context),
+              icon: const Icon(Icons.group_add_outlined),
+              label: const Text('加入共同目標'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor:
+                    isDark ? AppColors.darkAccent : AppColors.accent,
+                side: BorderSide(
+                  color: (isDark ? AppColors.darkAccent : AppColors.accent)
+                      .withValues(alpha: 0.4),
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ],
         ),
@@ -182,110 +163,347 @@ class SharedGoalPage extends StatelessWidget {
     );
   }
 
-  /// 總進度卡片
-  Widget _buildTotalProgressCard(
+  /// 目標卡片
+  Widget _buildGoalCard(
+    BuildContext context,
+    SharedGoalWithMembers goal,
     bool isDark,
-    Decimal totalContributed,
-    double totalProgress,
   ) {
-    final progressColor = _getProgressColor(totalProgress);
+    final progressColor = _getProgressColor(goal.progress);
 
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.cardPadding + AppTheme.spacingXs),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.surface,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => SharedGoalDetailPage(goal: goal),
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // 目標名稱 + emoji
-          Row(
-            children: [
-              const Text('\u{2708}\u{FE0F}', style: TextStyle(fontSize: 28)),
-              const SizedBox(width: AppTheme.spacingSm),
-              Expanded(
-                child: Text(_goalName, style: AppTextStyles.cardTitle()),
-              ),
-              Text(
-                '${(totalProgress * 100).toInt()}%',
-                style: AppTextStyles.bodyBold(color: progressColor),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: AppTheme.spacingSm + AppTheme.spacingXs),
-
-          // 總進度條
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: totalProgress,
-              backgroundColor: progressColor.withValues(alpha: 0.15),
-              valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-              minHeight: 10,
+        );
+        // 返回時重新載入
+        _loadGoals();
+      },
+      child: Container(
+        padding:
+            const EdgeInsets.all(AppTheme.cardPadding + AppTheme.spacingXs),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-          ),
+          ],
+        ),
+        child: Column(
+          children: [
+            // 目標名稱 + emoji + 百分比
+            Row(
+              children: [
+                Text(goal.emoji, style: const TextStyle(fontSize: 28)),
+                const SizedBox(width: AppTheme.spacingSm),
+                Expanded(
+                  child: Text(goal.name, style: AppTextStyles.cardTitle()),
+                ),
+                Text(
+                  '${(goal.progress * 100).toInt()}%',
+                  style: AppTextStyles.bodyBold(color: progressColor),
+                ),
+              ],
+            ),
 
-          const SizedBox(height: AppTheme.spacingSm),
+            const SizedBox(height: AppTheme.spacingSm + AppTheme.spacingXs),
 
-          // 金額
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '\$${_formatAmount(totalContributed)}',
-                style: AppTextStyles.amountMedium(
+            // 進度條
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: goal.progress,
+                backgroundColor: progressColor.withValues(alpha: 0.15),
+                valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                minHeight: 10,
+              ),
+            ),
+
+            const SizedBox(height: AppTheme.spacingSm),
+
+            // 金額
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '\$${_formatAmount(goal.totalContributed)}',
+                  style: AppTextStyles.amountMedium(
+                    color: isDark
+                        ? AppColors.darkPrimaryText
+                        : AppColors.primaryText,
+                  ),
+                ),
+                Text(
+                  '/ \$${_formatAmount(goal.targetAmount)}',
+                  style: AppTextStyles.caption(
+                    color: isDark
+                        ? AppColors.darkSecondaryText
+                        : AppColors.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: AppTheme.spacingSm),
+
+            // 成員頭像列
+            Row(
+              children: [
+                Icon(
+                  Icons.people_outline,
+                  size: 16,
+                  color: isDark
+                      ? AppColors.darkSecondaryText
+                      : AppColors.secondaryText,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${goal.members.length} 位成員',
+                  style: AppTextStyles.caption(
+                    color: isDark
+                        ? AppColors.darkSecondaryText
+                        : AppColors.secondaryText,
+                  ),
+                ),
+                const Spacer(),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: AppColors.secondaryText,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 顯示建立共同目標 Dialog
+  void _showCreateDialog(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final nameController = TextEditingController();
+    final amountController = TextEditingController();
+    String selectedEmoji = '\u{1F3AF}';
+
+    final emojiOptions = [
+      '\u{1F3AF}', // target
+      '\u{2708}\u{FE0F}', // airplane
+      '\u{1F3E0}', // house
+      '\u{1F697}', // car
+      '\u{1F381}', // gift
+      '\u{1F389}', // party
+      '\u{1F4B0}', // money bag
+      '\u{1F30E}', // globe
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor:
+                  isDark ? AppColors.darkSurface : AppColors.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.modalRadius),
+              ),
+              title: Text(
+                '建立共同目標',
+                style: AppTextStyles.cardTitle(
                   color: isDark
                       ? AppColors.darkPrimaryText
                       : AppColors.primaryText,
                 ),
               ),
-              Text(
-                '/ \$${_formatAmount(_targetAmount)}',
-                style: AppTextStyles.caption(
-                  color: isDark
-                      ? AppColors.darkSecondaryText
-                      : AppColors.secondaryText,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Emoji 選擇
+                    Text(
+                      '選擇圖示',
+                      style: AppTextStyles.caption(
+                        color: isDark
+                            ? AppColors.darkSecondaryText
+                            : AppColors.secondaryText,
+                      ),
+                    ),
+                    const SizedBox(height: AppTheme.spacingSm),
+                    Wrap(
+                      spacing: 8,
+                      children: emojiOptions.map((emoji) {
+                        final isSelected = emoji == selectedEmoji;
+                        return GestureDetector(
+                          onTap: () {
+                            setDialogState(() => selectedEmoji = emoji);
+                          },
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? (isDark
+                                          ? AppColors.darkAccent
+                                          : AppColors.accent)
+                                      .withValues(alpha: 0.2)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              border: isSelected
+                                  ? Border.all(
+                                      color: isDark
+                                          ? AppColors.darkAccent
+                                          : AppColors.accent,
+                                    )
+                                  : null,
+                            ),
+                            alignment: Alignment.center,
+                            child:
+                                Text(emoji, style: const TextStyle(fontSize: 24)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: AppTheme.spacingMd),
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        hintText: '目標名稱',
+                        prefixIcon: Icon(Icons.edit_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: AppTheme.spacingSm),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        hintText: '目標金額',
+                        prefixText: '\$ ',
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ],
-      ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final amount = amountController.text.trim();
+                    if (name.isEmpty || amount.isEmpty) return;
+
+                    Navigator.of(ctx).pop();
+                    try {
+                      await _repo.createSharedGoal(
+                        name: name,
+                        targetAmount: amount,
+                        emoji: selectedEmoji,
+                      );
+                      _loadGoals();
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('已建立：$name'),
+                          backgroundColor:
+                              isDark ? AppColors.darkSuccess : AppColors.success,
+                        ),
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('建立失敗：$e'),
+                          backgroundColor: AppColors.error,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('建立'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  /// 邀請連結按鈕
-  Widget _buildInviteButton(bool isDark) {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: () {
-          // TODO: 實作邀請連結功能
-        },
-        icon: const Icon(Icons.link),
-        label: const Text('複製邀請連結'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: isDark ? AppColors.darkAccent : AppColors.accent,
-          side: BorderSide(
-            color: (isDark ? AppColors.darkAccent : AppColors.accent)
-                .withValues(alpha: 0.4),
-          ),
-          padding: const EdgeInsets.symmetric(
-            vertical: AppTheme.spacingSm + AppTheme.spacingXs,
-          ),
+  /// 顯示加入共同目標 Dialog
+  void _showJoinDialog(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final codeController = TextEditingController();
+    final auth = context.read<AuthService>();
+    final userName = auth.currentUser?.name ?? '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppColors.darkSurface : AppColors.surface,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+            borderRadius: BorderRadius.circular(AppTheme.modalRadius),
           ),
-        ),
-      ),
+          title: Text(
+            '加入共同目標',
+            style: AppTextStyles.cardTitle(
+              color:
+                  isDark ? AppColors.darkPrimaryText : AppColors.primaryText,
+            ),
+          ),
+          content: TextField(
+            controller: codeController,
+            decoration: const InputDecoration(
+              hintText: '輸入邀請碼',
+              prefixIcon: Icon(Icons.vpn_key_outlined),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final code = codeController.text.trim();
+                if (code.isEmpty) return;
+
+                Navigator.of(ctx).pop();
+                try {
+                  await _repo.joinByInviteCode(code, userName);
+                  _loadGoals();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('已成功加入共同目標'),
+                      backgroundColor:
+                          isDark ? AppColors.darkSuccess : AppColors.success,
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('加入失敗：$e'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                }
+              },
+              child: const Text('加入'),
+            ),
+          ],
+        );
+      },
     );
   }
 

@@ -69,6 +69,32 @@ CREATE TABLE IF NOT EXISTS savings_goals (
 );
 CREATE INDEX IF NOT EXISTS idx_savings_goals_user ON savings_goals(user_id);
 
+-- 共同儲蓄目標
+CREATE TABLE IF NOT EXISTS shared_goals (
+  id              TEXT PRIMARY KEY,
+  creator_id      TEXT NOT NULL,
+  name            TEXT NOT NULL,
+  target_amount   TEXT NOT NULL DEFAULT '0',
+  emoji           TEXT NOT NULL DEFAULT '🎯',
+  invite_code     TEXT NOT NULL UNIQUE,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_shared_goals_creator ON shared_goals(creator_id);
+CREATE INDEX IF NOT EXISTS idx_shared_goals_invite ON shared_goals(invite_code);
+
+-- 共同儲蓄目標成員
+CREATE TABLE IF NOT EXISTS shared_goal_members (
+  id                  TEXT PRIMARY KEY,
+  goal_id             TEXT NOT NULL,
+  user_id             TEXT NOT NULL,
+  user_name           TEXT NOT NULL,
+  contributed_amount  TEXT NOT NULL DEFAULT '0',
+  joined_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sgm_goal ON shared_goal_members(goal_id);
+CREATE INDEX IF NOT EXISTS idx_sgm_user ON shared_goal_members(user_id);
+
 -- 交易紀錄
 CREATE TABLE IF NOT EXISTS transactions (
   id          TEXT PRIMARY KEY,
