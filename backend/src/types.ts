@@ -4,18 +4,86 @@ export interface Env {
   JWT_SECRET?: string;
 }
 
+/** 使用者基本資訊 */
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 帳本 */
+export interface Book {
+  id: string;
+  name: string;
+  emoji: string;
+  owner_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 帳本成員 (含 role) */
+export interface BookMember {
+  book_id: string;
+  user_id: string;
+  role: 'owner' | 'admin' | 'member';
+  joined_at: string;
+}
+
+/** 帳本邀請碼 */
+export interface BookInvite {
+  code: string;
+  book_id: string;
+  invited_by: string;
+  role: 'admin' | 'member';
+  expires_at: string;
+  used_at: string | null;
+  used_by: string | null;
+  created_at: string;
+}
+
+/** Activity feed entry */
+export interface BookActivity {
+  id: string;
+  book_id: string;
+  user_id: string | null;
+  action: string;
+  resource: string;
+  resource_id: string | null;
+  summary: string;
+  created_at: string;
+}
+
+/** 使用者偏好設定 */
+export interface UserSettings {
+  user_id: string;
+  active_book_id: string | null;
+  updated_at: string;
+}
+
+/** Book context — 由 bookContext middleware 注入 */
+export interface BookContext {
+  userId: string;
+  bookId: string;
+  role: 'owner' | 'admin' | 'member';
+  /** 若被踢時 auto-fallback 觸發，會帶上要回給 client 的新 active_book_id */
+  switchedTo?: string;
+}
+
 /** 帳戶 — 對應銀行帳戶或信用卡 */
 export interface Account {
   id: string;
-  user_id: string;
+  book_id: string;
+  created_by: string;
   name: string;
-  type: string;                    // 'bank' | 'credit_card'
-  account_number: string;          // 帳號後幾碼
-  balance: string;                 // Decimal stored as TEXT
-  billing_date: number | null;     // 信用卡帳單日
-  payment_date: number | null;     // 信用卡繳款日
-  billed_amount: string | null;    // 已出帳金額
-  unbilled_amount: string | null;  // 未出帳金額
+  type: string;
+  account_number: string;
+  balance: string;
+  billing_date: number | null;
+  payment_date: number | null;
+  billed_amount: string | null;
+  unbilled_amount: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -23,19 +91,20 @@ export interface Account {
 /** 固定收支 — 定期扣款/收入項目 */
 export interface FixedExpense {
   id: string;
-  user_id: string;
+  book_id: string;
+  created_by: string;
   name: string;
-  type: string;              // 'expense' | 'income'
-  amount: string;            // Decimal stored as TEXT
-  cycle: string;             // 'monthly' | 'bimonthly' | 'quarterly' | 'semi_annual' | 'annual'
-  due_date: string | null;   // ISO date（下次到期日）
-  due_day: number;           // 每月幾號（1-31）
-  payment_method: string;    // 付款/收款方式描述
+  type: string;
+  amount: string;
+  cycle: string;
+  due_date: string | null;
+  due_day: number;
+  payment_method: string;
   account_id: string;
   category: string;
   note: string | null;
-  reserved_amount: string;   // 已預留金額
-  is_active: number;         // 0 或 1
+  reserved_amount: string;
+  is_active: number;
   created_at: string;
   updated_at: string;
 }
@@ -43,13 +112,14 @@ export interface FixedExpense {
 /** 儲蓄目標 */
 export interface SavingsGoal {
   id: string;
-  user_id: string;
+  book_id: string;
+  created_by: string;
   name: string;
-  target_amount: string;           // Decimal stored as TEXT
-  current_amount: string;          // Decimal stored as TEXT
+  target_amount: string;
+  current_amount: string;
   category: string;
-  deadline: string | null;         // ISO date
-  monthly_reserve: string;         // Decimal stored as TEXT
+  deadline: string | null;
+  monthly_reserve: string;
   emoji: string;
   created_at: string;
   updated_at: string;
@@ -58,14 +128,16 @@ export interface SavingsGoal {
 /** 交易紀錄 */
 export interface Transaction {
   id: string;
-  user_id: string;
-  type: string;                    // 'income' | 'expense'
-  amount: string;                  // Decimal stored as TEXT
-  date: string;                    // YYYY-MM-DD
+  book_id: string;
+  created_by: string;
+  type: string;
+  amount: string;
+  date: string;
   note: string;
   category: string;
   account_id: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 /** 同步請求：客戶端上傳的一個表格的變更 */

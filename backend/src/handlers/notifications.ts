@@ -95,40 +95,58 @@ export async function handleScheduledNotifications(
       `[排程通知] 找到 ${result.results.length} 筆明天到期的扣款`
     );
 
-    // 按用戶分組
-    const byUser = new Map<
+    // 按帳本分組 (book-centric)
+    const byBook = new Map<
       string,
       Array<FixedExpense & { account_name: string }>
     >();
     for (const expense of result.results) {
-      const userId = expense.user_id;
-      if (!byUser.has(userId)) {
-        byUser.set(userId, []);
+      const bookId = expense.book_id;
+      if (!byBook.has(bookId)) {
+        byBook.set(bookId, []);
       }
-      byUser.get(userId)!.push(expense);
+      byBook.get(bookId)!.push(expense);
     }
 
-    // 為每位用戶發送推撥通知
-    for (const [userId, expenses] of byUser) {
+    // 為每個帳本的所有成員發送推撥通知
+    for (const [bookId, expenses] of byBook) {
+      // 取出該帳本所有成員
+      const { results: members } = await env.DB.prepare(
+        'SELECT user_id FROM book_members WHERE book_id = ?'
+      )
+        .bind(bookId)
+        .all<{ user_id: string }>();
+
+      const memberIds = (members ?? []).map((m) => m.user_id);
+
       if (expenses.length === 1) {
-        // 單筆扣款：顯示詳細資訊
         const e = expenses[0];
-        await sendFcmNotification({
-          userId,
-          title: '明日扣款提醒',
-          body: `${e.name} 將於明天從「${e.account_name}」扣款 $${e.amount}`,
-          data: { type: 'deduction_reminder', expenseId: e.id },
-        });
+        for (const userId of memberIds) {
+          await sendFcmNotification({
+            userId,
+            title: '明日扣款提醒',
+            body: `${e.name} 將於明天從「${e.account_name}」扣款 $${e.amount}`,
+            data: { type: 'deduction_reminder', expenseId: e.id, bookId },
+          });
+        }
       } else {
-        // 多筆扣款：顯示摘要
-        const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+        const total = expenses.reduce(
+          (sum, e) => sum + parseFloat(e.amount || '0'),
+          0
+        );
         const names = expenses.map((e) => e.name).join('、');
-        await sendFcmNotification({
-          userId,
-          title: '明日扣款提醒',
-          body: `您有 ${expenses.length} 筆扣款（${names}），合計 $${total}`,
-          data: { type: 'deduction_reminder', count: String(expenses.length) },
-        });
+        for (const userId of memberIds) {
+          await sendFcmNotification({
+            userId,
+            title: '明日扣款提醒',
+            body: `您有 ${expenses.length} 筆扣款（${names}），合計 $${total}`,
+            data: {
+              type: 'deduction_reminder',
+              count: String(expenses.length),
+              bookId,
+            },
+          });
+        }
       }
     }
 

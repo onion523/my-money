@@ -1,14 +1,18 @@
-import { Env, FixedExpense, ApiResponse } from '../types';
+import { Env, FixedExpense, ApiResponse, BookContext } from '../types';
+import {
+  isAdminOrOwner,
+  forbiddenResponse,
+} from '../middleware/book-context';
 
-/** 取得使用者所有固定收支 */
+/** 取得帳本所有固定收支 */
 export async function listFixedExpenses(
-  userId: string,
+  ctx: BookContext,
   env: Env
 ): Promise<Response> {
   const { results } = await env.DB.prepare(
-    'SELECT * FROM fixed_expenses WHERE user_id = ? ORDER BY due_day ASC'
+    'SELECT * FROM fixed_expenses WHERE book_id = ? ORDER BY due_day ASC'
   )
-    .bind(userId)
+    .bind(ctx.bookId)
     .all<FixedExpense>();
 
   return Response.json({ ok: true, data: results } satisfies ApiResponse);
@@ -16,14 +20,14 @@ export async function listFixedExpenses(
 
 /** 取得單一固定收支 */
 export async function getFixedExpense(
-  userId: string,
+  ctx: BookContext,
   id: string,
   env: Env
 ): Promise<Response> {
   const row = await env.DB.prepare(
-    'SELECT * FROM fixed_expenses WHERE id = ? AND user_id = ?'
+    'SELECT * FROM fixed_expenses WHERE id = ? AND book_id = ?'
   )
-    .bind(id, userId)
+    .bind(id, ctx.bookId)
     .first<FixedExpense>();
 
   if (!row) {
@@ -36,23 +40,28 @@ export async function getFixedExpense(
   return Response.json({ ok: true, data: row } satisfies ApiResponse);
 }
 
-/** 新增固定收支 */
+/** 新增固定收支 (admin/owner only) */
 export async function createFixedExpense(
-  userId: string,
+  ctx: BookContext,
   body: Partial<FixedExpense>,
   env: Env
 ): Promise<Response> {
+  if (!isAdminOrOwner(ctx)) {
+    return forbiddenResponse('只有管理者可以新增固定收支');
+  }
+
   const id = body.id ?? crypto.randomUUID();
   const now = new Date().toISOString();
 
   await env.DB.prepare(
     `INSERT INTO fixed_expenses
-       (id, user_id, name, type, amount, cycle, due_date, due_day, payment_method, account_id, category, note, reserved_amount, is_active, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, book_id, created_by, name, type, amount, cycle, due_date, due_day, payment_method, account_id, category, note, reserved_amount, is_active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
-      userId,
+      ctx.bookId,
+      ctx.userId,
       body.name ?? '',
       body.type ?? 'expense',
       body.amount ?? '0',
@@ -76,13 +85,17 @@ export async function createFixedExpense(
   );
 }
 
-/** 更新固定收支 */
+/** 更新固定收支 (admin/owner only) */
 export async function updateFixedExpense(
-  userId: string,
+  ctx: BookContext,
   id: string,
   body: Partial<FixedExpense>,
   env: Env
 ): Promise<Response> {
+  if (!isAdminOrOwner(ctx)) {
+    return forbiddenResponse('只有管理者可以編輯固定收支');
+  }
+
   const now = new Date().toISOString();
 
   const result = await env.DB.prepare(
@@ -100,7 +113,7 @@ export async function updateFixedExpense(
          reserved_amount = COALESCE(?, reserved_amount),
          is_active       = COALESCE(?, is_active),
          updated_at      = ?
-     WHERE id = ? AND user_id = ?`
+     WHERE id = ? AND book_id = ?`
   )
     .bind(
       body.name ?? null,
@@ -117,7 +130,7 @@ export async function updateFixedExpense(
       body.is_active ?? null,
       now,
       id,
-      userId
+      ctx.bookId
     )
     .run();
 
@@ -131,16 +144,20 @@ export async function updateFixedExpense(
   return Response.json({ ok: true, data: { id } } satisfies ApiResponse);
 }
 
-/** 刪除固定收支 */
+/** 刪除固定收支 (admin/owner only) */
 export async function deleteFixedExpense(
-  userId: string,
+  ctx: BookContext,
   id: string,
   env: Env
 ): Promise<Response> {
+  if (!isAdminOrOwner(ctx)) {
+    return forbiddenResponse('只有管理者可以刪除固定收支');
+  }
+
   const result = await env.DB.prepare(
-    'DELETE FROM fixed_expenses WHERE id = ? AND user_id = ?'
+    'DELETE FROM fixed_expenses WHERE id = ? AND book_id = ?'
   )
-    .bind(id, userId)
+    .bind(id, ctx.bookId)
     .run();
 
   if (!result.meta.changed_db) {

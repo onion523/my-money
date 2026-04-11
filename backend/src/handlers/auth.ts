@@ -108,7 +108,15 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
-/** POST /api/auth/register */
+/** POST /api/auth/register
+ *
+ * 註冊流程:
+ *   1. 建立 user
+ *   2. 自動建立個人帳本「我的帳本」(owner = 該 user)
+ *   3. 加入 book_members (role = owner)
+ *   4. 寫 user_settings (active_book_id = 個人帳本)
+ *   5. 簽 JWT 回傳
+ */
 export async function handleRegister(
   body: { email: string; password: string; name: string },
   env: Env
@@ -143,21 +151,105 @@ export async function handleRegister(
     );
   }
 
-  const id = generateId();
+  const userId = generateId();
   const salt = generateSalt();
   const hashed = await hashPassword(password, salt);
+  const bookId = generateId();
+  const now = new Date().toISOString();
 
-  await env.DB.prepare(
-    'INSERT INTO users (id, email, name, password, salt) VALUES (?, ?, ?, ?, ?)'
-  )
-    .bind(id, email.toLowerCase(), name, hashed, salt)
-    .run();
+  // Batch insert: user + book + book_members + user_settings
+  await env.DB.batch([
+    env.DB.prepare(
+      'INSERT INTO users (id, email, name, password, salt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(userId, email.toLowerCase(), name, hashed, salt, now, now),
 
-  const token = await createToken(id, email.toLowerCase(), env);
+    env.DB.prepare(
+      'INSERT INTO books (id, name, emoji, owner_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(bookId, '我的帳本', '📒', userId, now, now),
+
+    env.DB.prepare(
+      'INSERT INTO book_members (book_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)'
+    ).bind(bookId, userId, 'owner', now),
+
+    env.DB.prepare(
+      'INSERT INTO user_settings (user_id, active_book_id, updated_at) VALUES (?, ?, ?)'
+    ).bind(userId, bookId, now),
+  ]);
+
+  const token = await createToken(userId, email.toLowerCase(), env);
 
   return Response.json({
     ok: true,
-    data: { user_id: id, email: email.toLowerCase(), name, token },
+    data: {
+      user_id: userId,
+      email: email.toLowerCase(),
+      name,
+      token,
+      active_book_id: bookId,
+    },
+  });
+}
+
+/** GET /api/auth/me
+ *
+ * 回傳當前使用者資訊 + active_book + role + 所屬的所有 books
+ */
+export async function handleMe(
+  userId: string,
+  env: Env
+): Promise<Response> {
+  const user = await env.DB.prepare(
+    'SELECT id, email, name, created_at FROM users WHERE id = ?'
+  )
+    .bind(userId)
+    .first<{ id: string; email: string; name: string; created_at: string }>();
+
+  if (!user) {
+    return Response.json(
+      { ok: false, error: '使用者不存在' },
+      { status: 404 }
+    );
+  }
+
+  // 拿所有所屬 books + role
+  const { results: books } = await env.DB.prepare(
+    `SELECT b.id, b.name, b.emoji, b.owner_user_id, bm.role, b.created_at, b.updated_at
+     FROM books b
+     INNER JOIN book_members bm ON bm.book_id = b.id
+     WHERE bm.user_id = ?
+     ORDER BY bm.joined_at ASC`
+  )
+    .bind(userId)
+    .all();
+
+  // 拿 active_book_id (若沒有 settings 用第一本作為 fallback)
+  const settings = await env.DB.prepare(
+    'SELECT active_book_id FROM user_settings WHERE user_id = ?'
+  )
+    .bind(userId)
+    .first<{ active_book_id: string | null }>();
+
+  let activeBookId = settings?.active_book_id ?? null;
+  // 若 active_book_id 不在 books 列表中 (被踢) → 用第一本
+  if (activeBookId && !books.find((b: any) => b.id === activeBookId)) {
+    activeBookId = (books[0] as any)?.id ?? null;
+  }
+  if (!activeBookId && books.length > 0) {
+    activeBookId = (books[0] as any).id;
+  }
+
+  // 找 active book 的 role
+  const activeBook = books.find((b: any) => b.id === activeBookId) as any;
+
+  return Response.json({
+    ok: true,
+    data: {
+      user,
+      books,
+      active_book_id: activeBookId,
+      active_book: activeBook ?? null,
+      role: activeBook?.role ?? null,
+    },
   });
 }
 

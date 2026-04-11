@@ -1,14 +1,18 @@
-import { Env, SavingsGoal, ApiResponse } from '../types';
+import { Env, SavingsGoal, ApiResponse, BookContext } from '../types';
+import {
+  isAdminOrOwner,
+  forbiddenResponse,
+} from '../middleware/book-context';
 
-/** 取得使用者所有儲蓄目標 */
+/** 取得帳本所有儲蓄目標 */
 export async function listSavingsGoals(
-  userId: string,
+  ctx: BookContext,
   env: Env
 ): Promise<Response> {
   const { results } = await env.DB.prepare(
-    'SELECT * FROM savings_goals WHERE user_id = ? ORDER BY created_at ASC'
+    'SELECT * FROM savings_goals WHERE book_id = ? ORDER BY created_at ASC'
   )
-    .bind(userId)
+    .bind(ctx.bookId)
     .all<SavingsGoal>();
 
   return Response.json({ ok: true, data: results } satisfies ApiResponse);
@@ -16,14 +20,14 @@ export async function listSavingsGoals(
 
 /** 取得單一儲蓄目標 */
 export async function getSavingsGoal(
-  userId: string,
+  ctx: BookContext,
   id: string,
   env: Env
 ): Promise<Response> {
   const row = await env.DB.prepare(
-    'SELECT * FROM savings_goals WHERE id = ? AND user_id = ?'
+    'SELECT * FROM savings_goals WHERE id = ? AND book_id = ?'
   )
-    .bind(id, userId)
+    .bind(id, ctx.bookId)
     .first<SavingsGoal>();
 
   if (!row) {
@@ -36,23 +40,28 @@ export async function getSavingsGoal(
   return Response.json({ ok: true, data: row } satisfies ApiResponse);
 }
 
-/** 新增儲蓄目標 */
+/** 新增儲蓄目標 (admin/owner only) */
 export async function createSavingsGoal(
-  userId: string,
+  ctx: BookContext,
   body: Partial<SavingsGoal>,
   env: Env
 ): Promise<Response> {
+  if (!isAdminOrOwner(ctx)) {
+    return forbiddenResponse('只有管理者可以新增儲蓄目標');
+  }
+
   const id = body.id ?? crypto.randomUUID();
   const now = new Date().toISOString();
 
   await env.DB.prepare(
     `INSERT INTO savings_goals
-       (id, user_id, name, target_amount, current_amount, category, deadline, monthly_reserve, emoji, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, book_id, created_by, name, target_amount, current_amount, category, deadline, monthly_reserve, emoji, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
-      userId,
+      ctx.bookId,
+      ctx.userId,
       body.name ?? '',
       body.target_amount ?? '0',
       body.current_amount ?? '0',
@@ -71,13 +80,17 @@ export async function createSavingsGoal(
   );
 }
 
-/** 更新儲蓄目標 */
+/** 更新儲蓄目標 (admin/owner only) */
 export async function updateSavingsGoal(
-  userId: string,
+  ctx: BookContext,
   id: string,
   body: Partial<SavingsGoal>,
   env: Env
 ): Promise<Response> {
+  if (!isAdminOrOwner(ctx)) {
+    return forbiddenResponse('只有管理者可以編輯儲蓄目標');
+  }
+
   const now = new Date().toISOString();
 
   const result = await env.DB.prepare(
@@ -90,7 +103,7 @@ export async function updateSavingsGoal(
          monthly_reserve = COALESCE(?, monthly_reserve),
          emoji           = COALESCE(?, emoji),
          updated_at      = ?
-     WHERE id = ? AND user_id = ?`
+     WHERE id = ? AND book_id = ?`
   )
     .bind(
       body.name ?? null,
@@ -102,7 +115,7 @@ export async function updateSavingsGoal(
       body.emoji ?? null,
       now,
       id,
-      userId
+      ctx.bookId
     )
     .run();
 
@@ -116,16 +129,20 @@ export async function updateSavingsGoal(
   return Response.json({ ok: true, data: { id } } satisfies ApiResponse);
 }
 
-/** 刪除儲蓄目標 */
+/** 刪除儲蓄目標 (admin/owner only) */
 export async function deleteSavingsGoal(
-  userId: string,
+  ctx: BookContext,
   id: string,
   env: Env
 ): Promise<Response> {
+  if (!isAdminOrOwner(ctx)) {
+    return forbiddenResponse('只有管理者可以刪除儲蓄目標');
+  }
+
   const result = await env.DB.prepare(
-    'DELETE FROM savings_goals WHERE id = ? AND user_id = ?'
+    'DELETE FROM savings_goals WHERE id = ? AND book_id = ?'
   )
-    .bind(id, userId)
+    .bind(id, ctx.bookId)
     .run();
 
   if (!result.meta.changed_db) {

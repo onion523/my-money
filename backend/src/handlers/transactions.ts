@@ -1,8 +1,9 @@
-import { Env, Transaction, ApiResponse } from '../types';
+import { Env, Transaction, ApiResponse, BookContext } from '../types';
+import { canModify, forbiddenResponse } from '../middleware/book-context';
 
-/** 取得使用者所有交易紀錄（支援分頁與日期篩選） */
+/** 取得帳本所有交易紀錄（支援分頁與日期篩選） */
 export async function listTransactions(
-  userId: string,
+  ctx: BookContext,
   url: URL,
   env: Env
 ): Promise<Response> {
@@ -12,8 +13,8 @@ export async function listTransactions(
   const limit = parseInt(url.searchParams.get('limit') ?? '50', 10);
   const offset = parseInt(url.searchParams.get('offset') ?? '0', 10);
 
-  let sql = 'SELECT * FROM transactions WHERE user_id = ?';
-  const binds: unknown[] = [userId];
+  let sql = 'SELECT * FROM transactions WHERE book_id = ?';
+  const binds: unknown[] = [ctx.bookId];
 
   if (from) {
     sql += ' AND date >= ?';
@@ -35,14 +36,14 @@ export async function listTransactions(
 
 /** 取得單一交易紀錄 */
 export async function getTransaction(
-  userId: string,
+  ctx: BookContext,
   id: string,
   env: Env
 ): Promise<Response> {
   const row = await env.DB.prepare(
-    'SELECT * FROM transactions WHERE id = ? AND user_id = ?'
+    'SELECT * FROM transactions WHERE id = ? AND book_id = ?'
   )
-    .bind(id, userId)
+    .bind(id, ctx.bookId)
     .first<Transaction>();
 
   if (!row) {
@@ -55,9 +56,9 @@ export async function getTransaction(
   return Response.json({ ok: true, data: row } satisfies ApiResponse);
 }
 
-/** 新增交易紀錄 */
+/** 新增交易紀錄 (任何成員都能新增) */
 export async function createTransaction(
-  userId: string,
+  ctx: BookContext,
   body: Partial<Transaction>,
   env: Env
 ): Promise<Response> {
@@ -66,18 +67,20 @@ export async function createTransaction(
 
   await env.DB.prepare(
     `INSERT INTO transactions
-       (id, user_id, type, amount, date, note, category, account_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, book_id, created_by, type, amount, date, note, category, account_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
-      userId,
+      ctx.bookId,
+      ctx.userId,
       body.type ?? 'expense',
       body.amount ?? '0',
       body.date ?? now.slice(0, 10),
       body.note ?? '',
       body.category ?? '',
       body.account_id ?? null,
+      now,
       now
     )
     .run();
@@ -88,22 +91,43 @@ export async function createTransaction(
   );
 }
 
-/** 更新交易紀錄 */
+/** 更新交易紀錄 (admin/owner 全權；member 只能改自己記的) */
 export async function updateTransaction(
-  userId: string,
+  ctx: BookContext,
   id: string,
   body: Partial<Transaction>,
   env: Env
 ): Promise<Response> {
-  const result = await env.DB.prepare(
+  // 先讀出該筆 row 看 created_by
+  const existing = await env.DB.prepare(
+    'SELECT created_by FROM transactions WHERE id = ? AND book_id = ?'
+  )
+    .bind(id, ctx.bookId)
+    .first<{ created_by: string }>();
+
+  if (!existing) {
+    return Response.json(
+      { ok: false, error: '交易紀錄不存在' } satisfies ApiResponse,
+      { status: 404 }
+    );
+  }
+
+  if (!canModify(ctx, existing)) {
+    return forbiddenResponse('只能編輯自己記的交易');
+  }
+
+  const now = new Date().toISOString();
+
+  await env.DB.prepare(
     `UPDATE transactions
      SET type       = COALESCE(?, type),
          amount     = COALESCE(?, amount),
          date       = COALESCE(?, date),
          note       = COALESCE(?, note),
          category   = COALESCE(?, category),
-         account_id = COALESCE(?, account_id)
-     WHERE id = ? AND user_id = ?`
+         account_id = COALESCE(?, account_id),
+         updated_at = ?
+     WHERE id = ? AND book_id = ?`
   )
     .bind(
       body.type ?? null,
@@ -112,39 +136,41 @@ export async function updateTransaction(
       body.note ?? null,
       body.category ?? null,
       body.account_id ?? null,
+      now,
       id,
-      userId
+      ctx.bookId
     )
     .run();
-
-  if (!result.meta.changed_db) {
-    return Response.json(
-      { ok: false, error: '交易紀錄不存在' } satisfies ApiResponse,
-      { status: 404 }
-    );
-  }
 
   return Response.json({ ok: true, data: { id } } satisfies ApiResponse);
 }
 
-/** 刪除交易紀錄 */
+/** 刪除交易紀錄 (admin/owner 全權；member 只能刪自己記的) */
 export async function deleteTransaction(
-  userId: string,
+  ctx: BookContext,
   id: string,
   env: Env
 ): Promise<Response> {
-  const result = await env.DB.prepare(
-    'DELETE FROM transactions WHERE id = ? AND user_id = ?'
+  const existing = await env.DB.prepare(
+    'SELECT created_by FROM transactions WHERE id = ? AND book_id = ?'
   )
-    .bind(id, userId)
-    .run();
+    .bind(id, ctx.bookId)
+    .first<{ created_by: string }>();
 
-  if (!result.meta.changed_db) {
+  if (!existing) {
     return Response.json(
       { ok: false, error: '交易紀錄不存在' } satisfies ApiResponse,
       { status: 404 }
     );
   }
+
+  if (!canModify(ctx, existing)) {
+    return forbiddenResponse('只能刪除自己記的交易');
+  }
+
+  await env.DB.prepare('DELETE FROM transactions WHERE id = ? AND book_id = ?')
+    .bind(id, ctx.bookId)
+    .run();
 
   return Response.json({ ok: true } satisfies ApiResponse);
 }

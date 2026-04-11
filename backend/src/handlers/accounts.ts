@@ -1,14 +1,18 @@
-import { Env, Account, ApiResponse } from '../types';
+import { Env, Account, ApiResponse, BookContext } from '../types';
+import {
+  isAdminOrOwner,
+  forbiddenResponse,
+} from '../middleware/book-context';
 
-/** 取得使用者所有帳戶 */
+/** 取得帳本所有帳戶 */
 export async function listAccounts(
-  userId: string,
+  ctx: BookContext,
   env: Env
 ): Promise<Response> {
   const { results } = await env.DB.prepare(
-    'SELECT * FROM accounts WHERE user_id = ? ORDER BY created_at ASC'
+    'SELECT * FROM accounts WHERE book_id = ? ORDER BY created_at ASC'
   )
-    .bind(userId)
+    .bind(ctx.bookId)
     .all<Account>();
 
   return Response.json({ ok: true, data: results } satisfies ApiResponse);
@@ -16,14 +20,14 @@ export async function listAccounts(
 
 /** 取得單一帳戶 */
 export async function getAccount(
-  userId: string,
+  ctx: BookContext,
   id: string,
   env: Env
 ): Promise<Response> {
   const row = await env.DB.prepare(
-    'SELECT * FROM accounts WHERE id = ? AND user_id = ?'
+    'SELECT * FROM accounts WHERE id = ? AND book_id = ?'
   )
-    .bind(id, userId)
+    .bind(id, ctx.bookId)
     .first<Account>();
 
   if (!row) {
@@ -36,22 +40,27 @@ export async function getAccount(
   return Response.json({ ok: true, data: row } satisfies ApiResponse);
 }
 
-/** 新增帳戶 */
+/** 新增帳戶 (admin/owner only — 設定類資源) */
 export async function createAccount(
-  userId: string,
+  ctx: BookContext,
   body: Partial<Account>,
   env: Env
 ): Promise<Response> {
+  if (!isAdminOrOwner(ctx)) {
+    return forbiddenResponse('只有管理者可以新增帳戶');
+  }
+
   const id = body.id ?? crypto.randomUUID();
   const now = new Date().toISOString();
 
   await env.DB.prepare(
-    `INSERT INTO accounts (id, user_id, name, type, account_number, balance, billing_date, payment_date, billed_amount, unbilled_amount, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO accounts (id, book_id, created_by, name, type, account_number, balance, billing_date, payment_date, billed_amount, unbilled_amount, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
-      userId,
+      ctx.bookId,
+      ctx.userId,
       body.name ?? '',
       body.type ?? 'bank',
       body.account_number ?? '',
@@ -71,13 +80,17 @@ export async function createAccount(
   );
 }
 
-/** 更新帳戶 */
+/** 更新帳戶 (admin/owner only) */
 export async function updateAccount(
-  userId: string,
+  ctx: BookContext,
   id: string,
   body: Partial<Account>,
   env: Env
 ): Promise<Response> {
+  if (!isAdminOrOwner(ctx)) {
+    return forbiddenResponse('只有管理者可以編輯帳戶');
+  }
+
   const now = new Date().toISOString();
 
   const result = await env.DB.prepare(
@@ -91,7 +104,7 @@ export async function updateAccount(
          billed_amount   = COALESCE(?, billed_amount),
          unbilled_amount = COALESCE(?, unbilled_amount),
          updated_at      = ?
-     WHERE id = ? AND user_id = ?`
+     WHERE id = ? AND book_id = ?`
   )
     .bind(
       body.name ?? null,
@@ -104,7 +117,7 @@ export async function updateAccount(
       body.unbilled_amount ?? null,
       now,
       id,
-      userId
+      ctx.bookId
     )
     .run();
 
@@ -118,16 +131,20 @@ export async function updateAccount(
   return Response.json({ ok: true, data: { id } } satisfies ApiResponse);
 }
 
-/** 刪除帳戶 */
+/** 刪除帳戶 (admin/owner only) */
 export async function deleteAccount(
-  userId: string,
+  ctx: BookContext,
   id: string,
   env: Env
 ): Promise<Response> {
+  if (!isAdminOrOwner(ctx)) {
+    return forbiddenResponse('只有管理者可以刪除帳戶');
+  }
+
   const result = await env.DB.prepare(
-    'DELETE FROM accounts WHERE id = ? AND user_id = ?'
+    'DELETE FROM accounts WHERE id = ? AND book_id = ?'
   )
-    .bind(id, userId)
+    .bind(id, ctx.bookId)
     .run();
 
   if (!result.meta.changed_db) {

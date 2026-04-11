@@ -1,6 +1,11 @@
 import { Env } from './types';
 import { authenticate, unauthorizedResponse } from './middleware/auth';
-import { handleRegister, handleLogin } from './handlers/auth';
+import {
+  resolveBookContext,
+  noBooksResponse,
+  withSwitchHeader,
+} from './middleware/book-context';
+import { handleRegister, handleLogin, handleMe } from './handlers/auth';
 import {
   listAccounts,
   getAccount,
@@ -78,11 +83,9 @@ export async function handleRequest(
     return unauthorizedResponse();
   }
 
-  // ── /api/sync ──
-  if (pathname === '/api/sync' && method === 'POST') {
-    const body = await parseJsonBody(request);
-    if (body instanceof Response) return body;
-    return handleSync(userId, body as any, env);
+  // ── /api/auth/me — 不需要 book context ──
+  if (pathname === '/api/auth/me' && method === 'GET') {
+    return handleMe(userId, env);
   }
 
   // ── /api/notifications/trigger（手動觸發推撥排程，用於測試） ──
@@ -91,84 +94,99 @@ export async function handleRequest(
     return Response.json({ ok: true, message: '推撥排程已手動觸發' });
   }
 
+  // ── 從這裡開始所有 endpoint 都需要 book context ──
+  const ctx = await resolveBookContext(userId, env);
+  if (!ctx) {
+    return noBooksResponse();
+  }
+
+  const wrap = (res: Promise<Response>) => res.then((r) => withSwitchHeader(r, ctx));
+
+  // ── /api/sync ──
+  if (pathname === '/api/sync' && method === 'POST') {
+    const body = await parseJsonBody(request);
+    if (body instanceof Response) return body;
+    return wrap(handleSync(ctx, body as any, env));
+  }
+
   // ── /api/accounts ──
   if (pathname === '/api/accounts') {
-    if (method === 'GET') return listAccounts(userId, env);
+    if (method === 'GET') return wrap(listAccounts(ctx, env));
     if (method === 'POST') {
       const body = await parseJsonBody(request);
       if (body instanceof Response) return body;
-      return createAccount(userId, body as any, env);
+      return wrap(createAccount(ctx, body as any, env));
     }
   }
   const accountId = extractId(pathname, '/api/accounts');
   if (accountId) {
-    if (method === 'GET') return getAccount(userId, accountId, env);
+    if (method === 'GET') return wrap(getAccount(ctx, accountId, env));
     if (method === 'PUT') {
       const body = await parseJsonBody(request);
       if (body instanceof Response) return body;
-      return updateAccount(userId, accountId, body as any, env);
+      return wrap(updateAccount(ctx, accountId, body as any, env));
     }
-    if (method === 'DELETE') return deleteAccount(userId, accountId, env);
+    if (method === 'DELETE') return wrap(deleteAccount(ctx, accountId, env));
   }
 
   // ── /api/fixed-expenses ──
   if (pathname === '/api/fixed-expenses') {
-    if (method === 'GET') return listFixedExpenses(userId, env);
+    if (method === 'GET') return wrap(listFixedExpenses(ctx, env));
     if (method === 'POST') {
       const body = await parseJsonBody(request);
       if (body instanceof Response) return body;
-      return createFixedExpense(userId, body as any, env);
+      return wrap(createFixedExpense(ctx, body as any, env));
     }
   }
   const fixedExpenseId = extractId(pathname, '/api/fixed-expenses');
   if (fixedExpenseId) {
-    if (method === 'GET') return getFixedExpense(userId, fixedExpenseId, env);
+    if (method === 'GET') return wrap(getFixedExpense(ctx, fixedExpenseId, env));
     if (method === 'PUT') {
       const body = await parseJsonBody(request);
       if (body instanceof Response) return body;
-      return updateFixedExpense(userId, fixedExpenseId, body as any, env);
+      return wrap(updateFixedExpense(ctx, fixedExpenseId, body as any, env));
     }
-    if (method === 'DELETE') return deleteFixedExpense(userId, fixedExpenseId, env);
+    if (method === 'DELETE') return wrap(deleteFixedExpense(ctx, fixedExpenseId, env));
   }
 
   // ── /api/savings-goals ──
   if (pathname === '/api/savings-goals') {
-    if (method === 'GET') return listSavingsGoals(userId, env);
+    if (method === 'GET') return wrap(listSavingsGoals(ctx, env));
     if (method === 'POST') {
       const body = await parseJsonBody(request);
       if (body instanceof Response) return body;
-      return createSavingsGoal(userId, body as any, env);
+      return wrap(createSavingsGoal(ctx, body as any, env));
     }
   }
   const savingsGoalId = extractId(pathname, '/api/savings-goals');
   if (savingsGoalId) {
-    if (method === 'GET') return getSavingsGoal(userId, savingsGoalId, env);
+    if (method === 'GET') return wrap(getSavingsGoal(ctx, savingsGoalId, env));
     if (method === 'PUT') {
       const body = await parseJsonBody(request);
       if (body instanceof Response) return body;
-      return updateSavingsGoal(userId, savingsGoalId, body as any, env);
+      return wrap(updateSavingsGoal(ctx, savingsGoalId, body as any, env));
     }
-    if (method === 'DELETE') return deleteSavingsGoal(userId, savingsGoalId, env);
+    if (method === 'DELETE') return wrap(deleteSavingsGoal(ctx, savingsGoalId, env));
   }
 
   // ── /api/transactions ──
   if (pathname === '/api/transactions') {
-    if (method === 'GET') return listTransactions(userId, url, env);
+    if (method === 'GET') return wrap(listTransactions(ctx, url, env));
     if (method === 'POST') {
       const body = await parseJsonBody(request);
       if (body instanceof Response) return body;
-      return createTransaction(userId, body as any, env);
+      return wrap(createTransaction(ctx, body as any, env));
     }
   }
   const transactionId = extractId(pathname, '/api/transactions');
   if (transactionId) {
-    if (method === 'GET') return getTransaction(userId, transactionId, env);
+    if (method === 'GET') return wrap(getTransaction(ctx, transactionId, env));
     if (method === 'PUT') {
       const body = await parseJsonBody(request);
       if (body instanceof Response) return body;
-      return updateTransaction(userId, transactionId, body as any, env);
+      return wrap(updateTransaction(ctx, transactionId, body as any, env));
     }
-    if (method === 'DELETE') return deleteTransaction(userId, transactionId, env);
+    if (method === 'DELETE') return wrap(deleteTransaction(ctx, transactionId, env));
   }
 
   // ── 404 ──
