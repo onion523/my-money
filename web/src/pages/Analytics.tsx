@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import {
   txApi,
   budgetsApi,
@@ -37,7 +37,11 @@ import {
   Sliders,
   AlertTriangle,
   Calendar,
-  CheckCircle2
+  CheckCircle2,
+  Users,
+  Lock,
+  Globe,
+  Coins
 } from 'lucide-react'
 
 const PIE_COLORS = [
@@ -47,9 +51,11 @@ const PIE_COLORS = [
 
 export default function Analytics() {
   const [currentMonth, setCurrentMonth] = useState(thisMonth())
+  const [scope, setScope] = useState<'all' | 'household' | 'personal'>('all')
   const [catSummary, setCatSummary] = useState<CategorySummary[]>([])
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([])
   const [budgets, setBudgets] = useState<BudgetWithSpent[]>([])
+  const [householdShares, setHouseholdShares] = useState<Array<{ user_id: string; user_name: string; total: number }>>([])
   const [loading, setLoading] = useState(true)
 
   // 預算設定 Modal
@@ -58,17 +64,19 @@ export default function Analytics() {
   const [budgetAmount, setBudgetAmount] = useState('')
   const [submittingBudget, setSubmittingBudget] = useState(false)
 
-  const loadData = async (month: string) => {
+  const loadData = async (month: string, currentScope: 'all' | 'household' | 'personal') => {
     try {
       setLoading(true)
-      const [sum, mStats, buds] = await Promise.all([
-        txApi.summary(month).catch(() => []),
-        txApi.monthly().catch(() => []),
+      const [sum, mStats, buds, shares] = await Promise.all([
+        txApi.summary(month, currentScope).catch(() => []),
+        txApi.monthly(undefined, currentScope).catch(() => []),
         budgetsApi.list(month).catch(() => []),
+        txApi.householdShares(month).catch(() => []),
       ])
       setCatSummary(sum)
       setMonthlyStats(mStats)
       setBudgets(buds)
+      setHouseholdShares(shares)
     } catch (e) {
       console.error(e)
     } finally {
@@ -77,10 +85,10 @@ export default function Analytics() {
   }
 
   useEffect(() => {
-    loadData(currentMonth)
-  }, [currentMonth])
+    loadData(currentMonth, scope)
+  }, [currentMonth, scope])
 
-  // 處理 12 月收支柱狀圖資料結構整理
+  // 近 12 月收支柱狀圖資料結構整理
   const monthlyChartMap: Record<string, { month: string; income: number; expense: number }> = {}
   monthlyStats.forEach(st => {
     if (!monthlyChartMap[st.month]) {
@@ -98,8 +106,8 @@ export default function Analytics() {
   }))
 
   const totalExpense = catSummary.reduce((s, c) => s + c.total, 0)
+  const totalSharedExpense = householdShares.reduce((s, m) => s + m.total, 0)
 
-  // 預算 upsert
   const handleSaveBudget = async (e: React.FormEvent) => {
     e.preventDefault()
     const amt = parseFloat(budgetAmount)
@@ -117,7 +125,7 @@ export default function Analytics() {
       })
       setShowBudgetModal(false)
       setBudgetAmount('')
-      loadData(currentMonth)
+      loadData(currentMonth, scope)
     } catch (err: any) {
       alert(err.message || '預算設定失敗')
     } finally {
@@ -134,10 +142,10 @@ export default function Analytics() {
   return (
     <div className="fade-in">
       {/* 標題與月份切換 */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+      <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
         <div>
-          <h1 className="page-title">統計與預算 📊</h1>
-          <p className="page-subtitle">分類花費占比、長期收支走勢分析，與嚴格的月度預算監控</p>
+          <h1 className="page-title">統計與分析 📊</h1>
+          <p className="page-subtitle">深入洞悉消費佔比、長期收支走勢與嚴格把關年度預算</p>
         </div>
 
         <div className="flex items-center gap-sm">
@@ -152,20 +160,119 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* 圖表兩欄：左側圓餅圖 (分類占比) + 右側最近月收支柱狀圖 */}
+      {/* 帳本視角切換器 */}
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: 4,
+        background: 'var(--bg-surface-2)',
+        borderRadius: 12,
+        border: '1px solid var(--border-color)',
+        marginBottom: 20
+      }}>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('all')}
+        >
+          <Globe size={15} />
+          <span>全貌合併</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('household')}
+        >
+          <Users size={15} />
+          <span>🏠 家庭公帳</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('personal')}
+        >
+          <Lock size={15} />
+          <span>🔒 個人私帳</span>
+        </button>
+      </div>
+
+      {/* 家庭公費成員分攤與墊付統計 (當有家庭成員分攤數據時顯示) */}
+      {(scope === 'household' || scope === 'all') && householdShares.length > 0 && (
+        <div className="card" style={{ marginBottom: 24, background: 'linear-gradient(135deg, rgba(85,197,149,0.06) 0%, rgba(168,216,234,0.08) 100%)', border: '1px solid var(--border-color)' }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
+            <h2 className="text-xl flex items-center gap-xs">
+              <Coins size={20} color="var(--color-success)" />
+              {currentMonth} 家庭成員公費墊付與分攤統計
+            </h2>
+            <div className="text-sm">
+              當月公費總額：<strong style={{ color: 'var(--color-danger)' }}>{formatCurrency(totalSharedExpense)}</strong>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+            {householdShares.map((m, idx) => {
+              const pct = totalSharedExpense > 0 ? ((m.total / totalSharedExpense) * 100).toFixed(1) : '0'
+              return (
+                <div
+                  key={m.user_id}
+                  style={{
+                    padding: '14px 18px',
+                    borderRadius: 12,
+                    background: 'var(--surface-color, #ffffff)',
+                    border: '1px solid var(--border-color)',
+                    boxShadow: 'var(--shadow-sm)'
+                  }}
+                >
+                  <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>👤 {m.user_name}</span>
+                    <span className="badge badge-safe" style={{ fontSize: '0.75rem' }}>{pct}%</span>
+                  </div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-display)' }}>
+                    {formatCurrency(m.total)}
+                  </div>
+                  <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+                    已墊付本月公費 {pct}%
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <ProgressBar value={m.total} max={totalSharedExpense || 1} height={6} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {householdShares.length === 2 && (
+            <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(255,212,160,0.15)', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              💡 <strong>平分 (AA制) 結算建議</strong>：
+              若採兩人均攤，平均每人應負擔 {formatCurrency(Math.round(totalSharedExpense / 2))}。
+              {householdShares[0].total !== householdShares[1].total && (
+                <span>
+                  【{householdShares[1].user_name}】可轉帳 <strong>{formatCurrency(Math.abs(Math.round((householdShares[0].total - householdShares[1].total) / 2)))}</strong> 給【{householdShares[0].user_name}】完成結算。
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 圖表區：左圓餅圖 (類別佔比) + 右側近期收支走勢 */}
       <div className="grid grid-2" style={{ marginBottom: 24 }}>
-        {/* 本月分類占比 */}
+        {/* 類別佔比圓餅圖 */}
         <div className="card">
           <h2 className="text-xl flex items-center gap-xs" style={{ marginBottom: 16 }}>
             <PieIcon size={20} color="var(--color-primary)" />
-            {currentMonth} 支出分類占比
+            {currentMonth} 支出分類佔比 ({scope === 'household' ? '公帳' : scope === 'personal' ? '私帳' : '合併'})
           </h2>
 
           {pieData.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 0' }}>
-              <div className="emoji">🍰</div>
-              <h3>本月尚無支出記錄</h3>
-              <p style={{ fontSize: '0.85rem' }}>記錄交易後，這裡將呈現各分類花費佔比</p>
+              <div className="emoji">📊</div>
+              <h3>此範疇本月尚無支出紀錄</h3>
+              <p style={{ fontSize: '0.85rem' }}>記錄交易後，這裡將為您分析各分類消費佔比</p>
             </div>
           ) : (
             <div style={{ height: 260, width: '100%' }}>
@@ -204,18 +311,18 @@ export default function Analytics() {
           )}
         </div>
 
-        {/* 最近收支對比柱狀圖 */}
+        {/* 近期收支對比柱狀圖 */}
         <div className="card">
           <h2 className="text-xl flex items-center gap-xs" style={{ marginBottom: 16 }}>
             <BarChart2 size={20} color="var(--color-success)" />
-            收支趨勢對比 (月度)
+            收支趨勢對比 (年度)
           </h2>
 
           {monthlyChartData.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 0' }}>
-              <div className="emoji">📊</div>
+              <div className="emoji">📈</div>
               <h3>尚無歷史收支數據</h3>
-              <p style={{ fontSize: '0.85rem' }}>持續記帳將自動為您繪製月度趨勢</p>
+              <p style={{ fontSize: '0.85rem' }}>持續記帳將自動為您繪製年度趨勢</p>
             </div>
           ) : (
             <div style={{ height: 260, width: '100%' }}>
@@ -235,16 +342,16 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* 月度預算管理模組 */}
+      {/* 年度預算管理模組 */}
       <div className="card">
         <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
           <div>
             <h2 className="text-xl flex items-center gap-xs">
               <Sliders size={20} color="var(--color-primary)" />
-              {currentMonth} 分類預算管理
+              {currentMonth} 預算限額把關
             </h2>
             <p className="text-xs text-muted" style={{ marginTop: 2 }}>
-              為各日常支出設定金額上限，防範不知不覺中超支
+              為經常支出設定預算上限，防範在不自覺中超支
             </p>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={() => openBudgetDialog(CATEGORIES.expense[0])}>
@@ -273,7 +380,7 @@ export default function Analytics() {
               >
                 <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
                   <div className="flex items-center gap-sm">
-                    <span style={{ fontSize: '1.2rem' }}>{CATEGORY_ICONS[cat] || '📦'}</span>
+                    <span style={{ fontSize: '1.2rem' }}>{CATEGORY_ICONS[cat] || '🏷️'}</span>
                     <span style={{ fontWeight: 600 }}>{cat}</span>
                     {isOver && (
                       <span className="badge badge-expense flex items-center gap-xs">
@@ -320,10 +427,10 @@ export default function Analytics() {
 
       {/* 預算設定彈窗 */}
       {showBudgetModal && (
-        <Modal title={`設定 ${selectedCat} 月預算`} onClose={() => setShowBudgetModal(false)} maxWidth={400}>
+        <Modal title={`設定 ${selectedCat} 的預算`} onClose={() => setShowBudgetModal(false)} maxWidth={400}>
           <form onSubmit={handleSaveBudget} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="input-group">
-              <label className="input-label">支出分類</label>
+              <label className="input-label">支出類別</label>
               <select
                 className="input"
                 value={selectedCat}
@@ -356,7 +463,7 @@ export default function Analytics() {
               disabled={submittingBudget}
               style={{ marginTop: 8 }}
             >
-              {submittingBudget ? '儲存中…' : '確認預算設定'}
+              {submittingBudget ? '儲存中...' : '確認儲存設定'}
             </button>
           </form>
         </Modal>

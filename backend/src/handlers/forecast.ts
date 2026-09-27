@@ -38,7 +38,7 @@ forecast.get('/', async (c) => {
   let balance = bankTotal - ccBilled - ccUnbilled;
 
   const recRows = await c.env.DB.prepare('SELECT * FROM recurring_items WHERE user_id = ?').bind(userId).all();
-  const items = recRows.results as RecurringItem[];
+  const items = recRows.results as unknown as RecurringItem[];
   const events = getDaysInForecast(items, 30);
 
   // 逐日模擬
@@ -80,7 +80,7 @@ forecast.post('/purchase-check', async (c) => {
 
   // 30天現金流
   const recRows = await c.env.DB.prepare('SELECT * FROM recurring_items WHERE user_id = ?').bind(userId).all();
-  const items = recRows.results as RecurringItem[];
+  const items = recRows.results as unknown as RecurringItem[];
   const events = getDaysInForecast(items, 30);
   let minBalance = balance;
   events.forEach(e => { balance += e.type === 'income' ? e.amount : -e.amount; if (balance < minBalance) minBalance = balance; });

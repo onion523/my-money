@@ -50,7 +50,7 @@ recurring.delete('/:id', async (c) => {
 recurring.get('/amortize', async (c) => {
   const userId = c.get('userId');
   const rows = await c.env.DB.prepare('SELECT * FROM recurring_items WHERE user_id = ?').bind(userId).all();
-  const items = rows.results as RecurringItem[];
+  const items = rows.results as unknown as RecurringItem[];
   const monthly = items.filter(i => i.type === 'expense').reduce((s, i) => s + i.amount / (CYCLE_MONTHS[i.cycle] || 1), 0);
   const income = items.filter(i => i.type === 'income').reduce((s, i) => s + i.amount / (CYCLE_MONTHS[i.cycle] || 1), 0);
   return c.json({ success: true, data: { monthly_expense: monthly, monthly_income: income, items } });

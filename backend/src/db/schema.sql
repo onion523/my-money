@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount REAL NOT NULL,
   note TEXT DEFAULT '',
   date TEXT NOT NULL,
+  is_shared INTEGER NOT NULL DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -139,3 +140,4 @@ CREATE INDEX IF NOT EXISTS idx_hm_household ON household_members(household_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_code ON household_invitations(code);
 CREATE INDEX IF NOT EXISTS idx_bot_user ON bot_bindings(user_id);
 CREATE INDEX IF NOT EXISTS idx_bot_platform_user ON bot_bindings(platform, platform_user_id);
+

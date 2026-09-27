@@ -39,6 +39,7 @@ export interface Transaction {
   amount: number;
   note: string;
   date: string;
+  is_shared: number;
   created_at: string;
   user_name?: string;
 }
@@ -121,3 +122,4 @@ export interface JWTPayload {
 export type ApiResponse<T = unknown> =
   | { success: true; data: T }
   | { success: false; error: string };
+

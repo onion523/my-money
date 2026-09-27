@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { accountsApi, txApi, recurringApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
@@ -18,7 +18,10 @@ import {
   ChevronRight,
   ArrowUpRight,
   ArrowDownRight,
-  Calendar
+  Calendar,
+  Users,
+  Lock,
+  Globe
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -28,6 +31,7 @@ export default function Dashboard() {
   const [budgets, setBudgets] = useState<any[]>([])
   const [recurringList, setRecurringList] = useState<any[]>([])
   const [goalsList, setGoalsList] = useState<any[]>([])
+  const [viewScope, setViewScope] = useState<'all' | 'household' | 'personal'>('all')
   const navigate = useNavigate()
 
   // 快速新增表單
@@ -38,17 +42,18 @@ export default function Dashboard() {
     amount: '',
     note: '',
     date: today(),
+    is_shared: 1, // 1: 公帳, 0: 私帳
   })
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
-  const loadData = async () => {
+  const loadData = async (scope = viewScope) => {
     try {
       setLoading(true)
       const [bal, accs, txs, buds, rec, g] = await Promise.all([
         accountsApi.balance().catch(() => null),
         accountsApi.list().catch(() => []),
-        txApi.list({ limit: '6' }).catch(() => []),
+        txApi.list({ limit: '10', scope }).catch(() => []),
         budgetsApi.list().catch(() => []),
         recurringApi.list().catch(() => []),
         goalsApi.list().catch(() => []),
@@ -72,14 +77,14 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    loadData()
-  }, [])
+    loadData(viewScope)
+  }, [viewScope])
 
   const handleQuickAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitError('')
     if (!form.account_id) {
-      setSubmitError('請先在「帳戶管理」建立至少一個帳戶')
+      setSubmitError('請先至「帳戶管理」建立至少一個帳戶')
       return
     }
     const amt = parseFloat(form.amount)
@@ -97,20 +102,26 @@ export default function Dashboard() {
         amount: amt,
         note: form.note.trim(),
         date: form.date,
+        is_shared: form.is_shared,
       })
       setShowAddModal(false)
       setForm(p => ({ ...p, amount: '', note: '', date: today() }))
-      loadData()
+      loadData(viewScope)
     } catch (err: any) {
-      setSubmitError(err.message || '新增失敗')
+      setSubmitError(err.message || '記帳失敗')
     } finally {
       setSubmitting(false)
     }
   }
 
-  // 本月收支計算
+  // 本月收支計算 (依目前選定之視角)
   const thisMonthStr = today().slice(0, 7)
-  const monthTransactions = transactions.filter(t => t.date?.startsWith(thisMonthStr))
+  const monthTransactions = transactions.filter(t => {
+    if (!t.date?.startsWith(thisMonthStr)) return false
+    if (viewScope === 'household') return t.is_shared === 1
+    if (viewScope === 'personal') return t.is_shared === 0
+    return true
+  })
   const monthIncome = monthTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const monthExpense = monthTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
 
@@ -120,10 +131,10 @@ export default function Dashboard() {
   return (
     <div className="fade-in">
       {/* 頁面標題 */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 24 }}>
+      <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
         <div>
-          <h1 className="page-title">早安，{user?.name || '朋友'} 🌸</h1>
-          <p className="page-subtitle">這是你本月的家庭財務總覽與可用資金狀況</p>
+          <h1 className="page-title">早安，{user?.name || '朋友'} 👋</h1>
+          <p className="page-subtitle">這裡是您本月的財務總覽與即時收支數據</p>
         </div>
         <button
           id="btn-quick-add"
@@ -135,12 +146,52 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* 核心資金卡片區（3欄） */}
+      {/* 帳本視角切換器 */}
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: 4,
+        background: 'var(--bg-surface-2)',
+        borderRadius: 12,
+        border: '1px solid var(--border-color)',
+        marginBottom: 20
+      }}>
+        <button
+          type="button"
+          className={`btn btn-sm ${viewScope === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setViewScope('all')}
+        >
+          <Globe size={15} />
+          <span>全貌合併</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${viewScope === 'household' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setViewScope('household')}
+        >
+          <Users size={15} />
+          <span>🏠 家庭公帳</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${viewScope === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setViewScope('personal')}
+        >
+          <Lock size={15} />
+          <span>🔒 個人私帳</span>
+        </button>
+      </div>
+
+      {/* 核心資產/可動用資訊欄位 */}
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
-        {/* 即時可用餘額 */}
+        {/* 目前可用餘額 */}
         <div className="stat-card" style={{ background: 'linear-gradient(135deg, rgba(255,138,138,0.15) 0%, rgba(255,212,160,0.15) 100%)' }}>
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-            <span className="stat-label">即時可用餘額</span>
+            <span className="stat-label">目前可用餘額</span>
             <div style={{ background: 'var(--color-primary)', color: 'white', padding: 6, borderRadius: '50%' }}>
               <Wallet size={18} />
             </div>
@@ -149,14 +200,14 @@ export default function Dashboard() {
             {formatCurrency(balance?.available ?? 0)}
           </div>
           <div className="stat-sub">
-            銀行 {formatCurrency(balance?.bankTotal ?? 0)} - 信用卡已出帳 {formatCurrency(balance?.ccBilled ?? 0)} - 未出帳 {formatCurrency(balance?.ccUnbilled ?? 0)}
+            存款 {formatCurrency(balance?.bankTotal ?? 0)} - 信用卡已出帳 {formatCurrency(balance?.ccBilled ?? 0)} - 未出帳 {formatCurrency(balance?.ccUnbilled ?? 0)}
           </div>
         </div>
 
-        {/* 攤提後可自由花用 */}
+        {/* 扣除後可自由動用 */}
         <div className="stat-card" style={{ background: 'linear-gradient(135deg, rgba(85,197,149,0.15) 0%, rgba(168,216,234,0.15) 100%)' }}>
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-            <span className="stat-label">攤提後可自由花用</span>
+            <span className="stat-label">扣除後可自由動用</span>
             <div style={{ background: 'var(--color-success)', color: 'white', padding: 6, borderRadius: '50%' }}>
               <Sparkles size={18} />
             </div>
@@ -165,14 +216,16 @@ export default function Dashboard() {
             {formatCurrency(balance?.disposable ?? 0)}
           </div>
           <div className="stat-sub">
-            扣除固定月攤提 {formatCurrency(balance?.monthlyFixed ?? 0)} 及儲蓄預留 {formatCurrency(balance?.monthlyGoals ?? 0)}
+            含固定開銷分攤 {formatCurrency(balance?.monthlyFixed ?? 0)} 與儲蓄扣款 {formatCurrency(balance?.monthlyGoals ?? 0)}
           </div>
         </div>
 
-        {/* 本月收支結餘 */}
+        {/* 當月收支結算 */}
         <div className="stat-card">
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-            <span className="stat-label">本月淨收支</span>
+            <span className="stat-label">
+              {viewScope === 'household' ? '當月公帳淨結算' : viewScope === 'personal' ? '當月私帳淨收支' : '當月淨收支'}
+            </span>
             <div style={{ background: 'var(--color-secondary)', color: '#7a4e00', padding: 6, borderRadius: '50%' }}>
               {monthIncome - monthExpense >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
             </div>
@@ -182,35 +235,35 @@ export default function Dashboard() {
           </div>
           <div className="stat-sub flex gap-sm" style={{ marginTop: 6 }}>
             <span style={{ color: 'var(--color-success)' }}>
-              ↑ 收入 {formatCurrency(monthIncome)}
+              收入 {formatCurrency(monthIncome)}
             </span>
             <span style={{ color: 'var(--color-danger)' }}>
-              ↓ 支出 {formatCurrency(monthExpense)}
+              支出 {formatCurrency(monthExpense)}
             </span>
           </div>
         </div>
       </div>
 
-      {/* 警告區塊（若有預算超支） */}
+      {/* 警示區塊：當月預算超支時 */}
       {overBudgets.length > 0 && (
         <div className="card" style={{ marginBottom: 24, borderLeft: '4px solid var(--color-danger)', background: 'rgba(255,107,107,0.06)' }}>
           <div className="flex items-center gap-sm">
             <AlertTriangle size={20} color="var(--color-danger)" />
             <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-danger)' }}>
-              本月有 {overBudgets.length} 個分類支出已超過預算！
+              注意！有 {overBudgets.length} 個分類支出已超出預算！
             </h3>
           </div>
           <div className="flex gap-md" style={{ marginTop: 8, flexWrap: 'wrap' }}>
             {overBudgets.map(b => (
               <span key={b.category} className="badge badge-expense">
-                {b.category}：已花 {formatCurrency(b.spent)} / 預算 {formatCurrency(b.amount)}（超支 {formatCurrency(b.spent - b.amount)}）
+                {b.category}：已用 {formatCurrency(b.spent)} / 預算 {formatCurrency(b.amount)}（超支 {formatCurrency(b.spent - b.amount)}）
               </span>
             ))}
           </div>
         </div>
       )}
 
-      {/* 主體區塊：左 2/3 (帳戶 + 最近交易) + 右 1/3 (儲蓄目標 + 固定支出速覽) */}
+      {/* 主要區塊：左 2/3 (帳戶 + 最近交易) + 右 1/3 (儲蓄目標 + 固定支出總覽) */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
         <div className="flex-col gap-lg" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* 帳戶一覽 */}
@@ -218,7 +271,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
               <h2 className="text-xl flex items-center gap-xs">
                 <CreditCard size={20} color="var(--color-primary)" />
-                帳戶現況
+                帳戶一覽
               </h2>
               <Link to="/accounts" className="btn btn-ghost btn-sm">
                 管理帳戶 <ChevronRight size={16} />
@@ -248,7 +301,7 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between">
                       <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{acc.name}</span>
                       <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
-                        {acc.type === 'bank' ? '銀行' : '信用卡'}
+                        {acc.type === 'bank' ? '活存' : '信用卡'}
                       </span>
                     </div>
                     <div style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 6, fontFamily: 'var(--font-display)' }}>
@@ -256,8 +309,8 @@ export default function Dashboard() {
                     </div>
                     {acc.type === 'credit_card' && (
                       <div className="text-xs text-muted" style={{ marginTop: 4 }}>
-                        未出帳：{formatCurrency(acc.unbilled || 0)}
-                        {acc.payment_due_day ? ` · 繳款日 ${acc.payment_due_day} 號` : ''}
+                        未出帳款 {formatCurrency(acc.unbilled || 0)}
+                        {acc.payment_due_day ? ` · 繳款日每月 ${acc.payment_due_day} 號` : ''}
                       </div>
                     )}
                   </div>
@@ -266,12 +319,12 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* 最近交易 */}
+          {/* 最近明細 */}
           <div className="card">
             <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
               <h2 className="text-xl flex items-center gap-xs">
                 <Calendar size={20} color="var(--color-primary)" />
-                最近交易記錄
+                最近交易明細 ({viewScope === 'household' ? '公帳' : viewScope === 'personal' ? '私帳' : '全部'})
               </h2>
               <Link to="/transactions" className="btn btn-ghost btn-sm">
                 查看全部 <ChevronRight size={16} />
@@ -280,20 +333,35 @@ export default function Dashboard() {
 
             {transactions.length === 0 ? (
               <div className="empty-state" style={{ padding: '24px 0' }}>
-                <div className="emoji">📝</div>
-                <h3>尚無交易記錄</h3>
-                <p style={{ fontSize: '0.875rem' }}>點擊右上角「快速記帳」記錄第一筆收支吧！</p>
+                <p style={{ color: 'var(--text-muted)' }}>此視角目前尚無收支記錄</p>
+                <button className="btn btn-primary btn-sm" style={{ marginTop: 8 }} onClick={() => setShowAddModal(true)}>
+                  記一筆帳
+                </button>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="tx-list">
                 {transactions.slice(0, 6).map(tx => (
-                  <div key={tx.id} className="transaction-item" onClick={() => navigate('/transactions')}>
+                  <div key={tx.id} className="tx-item">
                     <div className={`tx-icon ${tx.type}`}>
                       {CATEGORY_ICONS[tx.category] || (tx.type === 'income' ? '💰' : '💸')}
                     </div>
                     <div className="tx-info">
-                      <div className="tx-name">
-                        {tx.category} {tx.note ? `· ${tx.note}` : ''}
+                      <div className="tx-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>{tx.category} {tx.note ? `· ${tx.note}` : ''}</span>
+                        {tx.is_shared === 0 ? (
+                          <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.7rem', padding: '1px 6px' }}>
+                            🔒 私帳
+                          </span>
+                        ) : (
+                          <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px' }}>
+                            🏠 公帳
+                          </span>
+                        )}
+                        {tx.user_name && (
+                          <span className="badge badge-safe" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                            👤 {tx.user_name}
+                          </span>
+                        )}
                       </div>
                       <div className="tx-meta">
                         {formatDate(tx.date)} · {tx.account_name || '帳戶'}
@@ -316,16 +384,16 @@ export default function Dashboard() {
             <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
               <h2 className="text-xl flex items-center gap-xs">
                 <PiggyBank size={20} color="var(--color-primary)" />
-                儲蓄目標
+                儲蓄進度
               </h2>
               <Link to="/goals" className="btn btn-ghost btn-sm">
-                查看 <ChevronRight size={16} />
+                管理 <ChevronRight size={16} />
               </Link>
             </div>
 
             {goalsList.length === 0 ? (
               <div className="text-sm text-muted" style={{ textAlign: 'center', padding: '16px 0' }}>
-                還沒有設定儲蓄目標，去設定一個旅行或夢想基金吧！
+                目前未設定儲蓄目標，點擊設定一個旅行或夢想基金吧！
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -346,7 +414,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* 智慧理財提示與即將到期固定收支 */}
+          {/* 智慧理財提示 */}
           <div className="card" style={{ background: 'var(--bg-surface-2)' }}>
             <h3 className="text-lg flex items-center gap-xs" style={{ marginBottom: 12 }}>
               <Sparkles size={18} color="var(--color-warning)" />
@@ -354,20 +422,20 @@ export default function Dashboard() {
             </h3>
             <ul style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', paddingLeft: 18, lineHeight: 1.8 }}>
               <li>
-                固定支出每月平均攤提 <strong>{formatCurrency(balance?.monthlyFixed ?? 0)}</strong>，已自動自可用餘額扣除。
+                固定支出每月平均預算 <strong>{formatCurrency(balance?.monthlyFixed ?? 0)}</strong>，已自動從可動用餘額扣除。
               </li>
               <li>
-                每月儲蓄目標預留 <strong>{formatCurrency(balance?.monthlyGoals ?? 0)}</strong>，建議專款專用。
+                每月計劃儲蓄金額 <strong>{formatCurrency(balance?.monthlyGoals ?? 0)}</strong>，建議按款項留存。
               </li>
               <li>
-                想評估大額支出？可至「<Link to="/forecast" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>現金流預測</Link>」使用購買力檢查工具！
+                公帳由全體家庭成員共同分攤檢視，私帳僅個人專屬可見，彼此保有獨立財務隱私。
               </li>
             </ul>
           </div>
         </div>
       </div>
 
-      {/* 快速記帳彈出視窗 */}
+      {/* 快速記帳彈窗 */}
       {showAddModal && (
         <Modal title="快速記帳" onClose={() => setShowAddModal(false)}>
           {submitError && (
@@ -376,6 +444,31 @@ export default function Dashboard() {
             </div>
           )}
           <form onSubmit={handleQuickAdd} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* 帳本歸屬選擇器 (公帳 / 私帳) */}
+            <div className="input-group">
+              <label className="input-label" style={{ marginBottom: 6, fontWeight: 600 }}>帳本歸屬</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  className={`btn ${form.is_shared === 1 ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 12px' }}
+                  onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
+                >
+                  <Users size={16} />
+                  <span>🏠 家庭公帳 (公開)</span>
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${form.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 12px' }}
+                  onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
+                >
+                  <Lock size={16} />
+                  <span>🔒 個人私帳 (隱私)</span>
+                </button>
+              </div>
+            </div>
+
             {/* 類型切換 (收入/支出) */}
             <div style={{ display: 'flex', gap: 8 }}>
               <button
@@ -431,7 +524,7 @@ export default function Dashboard() {
 
             {/* 帳戶選擇 */}
             <div className="input-group">
-              <label className="input-label">支付 / 存入帳戶</label>
+              <label className="input-label">扣款 / 存入帳戶</label>
               <select
                 id="quick-account"
                 className="input"
@@ -441,7 +534,7 @@ export default function Dashboard() {
               >
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.type === 'bank' ? '銀行' : '信用卡'})
+                    {acc.name} ({acc.type === 'bank' ? '活存' : '信用卡'})
                   </option>
                 ))}
               </select>
@@ -467,7 +560,7 @@ export default function Dashboard() {
                 id="quick-note"
                 className="input"
                 type="text"
-                placeholder="例如 午餐便當、買日用品"
+                placeholder="例如 午餐便當、買生活用品"
                 value={form.note}
                 onChange={e => setForm(p => ({ ...p, note: e.target.value }))}
               />
@@ -480,7 +573,7 @@ export default function Dashboard() {
               disabled={submitting}
               style={{ marginTop: 8 }}
             >
-              {submitting ? '記錄中…' : '確認記錄'}
+              {submitting ? '記錄中...' : '確認記錄'}
             </button>
           </form>
         </Modal>

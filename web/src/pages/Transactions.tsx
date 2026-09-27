@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { txApi, accountsApi, exportApi, Transaction, Account } from '../api/client'
 import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS } from '../components/utils'
 import Modal from '../components/Modal'
@@ -11,7 +11,10 @@ import {
   Calendar,
   Search,
   ArrowUpDown,
-  Tag
+  Tag,
+  Users,
+  Lock,
+  Globe
 } from 'lucide-react'
 
 export default function Transactions() {
@@ -22,6 +25,7 @@ export default function Transactions() {
   // 篩選狀態
   const [categoryFilter, setCategoryFilter] = useState('全部')
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all')
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'household' | 'personal'>('all')
   const [startDate, setStartDate] = useState(`${thisMonth()}-01`)
   const [endDate, setEndDate] = useState(today())
   const [keyword, setKeyword] = useState('')
@@ -36,6 +40,7 @@ export default function Transactions() {
     amount: '',
     note: '',
     date: today(),
+    is_shared: 1, // 1: 公帳, 0: 私帳
   })
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -45,7 +50,7 @@ export default function Transactions() {
     try {
       setLoading(true)
       const [txs, accs] = await Promise.all([
-        txApi.list({ from: startDate, to: endDate }),
+        txApi.list({ from: startDate, to: endDate, scope: scopeFilter }),
         accountsApi.list(),
       ])
       setTransactions(txs)
@@ -62,9 +67,9 @@ export default function Transactions() {
 
   useEffect(() => {
     loadData()
-  }, [startDate, endDate])
+  }, [startDate, endDate, scopeFilter])
 
-  // 打開新增 Modal
+  // 開啟新增 Modal
   const handleOpenAdd = () => {
     setEditingTx(null)
     setForm({
@@ -74,12 +79,13 @@ export default function Transactions() {
       amount: '',
       note: '',
       date: today(),
+      is_shared: 1,
     })
     setErrorMsg('')
     setShowModal(true)
   }
 
-  // 打開編輯 Modal
+  // 開啟編輯 Modal
   const handleOpenEdit = (tx: Transaction) => {
     setEditingTx(tx)
     setForm({
@@ -89,6 +95,7 @@ export default function Transactions() {
       amount: tx.amount.toString(),
       note: tx.note || '',
       date: tx.date,
+      is_shared: tx.is_shared !== undefined ? tx.is_shared : 1,
     })
     setErrorMsg('')
     setShowModal(true)
@@ -99,7 +106,7 @@ export default function Transactions() {
     e.preventDefault()
     setErrorMsg('')
     if (!form.account_id) {
-      setErrorMsg('請先建立或選擇帳戶')
+      setErrorMsg('請先建立並選擇帳戶')
       return
     }
     const amt = parseFloat(form.amount)
@@ -118,6 +125,7 @@ export default function Transactions() {
           amount: amt,
           note: form.note.trim(),
           date: form.date,
+          is_shared: form.is_shared,
         })
       } else {
         await txApi.create({
@@ -127,12 +135,13 @@ export default function Transactions() {
           amount: amt,
           note: form.note.trim(),
           date: form.date,
+          is_shared: form.is_shared,
         })
       }
       setShowModal(false)
       loadData()
     } catch (err: any) {
-      setErrorMsg(err.message || '儲存失敗')
+      setErrorMsg(err.message || '操作失敗')
     } finally {
       setSubmitting(false)
     }
@@ -140,7 +149,7 @@ export default function Transactions() {
 
   // 刪除交易
   const handleDelete = async (id: string) => {
-    if (!window.confirm('確定要刪除這筆交易記錄嗎？')) return
+    if (!window.confirm('確定要刪除這筆交易紀錄嗎？')) return
     try {
       await txApi.remove(id)
       loadData()
@@ -162,7 +171,8 @@ export default function Transactions() {
       const matchNote = t.note?.toLowerCase().includes(keyword.toLowerCase())
       const matchCat = t.category?.toLowerCase().includes(keyword.toLowerCase())
       const matchAcc = t.account_name?.toLowerCase().includes(keyword.toLowerCase())
-      if (!matchNote && !matchCat && !matchAcc) return false
+      const matchUser = t.user_name?.toLowerCase().includes(keyword.toLowerCase())
+      if (!matchNote && !matchCat && !matchAcc && !matchUser) return false
     }
     return true
   })
@@ -175,7 +185,7 @@ export default function Transactions() {
   })
   const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a))
 
-  // 當前篩選之收支小計
+  // 計算篩選之收支加總
   const totalIncome = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const totalExpense = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
 
@@ -184,8 +194,8 @@ export default function Transactions() {
       {/* 標題與操作按鈕 */}
       <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
         <div>
-          <h1 className="page-title">交易記錄 💳</h1>
-          <p className="page-subtitle">追蹤與管理所有收支項目、快速篩選與匯出明細</p>
+          <h1 className="page-title">交易紀錄 📜</h1>
+          <p className="page-subtitle">追蹤與管理所有收支明細、快速篩選與匯出明細</p>
         </div>
         <div className="flex gap-sm">
           <button id="btn-export-csv" className="btn btn-secondary" onClick={handleExportCSV}>
@@ -194,13 +204,50 @@ export default function Transactions() {
           </button>
           <button id="btn-add-tx" className="btn btn-primary" onClick={handleOpenAdd}>
             <Plus size={18} />
-            <span>新增明細</span>
+            <span>記一筆</span>
           </button>
         </div>
       </div>
 
       {/* 篩選工具列 */}
       <div className="card" style={{ marginBottom: 20, padding: '16px 20px' }}>
+        {/* 帳本範疇切換 (公帳 / 私帳 / 全部) */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 16,
+          paddingBottom: 14,
+          borderBottom: '1px solid var(--border-color)',
+          flexWrap: 'wrap'
+        }}>
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>帳本分類：</span>
+          <button
+            type="button"
+            className={`btn btn-sm ${scopeFilter === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ borderRadius: 8, padding: '4px 12px' }}
+            onClick={() => setScopeFilter('all')}
+          >
+            <Globe size={14} /> 全部
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${scopeFilter === 'household' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ borderRadius: 8, padding: '4px 12px' }}
+            onClick={() => setScopeFilter('household')}
+          >
+            <Users size={14} /> 🏠 家庭公帳
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${scopeFilter === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ borderRadius: 8, padding: '4px 12px' }}
+            onClick={() => setScopeFilter('personal')}
+          >
+            <Lock size={14} /> 🔒 個人私帳
+          </button>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, alignItems: 'center' }}>
           {/* 日期範圍 */}
           <div className="input-group">
@@ -227,7 +274,7 @@ export default function Transactions() {
             />
           </div>
 
-          {/* 收支類型篩選 */}
+          {/* 類型篩選 */}
           <div className="input-group">
             <label className="input-label flex items-center gap-xs">
               <ArrowUpDown size={14} /> 收支類型
@@ -237,9 +284,9 @@ export default function Transactions() {
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value as any)}
             >
-              <option value="all">全部收支</option>
-              <option value="expense">只看支出</option>
-              <option value="income">只看收入</option>
+              <option value="all">全部類型</option>
+              <option value="expense">僅支出</option>
+              <option value="income">僅收入</option>
             </select>
           </div>
 
@@ -254,81 +301,64 @@ export default function Transactions() {
               onChange={e => setCategoryFilter(e.target.value)}
             >
               <option value="全部">全部分類</option>
-              {CATEGORIES.expense.map(c => <option key={c} value={c}>{c}</option>)}
-              {CATEGORIES.income.map(c => <option key={c} value={c}>{c}</option>)}
+              {CATEGORIES.expense.map(c => (
+                <option key={c} value={c}>{CATEGORY_ICONS[c] || ''} {c}</option>
+              ))}
+              {CATEGORIES.income.map(c => (
+                <option key={c} value={c}>{CATEGORY_ICONS[c] || ''} {c}</option>
+              ))}
             </select>
           </div>
 
           {/* 關鍵字搜尋 */}
           <div className="input-group">
             <label className="input-label flex items-center gap-xs">
-              <Search size={14} /> 備註搜尋
+              <Search size={14} /> 搜尋備註/成員
             </label>
             <input
               className="input"
               type="text"
-              placeholder="搜尋關鍵字…"
+              placeholder="搜尋備註或記帳人..."
               value={keyword}
               onChange={e => setKeyword(e.target.value)}
             />
           </div>
         </div>
 
-        {/* 本期彙總條 */}
-        <div className="flex items-center justify-between" style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border-color)' }}>
-          <div className="flex gap-lg">
-            <span style={{ fontSize: '0.875rem' }}>
-              篩選筆數：<strong>{filtered.length}</strong> 筆
+        {/* 篩選結果加總橫條 */}
+        <div className="flex items-center justify-between" style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-color)', fontSize: '0.875rem' }}>
+          <div>
+            篩選筆數：<strong>{filtered.length}</strong> 筆
+          </div>
+          <div className="flex gap-md">
+            <span style={{ color: 'var(--color-success)' }}>
+              總收入：<strong>+{formatCurrency(totalIncome)}</strong>
             </span>
-            <span style={{ fontSize: '0.875rem', color: 'var(--color-success)' }}>
-              總收入：<strong>{formatCurrency(totalIncome)}</strong>
+            <span style={{ color: 'var(--color-danger)' }}>
+              總支出：<strong>-{formatCurrency(totalExpense)}</strong>
             </span>
-            <span style={{ fontSize: '0.875rem', color: 'var(--color-danger)' }}>
-              總支出：<strong>{formatCurrency(totalExpense)}</strong>
-            </span>
-            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>
+            <span style={{ fontWeight: 600 }}>
               淨收支：<span style={{ color: totalIncome - totalExpense >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                 {formatCurrency(totalIncome - totalExpense)}
               </span>
             </span>
-          </div>
-
-          {/* 快捷日期按鈕 */}
-          <div className="flex gap-xs">
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setStartDate(`${thisMonth()}-01`)
-                setEndDate(today())
-              }}
-            >
-              本月
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                const d = new Date()
-                d.setDate(d.getDate() - 30)
-                setStartDate(d.toISOString().slice(0, 10))
-                setEndDate(today())
-              }}
-            >
-              近 30 天
-            </button>
           </div>
         </div>
       </div>
 
       {/* 交易清單 (依日期分組) */}
       {loading ? (
-        <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
-          載入明細中…
+        <div className="loading" style={{ height: 200 }}>
+          <div className="spinner" />
         </div>
       ) : sortedDates.length === 0 ? (
         <div className="card empty-state">
           <div className="emoji">🔍</div>
-          <h3>沒有符合條件的交易記錄</h3>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>試著調整篩選條件或點擊上方「新增明細」</p>
+          <h3>沒有符合條件的明細</h3>
+          <p style={{ fontSize: '0.875rem', marginBottom: 16 }}>試著調整篩選條件，或新增第一筆收支</p>
+          <button className="btn btn-primary" onClick={handleOpenAdd}>
+            <Plus size={16} /> 記一筆
+          </button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -338,28 +368,39 @@ export default function Transactions() {
             const dayExpense = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
 
             return (
-              <div key={dateStr} className="card" style={{ padding: '12px 18px' }}>
-                {/* 日期標題與該日小計 */}
+              <div key={dateStr} className="card" style={{ padding: '16px 20px' }}>
+                {/* 日期標題欄 */}
                 <div className="flex items-center justify-between" style={{ paddingBottom: 10, borderBottom: '1px solid var(--border-color)', marginBottom: 8 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                    📅 {dateStr}
+                  <div className="flex items-center gap-xs" style={{ fontWeight: 600, fontSize: '0.95rem' }}>
+                    <Calendar size={16} color="var(--color-primary)" />
+                    <span>{formatDate(dateStr)}</span>
                   </div>
-                  <div className="flex gap-md" style={{ fontSize: '0.8rem' }}>
-                    {dayIncome > 0 && <span style={{ color: 'var(--color-success)' }}>+ {formatCurrency(dayIncome)}</span>}
-                    {dayExpense > 0 && <span style={{ color: 'var(--color-danger)' }}>- {formatCurrency(dayExpense)}</span>}
+                  <div className="flex gap-sm text-xs text-muted">
+                    {dayIncome > 0 && <span style={{ color: 'var(--color-success)' }}>+{formatCurrency(dayIncome)}</span>}
+                    {dayExpense > 0 && <span style={{ color: 'var(--color-danger)' }}>-{formatCurrency(dayExpense)}</span>}
                   </div>
                 </div>
 
-                {/* 當日項目 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {/* 當日明細列表 */}
+                <div className="tx-list">
                   {dayTxs.map(tx => (
-                    <div key={tx.id} className="transaction-item" style={{ padding: '8px 10px' }}>
+                    <div key={tx.id} className="tx-item">
                       <div className={`tx-icon ${tx.type}`}>
                         {CATEGORY_ICONS[tx.category] || (tx.type === 'income' ? '💰' : '💸')}
                       </div>
                       <div className="tx-info">
-                        <div className="tx-name">
-                          {tx.category} {tx.note && <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>· {tx.note}</span>}
+                        <div className="tx-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>{tx.category}</span>
+                          {tx.note && <span className="text-muted" style={{ fontWeight: 400 }}>· {tx.note}</span>}
+                          {tx.is_shared === 0 ? (
+                            <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.7rem', padding: '1px 6px' }}>
+                              🔒 私帳
+                            </span>
+                          ) : (
+                            <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px' }}>
+                              🏠 公帳
+                            </span>
+                          )}
                         </div>
                         <div className="tx-meta">
                           帳戶：{tx.account_name || '預設帳戶'}
@@ -370,26 +411,28 @@ export default function Transactions() {
                           )}
                         </div>
                       </div>
-                      <div className={`tx-amount ${tx.type}`} style={{ marginRight: 12 }}>
-                        {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
-                      </div>
-                      <div className="flex gap-xs">
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ padding: 6 }}
-                          title="編輯"
-                          onClick={() => handleOpenEdit(tx)}
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ padding: 6, color: 'var(--color-danger)' }}
-                          title="刪除"
-                          onClick={() => handleDelete(tx.id)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                      <div className="flex items-center gap-md">
+                        <div className={`tx-amount ${tx.type}`} style={{ fontSize: '1.1rem' }}>
+                          {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                        </div>
+                        <div className="flex gap-xs">
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: 4 }}
+                            onClick={() => handleOpenEdit(tx)}
+                            title="編輯"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: 4, color: 'var(--color-danger)' }}
+                            onClick={() => handleDelete(tx.id)}
+                            title="刪除"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -403,7 +446,7 @@ export default function Transactions() {
       {/* 新增/編輯 Modal */}
       {showModal && (
         <Modal
-          title={editingTx ? '編輯交易記錄' : '新增交易記錄'}
+          title={editingTx ? '編輯交易明細' : '新增交易明細'}
           onClose={() => setShowModal(false)}
         >
           {errorMsg && (
@@ -411,9 +454,33 @@ export default function Transactions() {
               {errorMsg}
             </div>
           )}
-
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* 類型切換 (收入/支出) */}
+            {/* 公帳 / 私帳 切換 */}
+            <div className="input-group">
+              <label className="input-label" style={{ fontWeight: 600, marginBottom: 6 }}>帳本歸屬</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  className={`btn ${form.is_shared === 1 ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px' }}
+                  onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
+                >
+                  <Users size={16} />
+                  <span>🏠 家庭公帳 (公開)</span>
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${form.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px' }}
+                  onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
+                >
+                  <Lock size={16} />
+                  <span>🔒 個人私帳 (隱私)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 收支類型 */}
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
@@ -436,12 +503,11 @@ export default function Transactions() {
             <div className="input-group">
               <label className="input-label">金額 (NT$)</label>
               <input
-                id="tx-amount"
                 className="input"
                 type="number"
                 step="1"
                 min="1"
-                placeholder="例如 150"
+                placeholder="例如 100"
                 required
                 autoFocus
                 value={form.amount}
@@ -453,7 +519,6 @@ export default function Transactions() {
             <div className="input-group">
               <label className="input-label">分類</label>
               <select
-                id="tx-category"
                 className="input"
                 value={form.category}
                 onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
@@ -468,9 +533,8 @@ export default function Transactions() {
 
             {/* 帳戶選擇 */}
             <div className="input-group">
-              <label className="input-label">關聯帳戶</label>
+              <label className="input-label">扣款 / 存入帳戶</label>
               <select
-                id="tx-account"
                 className="input"
                 value={form.account_id}
                 onChange={e => setForm(p => ({ ...p, account_id: e.target.value }))}
@@ -478,7 +542,7 @@ export default function Transactions() {
               >
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.type === 'bank' ? '銀行' : '信用卡'})
+                    {acc.name} ({acc.type === 'bank' ? '活存' : '信用卡'})
                   </option>
                 ))}
               </select>
@@ -488,7 +552,6 @@ export default function Transactions() {
             <div className="input-group">
               <label className="input-label">交易日期</label>
               <input
-                id="tx-date"
                 className="input"
                 type="date"
                 required
@@ -499,25 +562,23 @@ export default function Transactions() {
 
             {/* 備註 */}
             <div className="input-group">
-              <label className="input-label">備註說明 (選填)</label>
+              <label className="input-label">備註 (選填)</label>
               <input
-                id="tx-note"
                 className="input"
                 type="text"
-                placeholder="例如 家樂福採買、捷運儲值"
+                placeholder="例如 午餐、捷運儲值"
                 value={form.note}
                 onChange={e => setForm(p => ({ ...p, note: e.target.value }))}
               />
             </div>
 
             <button
-              id="tx-submit"
               type="submit"
               className="btn btn-primary btn-full btn-lg"
               disabled={submitting}
               style={{ marginTop: 8 }}
             >
-              {submitting ? '儲存中…' : (editingTx ? '儲存變更' : '新增記錄')}
+              {submitting ? '儲存中...' : (editingTx ? '儲存修改' : '確認新增')}
             </button>
           </form>
         </Modal>

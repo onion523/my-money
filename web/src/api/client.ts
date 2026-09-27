@@ -1,4 +1,4 @@
-// API 呼叫層 — 所有 fetch 請求的統一入口
+﻿// API ?澆撅??????fetch 隢??絞銝?亙
 const BASE = (import.meta as any).env?.VITE_API_URL || '/api';
 
 function getToken(): string | null {
@@ -16,7 +16,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   });
   const data = await res.json();
-  if (!res.ok || !data.success) throw new Error(data.error || '請求失敗');
+  if (!res.ok || !data.success) throw new Error(data.error || '隢?憭望?');
   return data.data as T;
 }
 
@@ -46,16 +46,30 @@ export const accountsApi = {
 export const txApi = {
   list: (params?: Record<string, string>) =>
     get<Transaction[]>(`/transactions${params ? '?' + new URLSearchParams(params).toString() : ''}`),
-  summary: (month?: string) =>
-    get<CategorySummary[]>(`/transactions/summary/category${month ? '?month=' + month : ''}`),
-  monthly: (year?: string) =>
-    get<MonthlyStats[]>(`/transactions/summary/monthly${year ? '?year=' + year : ''}`),
-  categorySummary: (month?: string) =>
-    get<CategorySummary[]>(`/transactions/summary/category${month ? '?month=' + month : ''}`),
-  monthlyStats: (year?: string) =>
-    get<MonthlyStats[]>(`/transactions/summary/monthly${year ? '?year=' + year : ''}`),
-  create: (body: Partial<Transaction>) => post<Transaction>('/transactions', body),
-  update: (id: string, body: Partial<Transaction>) => put<Transaction>(`/transactions/${id}`, body),
+  summary: (month?: string, scope?: string) => {
+    const q = new URLSearchParams();
+    if (month) q.set('month', month);
+    if (scope) q.set('scope', scope);
+    const qs = q.toString();
+    return get<CategorySummary[]>(`/transactions/summary/category${qs ? '?' + qs : ''}`);
+  },
+  monthly: (year?: string, scope?: string) => {
+    const q = new URLSearchParams();
+    if (year) q.set('year', year);
+    if (scope) q.set('scope', scope);
+    const qs = q.toString();
+    return get<MonthlyStats[]>(`/transactions/summary/monthly${qs ? '?' + qs : ''}`);
+  },
+  householdShares: (month?: string) =>
+    get<Array<{ user_id: string; user_name: string; total: number }>>(
+      `/transactions/summary/household-shares${month ? '?month=' + month : ''}`
+    ),
+  categorySummary: (month?: string, scope?: string) =>
+    txApi.summary(month, scope),
+  monthlyStats: (year?: string, scope?: string) =>
+    txApi.monthly(year, scope),
+  create: (body: Partial<Transaction> & { is_shared?: number }) => post<Transaction>('/transactions', body),
+  update: (id: string, body: Partial<Transaction> & { is_shared?: number }) => put<Transaction>(`/transactions/${id}`, body),
   remove: (id: string) => del<null>(`/transactions/${id}`),
 };
 
@@ -108,7 +122,7 @@ export const exportApi = {
   },
 };
 
-// Household (家庭協同)
+// Household (摰嗅滬??)
 export const householdApi = {
   current: () => get<HouseholdData>('/households/current'),
   create: (name: string) => post<{ id: string; name: string; role: string }>('/households', { name }),
@@ -118,7 +132,7 @@ export const householdApi = {
   removeMember: (userId: string) => del<{ message: string }>(`/households/members/${userId}`),
 };
 
-// Bot (LINE & Telegram 機器人)
+// Bot (LINE & Telegram 璈鈭?
 export const botApi = {
   pairingCode: () => post<{ code: string; expires_in_seconds: number; expires_at: string }>('/bot/pairing-code'),
   bindings: () => get<BotBinding[]>('/bot/bindings'),
@@ -162,6 +176,7 @@ export interface Transaction {
   amount: number;
   note: string;
   date: string;
+  is_shared?: number;
   created_at: string;
   account_name?: string;
   user_name?: string;
