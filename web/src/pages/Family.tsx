@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { householdApi, HouseholdData, HouseholdMember } from '../api/client'
+import { householdApi, HouseholdData, HouseholdMember, accountsApi, Account } from '../api/client'
+import { formatCurrency, today } from '../components/utils'
 import Modal from '../components/Modal'
 import {
   Users,
@@ -14,7 +15,11 @@ import {
   Sparkles,
   Info,
   Calendar,
-  Mail
+  Mail,
+  DollarSign,
+  CheckCircle2,
+  ArrowRightLeft,
+  Wallet
 } from 'lucide-react'
 
 export default function Family() {
@@ -35,6 +40,28 @@ export default function Family() {
   // Join household form
   const [joinCode, setJoinCode] = useState('')
   const [joining, setJoining] = useState(false)
+  // 代墊與報銷狀態
+  const [advances, setAdvances] = useState<Array<{
+    user_id: string;
+    user_name: string;
+    email: string;
+    total_advanced: number;
+    total_reimbursed: number;
+    pending_reimburse: number;
+  }>>([])
+  const [jointAccounts, setJointAccounts] = useState<Account[]>([])
+  const [allAccounts, setAllAccounts] = useState<Account[]>([])
+  const [reimburseModalTarget, setReimburseModalTarget] = useState<any | null>(null)
+  const [reimburseForm, setReimburseForm] = useState({
+    from_account_id: '',
+    to_account_id: '',
+    amount: '',
+    date: today(),
+    note: '',
+  })
+  const [reimbursing, setReimbursing] = useState(false)
+  const [reimburseError, setReimburseError] = useState('')
+
 
   const loadData = async () => {
     try {
@@ -68,6 +95,55 @@ export default function Family() {
       alert(err.message || '建立家庭失敗')
     } finally {
       setCreating(false)
+    }
+  }
+
+  
+  const handleOpenReimburse = (adv: any) => {
+    setReimburseModalTarget(adv)
+    const defaultJoint = jointAccounts.find(a => a.balance >= adv.pending_reimburse) || jointAccounts[0]
+    const memberPersonalAccounts = allAccounts.filter(a => a.user_id === adv.user_id && a.is_joint === 0)
+    const defaultTo = memberPersonalAccounts[0]
+
+    setReimburseForm({
+      from_account_id: defaultJoint ? defaultJoint.id : '',
+      to_account_id: defaultTo ? defaultTo.id : '',
+      amount: adv.pending_reimburse.toString(),
+      date: today(),
+      note: `家庭基金撥款報銷 ${adv.user_name} 代墊公帳`,
+    })
+    setReimburseError('')
+  }
+
+  const handleReimburseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!reimburseModalTarget) return
+    setReimburseError('')
+
+    const { from_account_id, to_account_id, amount, date, note } = reimburseForm
+    const amt = parseFloat(amount)
+    if (!from_account_id || !to_account_id || isNaN(amt) || amt <= 0) {
+      setReimburseError('請選擇撥款公帳、收款帳戶並輸入大於 0 的金額')
+      return
+    }
+
+    try {
+      setReimbursing(true)
+      const res = await householdApi.reimburse({
+        target_user_id: reimburseModalTarget.user_id,
+        from_account_id,
+        to_account_id,
+        amount: amt,
+        date,
+        note,
+      })
+      setReimburseModalTarget(null)
+      await loadData()
+      alert(res.message || '撥款報銷成功！')
+    } catch (err: any) {
+      setReimburseError(err.message || '報銷失敗')
+    } finally {
+      setReimbursing(false)
     }
   }
 
@@ -276,6 +352,89 @@ export default function Family() {
             </div>
           </div>
 
+          
+          {/* 家庭公帳代墊與報銷中心 */}
+          <div className="card" style={{ padding: 24, marginBottom: 24 }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <DollarSign size={20} color="var(--color-primary)" />
+                  家庭公帳代墊與報銷中心 📑
+                </h3>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)', marginTop: 2 }}>
+                  即時統計各成員掏個人錢包或信用卡為家庭代墊的公帳，支援從共同基金一鍵撥款報銷平帳！
+                </p>
+              </div>
+            </div>
+
+            {advances.length === 0 ? (
+              <div className="text-center" style={{ padding: 20, color: 'var(--text-secondary)' }}>
+                暫無公帳代墊款紀錄
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {advances.map(adv => (
+                  <div
+                    key={adv.user_id}
+                    style={{
+                      padding: '16px 20px',
+                      borderRadius: 12,
+                      background: adv.pending_reimburse > 0 ? 'rgba(255, 138, 138, 0.06)' : 'var(--bg-surface-2)',
+                      border: adv.pending_reimburse > 0 ? '1px solid rgba(255, 138, 138, 0.3)' : '1px solid var(--border-color)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 16
+                    }}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{adv.user_name}</span>
+                        {adv.pending_reimburse > 0 ? (
+                          <span className="badge badge-danger">有待請款代墊</span>
+                        ) : (
+                          <span className="badge badge-success">
+                            <CheckCircle2 size={12} style={{ display: 'inline', marginRight: 2 }} />
+                            已全數報銷
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-secondary)', marginTop: 6 }}>
+                        <span>累計公帳墊付：{formatCurrency(adv.total_advanced)}</span>
+                        <span>·</span>
+                        <span>已獲撥款報銷：{formatCurrency(adv.total_reimbursed)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>待報銷代墊總額</div>
+                        <div style={{
+                          fontSize: '1.4rem',
+                          fontWeight: 800,
+                          color: adv.pending_reimburse > 0 ? 'var(--color-danger)' : 'var(--color-success)'
+                        }}>
+                          {formatCurrency(adv.pending_reimburse)}
+                        </div>
+                      </div>
+
+                      {adv.pending_reimburse > 0 && (
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => handleOpenReimburse(adv)}
+                        >
+                          <ArrowRightLeft size={16} style={{ marginRight: 4 }} />
+                          從共同基金一鍵報銷
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* 成員列表 */}
           <div className="card" style={{ padding: 24 }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 16 }}>家庭成員名冊</h3>
@@ -372,6 +531,102 @@ export default function Family() {
           </div>
         </Modal>
       )}
+
+      {/* 共同基金撥款報銷 Modal */}
+      {reimburseModalTarget && (
+        <Modal
+          
+          onClose={() => setReimburseModalTarget(null)}
+          title={`💸 從共同基金撥款報銷給 ${reimburseModalTarget.user_name}`}
+        >
+          <form onSubmit={handleReimburseSubmit}>
+            {reimburseError && <div className="alert alert-danger" style={{ marginBottom: 14 }}>{reimburseError}</div>}
+
+            <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.85rem', color: '#1E40AF' }}>
+              💡 此操作將從家庭共同基金扣款，並撥入該成員的個人帳戶，自動結清公帳代墊款，<strong>不會被重複計入家庭消費支出</strong>！
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">撥款公帳 (家庭共同基金)</label>
+              <select
+                className="input"
+                value={reimburseForm.from_account_id}
+                onChange={e => setReimburseForm(p => ({ ...p, from_account_id: e.target.value }))}
+                required
+              >
+                <option value="">-- 請選擇家庭共同基金公帳 --</option>
+                {jointAccounts.map(j => (
+                  <option key={j.id} value={j.id}>
+                    {j.name} (目前公款餘額: {formatCurrency(j.balance)})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">撥入收款帳戶 ({reimburseModalTarget.user_name} 的個人帳戶/皮夾)</label>
+              <select
+                className="input"
+                value={reimburseForm.to_account_id}
+                onChange={e => setReimburseForm(p => ({ ...p, to_account_id: e.target.value }))}
+                required
+              >
+                <option value="">-- 請選擇收款個人帳戶 --</option>
+                {allAccounts.filter(a => a.user_id === reimburseModalTarget.user_id && a.is_joint === 0).map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.type === 'cash' ? '💵 現金' : '🏦 銀行'} - {a.name} (目前餘額: {formatCurrency(a.balance)})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-2 gap-sm">
+              <div className="form-group">
+                <label className="form-label">報銷金額 (NT$)</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="1"
+                  className="input"
+                  value={reimburseForm.amount}
+                  onChange={e => setReimburseForm(p => ({ ...p, amount: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">撥款日期</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={reimburseForm.date}
+                  onChange={e => setReimburseForm(p => ({ ...p, date: e.target.value }))}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">備註</label>
+              <input
+                type="text"
+                className="input"
+                value={reimburseForm.note}
+                onChange={e => setReimburseForm(p => ({ ...p, note: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex justify-end gap-sm" style={{ marginTop: 24 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setReimburseModalTarget(null)}>
+                取消
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={reimbursing}>
+                {reimbursing ? '撥款報銷中...' : '確認撥款沖帳'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
     </div>
   )
 }

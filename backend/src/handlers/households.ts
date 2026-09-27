@@ -197,4 +197,115 @@ households.delete('/members/:targetUserId', async (c) => {
   return c.json({ success: true, message: '已移除成員' });
 });
 
+
+// GET /households/advances (家庭代墊款待報銷統計)
+households.get('/advances', async (c) => {
+  const userId = c.get('userId');
+  const { household, memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  if (!household) return c.json({ success: true, data: [] });
+
+  const membersResult = await c.env.DB.prepare(`
+    SELECT hm.user_id, u.name, u.email
+    FROM household_members hm
+    JOIN users u ON hm.user_id = u.id
+    WHERE hm.household_id = ?
+  `).bind(household.id).all();
+
+  const advances = await Promise.all((membersResult.results as any[]).map(async (m) => {
+    // 個人為家庭公帳墊付支出總額 (排除信用卡還款、轉帳、報銷)
+    const advRow = await c.env.DB.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM transactions
+      WHERE user_id = ? AND is_shared = 1 AND type = 'expense'
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+    `).bind(m.user_id).first<{ total: number }>();
+
+    // 個人已收到之公帳代墊報銷款
+    const reimbRow = await c.env.DB.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM transactions
+      WHERE user_id = ? AND category = '公帳代墊報銷' AND type = 'income'
+    `).bind(m.user_id).first<{ total: number }>();
+
+    const totalAdvanced = advRow?.total || 0;
+    const totalReimbursed = reimbRow?.total || 0;
+    const pendingReimburse = Math.max(0, totalAdvanced - totalReimbursed);
+
+    return {
+      user_id: m.user_id,
+      user_name: m.name,
+      email: m.email,
+      total_advanced: totalAdvanced,
+      total_reimbursed: totalReimbursed,
+      pending_reimburse: pendingReimburse
+    };
+  }));
+
+  return c.json({ success: true, data: advances });
+});
+
+// POST /households/reimburse (從共同基金一鍵撥款報銷代墊款)
+households.post('/reimburse', async (c) => {
+  const userId = c.get('userId');
+  const { household, memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  if (!household) return c.json({ success: false, error: '尚未建立或加入家庭群組' }, 400);
+
+  const body = await c.req.json();
+  const { target_user_id, from_account_id, to_account_id, amount, date = new Date().toISOString().slice(0, 10), note = '' } = body;
+  const amt = Number(amount);
+
+  if (!target_user_id || !from_account_id || !to_account_id || isNaN(amt) || amt <= 0) {
+    return c.json({ success: false, error: '請填寫正確報銷資訊與金額' }, 400);
+  }
+
+  const placeholders = memberUserIds.map(() => '?').join(',');
+  const fromAcc = await c.env.DB.prepare(
+    `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND is_joint = 1`
+  ).bind(from_account_id, ...memberUserIds).first<any>();
+
+  if (!fromAcc) {
+    return c.json({ success: false, error: '撥款帳戶必須為家庭共同基金公帳 (公用帳戶)' }, 400);
+  }
+  if (fromAcc.balance < amt) {
+    return c.json({ success: false, error: `家庭共同基金餘額不足（目前餘額：NT$ ${fromAcc.balance.toLocaleString()}）` }, 400);
+  }
+
+  const toAcc = await c.env.DB.prepare(
+    'SELECT * FROM accounts WHERE id = ? AND user_id = ?'
+  ).bind(to_account_id, target_user_id).first<any>();
+
+  if (!toAcc) {
+    return c.json({ success: false, error: '找不到收款成員之個人帳戶' }, 404);
+  }
+
+  const targetUser = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(target_user_id).first<{ name: string }>();
+  const targetName = targetUser?.name || '成員';
+
+  await c.env.DB.batch([
+    c.env.DB.prepare('UPDATE accounts SET balance = balance - ? WHERE id = ?').bind(amt, from_account_id),
+    c.env.DB.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(amt, to_account_id),
+  ]);
+
+  const outTxId = generateId();
+  const inTxId = generateId();
+
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(outTxId, userId, from_account_id, 'expense', '公帳代墊報銷', amt, note ? `${note} (撥款至 ${targetName} ${toAcc.name})` : `撥款報銷代墊款給 ${targetName} (${toAcc.name})`, date, 1),
+    c.env.DB.prepare(
+      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(inTxId, target_user_id, to_account_id, 'income', '公帳代墊報銷', amt, note ? `${note} (來自家庭基金 ${fromAcc.name})` : `收到公帳代墊報銷款 (來自 ${fromAcc.name})`, date, 0)
+  ]);
+
+  return c.json({
+    success: true,
+    data: {
+      message: `成功從共同基金撥款報銷 NT$ ${amt.toLocaleString()} 給 ${targetName}！`,
+      from_balance: fromAcc.balance - amt,
+      to_balance: toAcc.balance + amt
+    }
+  });
+});
+
 export default households;

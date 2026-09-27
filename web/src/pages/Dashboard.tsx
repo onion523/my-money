@@ -53,8 +53,8 @@ export default function Dashboard() {
       setLoading(true)
       const currentYear = thisMonth().slice(0, 4);
       const [bal, accs, txs, buds, rec, g, monthlyStats] = await Promise.all([
-        accountsApi.balance().catch(() => null),
-        accountsApi.list().catch(() => []),
+        accountsApi.balance(scope).catch(() => null),
+        accountsApi.list(scope).catch(() => []),
         txApi.list({ limit: '10', scope }).catch(() => []),
         budgetsApi.list().catch(() => []),
         recurringApi.list().catch(() => []),
@@ -133,6 +133,17 @@ export default function Dashboard() {
   // 警示預算
   const overBudgets = budgets.filter(b => b.over)
 
+  // 視角防禦過濾帳戶清單
+  const displayAccounts = accounts.filter(acc => {
+    if (viewScope === 'household') {
+      return acc.is_joint === 1;
+    }
+    if (viewScope === 'personal') {
+      return acc.is_joint === 0 && (!user || acc.user_id === user.id);
+    }
+    return true;
+  });
+
   return (
     <div className="fade-in">
       {/* 頁面標題 */}
@@ -205,7 +216,7 @@ export default function Dashboard() {
             {formatCurrency(balance?.available ?? 0)}
           </div>
           <div className="stat-sub">
-            存款 {formatCurrency(balance?.bankTotal ?? 0)} - 信用卡已出帳 {formatCurrency(balance?.ccBilled ?? 0)} - 未出帳 {formatCurrency(balance?.ccUnbilled ?? 0)}
+            現金 {formatCurrency(balance?.cashTotal ?? 0)} + 活存 {formatCurrency(balance?.bankTotal ?? 0)} - 卡債 {formatCurrency((balance?.ccBilled ?? 0) + (balance?.ccUnbilled ?? 0))}
           </div>
         </div>
 
@@ -283,43 +294,98 @@ export default function Dashboard() {
               </Link>
             </div>
 
-            {accounts.length === 0 ? (
+            {displayAccounts.length === 0 ? (
               <div className="empty-state" style={{ padding: '24px 0' }}>
                 <div className="emoji">💳</div>
-                <h3>尚未建立帳戶</h3>
-                <p style={{ fontSize: '0.875rem', marginBottom: 12 }}>請先新增銀行帳戶或信用卡以開始記帳</p>
-                <Link to="/accounts" className="btn btn-primary btn-sm">立即新增</Link>
+                <h3>{viewScope === 'household' ? '目前無家庭公用帳戶' : viewScope === 'personal' ? '目前無個人私帳' : '尚未建立帳戶'}</h3>
+                <p style={{ fontSize: '0.875rem', marginBottom: 12 }}>
+                  {viewScope === 'household' ? '至帳戶管理將帳戶屬性設為「家庭公用」即可在此呈現' : '至帳戶管理新增你的銀行、現金或信用卡'}
+                </p>
+                <Link to="/accounts" className="btn btn-primary btn-sm">前往帳戶管理</Link>
               </div>
             ) : (
               <div className="grid grid-2">
-                {accounts.map(acc => (
-                  <div
-                    key={acc.id}
-                    style={{
-                      padding: 14,
-                      borderRadius: 'var(--radius-md)',
-                      background: 'var(--bg-surface-2)',
-                      border: '1px solid var(--border-color)',
-                      borderLeft: `5px solid ${acc.color || 'var(--color-primary)'}`,
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{acc.name}</span>
-                      <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
-                        {acc.type === 'bank' ? '活存' : '信用卡'}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 6, fontFamily: 'var(--font-display)' }}>
-                      {formatCurrency(acc.balance)}
-                    </div>
-                    {acc.type === 'credit_card' && (
-                      <div className="text-xs text-muted" style={{ marginTop: 4 }}>
-                        未出帳款 {formatCurrency(acc.unbilled || 0)}
-                        {acc.payment_due_day ? ` · 繳款日每月 ${acc.payment_due_day} 號` : ''}
+                {displayAccounts.map(acc => {
+                  const isCc = acc.type === 'credit_card';
+                  const isCash = acc.type === 'cash';
+                  const totalDue = isCc ? (acc.balance || 0) + (acc.unbilled || 0) : acc.balance;
+
+                  return (
+                    <div
+                      key={acc.id}
+                      style={{
+                        padding: 14,
+                        borderRadius: 'var(--radius-md)',
+                        background: 'var(--bg-surface-2)',
+                        border: '1px solid var(--border-color)',
+                        borderLeft: `5px solid ${acc.color || (isCash ? '#10B981' : isCc ? 'var(--color-danger)' : 'var(--color-primary)')}`,
+                      }}
+                    >
+                      <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                        <div className="flex items-center gap-xs">
+                          {isCash ? (
+                            <Wallet size={16} color="#10B981" />
+                          ) : isCc ? (
+                            <CreditCard size={16} color="var(--color-danger)" />
+                          ) : (
+                            <Building size={16} color="var(--color-primary)" />
+                          )}
+                          <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{acc.name}</span>
+                        </div>
+                        <div className="flex items-center gap-xs">
+                          {acc.is_joint === 1 ? (
+                            <span className="badge badge-primary" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                              🏠 公帳
+                            </span>
+                          ) : (
+                            <span className="badge badge-secondary" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                              👤 私帳
+                            </span>
+                          )}
+                          <span className="badge" style={{ fontSize: '0.68rem', padding: '1px 5px', background: 'rgba(0,0,0,0.05)' }}>
+                            {isCash ? '現金' : isCc ? '信用卡' : '活存'}
+                          </span>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      <div style={{
+                        fontSize: '1.25rem',
+                        fontWeight: 700,
+                        marginTop: 4,
+                        fontFamily: 'var(--font-display)',
+                        color: isCc && totalDue > 0 ? 'var(--color-danger)' : isCash ? '#10B981' : 'var(--text-primary)'
+                      }}>
+                        {formatCurrency(totalDue)}
+                      </div>
+
+                      {/* 信用卡公私拆解與未出帳/繳款狀態 */}
+                      {isCc && (
+                        <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          {totalDue > 0 ? (
+                            <div className="flex items-center justify-between" style={{ background: 'rgba(0,0,0,0.03)', padding: '3px 6px', borderRadius: 4, marginBottom: 2 }}>
+                              <span>🏠 代墊：<strong>{formatCurrency(acc.shared_debt || 0)}</strong></span>
+                              <span>·</span>
+                              <span>👤 私帳：<strong>{formatCurrency(acc.personal_debt || 0)}</strong></span>
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>卡費已全數結清</span>
+                          )}
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                            未出帳 {formatCurrency(acc.unbilled || 0)}
+                            {acc.payment_due_day ? ` · 每月 ${acc.payment_due_day} 日繳款` : ''}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 擁有者註記 */}
+                      {!isCc && acc.owner_name && (
+                        <div className="text-xs text-muted" style={{ marginTop: 4, fontSize: '0.72rem' }}>
+                          擁有者：{acc.owner_name}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -539,7 +605,7 @@ export default function Dashboard() {
               >
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.type === 'bank' ? '活存' : '信用卡'})
+                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 公帳' : '👤 私帳'})
                   </option>
                 ))}
               </select>

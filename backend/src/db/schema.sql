@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK(type IN ('bank', 'credit_card')),
+  type TEXT NOT NULL CHECK(type IN ('bank', 'credit_card', 'cash')),
   balance REAL NOT NULL DEFAULT 0,
   credit_limit REAL,
   statement_day INTEGER,

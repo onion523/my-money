@@ -413,7 +413,7 @@ export default function Transactions() {
                           {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                         </div>
                         <div className="flex gap-xs">
-                          {tx.category === '信用卡還款' ? (
+                          {['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'].includes(tx.category) ? (
                             <span
                               style={{
                                 display: 'inline-flex',
@@ -561,7 +561,7 @@ export default function Transactions() {
               >
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.type === 'bank' ? '活存' : '信用卡'})
+                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 家庭公用' : '👤 個人私帳'})
                   </option>
                 ))}
               </select>

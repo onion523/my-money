@@ -67,7 +67,7 @@ transactions.post('/', async (c) => {
 
   // 更新帳戶餘額
   const amt = Number(amount);
-  if (acc.type === 'bank') {
+  if (acc.type === 'bank' || acc.type === 'cash') {
     const delta = type === 'income' ? amt : -amt;
     await c.env.DB.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(delta, account_id).run();
   } else {
@@ -107,10 +107,11 @@ transactions.put('/:id', async (c) => {
   if (!existing) return c.json({ success: false, error: '紀錄不存在' }, 404);
 
   // Q5: 信用卡還款紀錄受保護
-  if (existing.category === '信用卡還款') {
+  const protectedCategories = ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'];
+  if (protectedCategories.includes(existing.category as string)) {
     return c.json({
       success: false,
-      error: '「信用卡還款」為系統內部平帳紀錄，受系統保護禁止直接修改。若金額有誤，請至「帳戶管理」直接校正銀行或卡片餘額。'
+      error: `「${existing.category}」為系統內部平帳/轉帳紀錄，受系統保護禁止直接修改。若金額有誤，請至「帳戶管理」進行資金校正。`,
     }, 400);
   }
 
@@ -142,10 +143,11 @@ transactions.delete('/:id', async (c) => {
   if (!existing) return c.json({ success: false, error: '紀錄不存在' }, 404);
 
   // Q5: 信用卡還款紀錄受保護
-  if (existing.category === '信用卡還款') {
+  const protectedCategories = ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'];
+  if (protectedCategories.includes(existing.category as string)) {
     return c.json({
       success: false,
-      error: '「信用卡還款」為系統內部平帳紀錄，受系統保護禁止直接刪除。若金額有誤，請至「帳戶管理」直接校正銀行或卡片餘額。'
+      error: `「${existing.category}」為系統內部平帳/轉帳紀錄，受系統保護禁止直接刪除。若金額有誤，請至「帳戶管理」進行資金校正。`,
     }, 400);
   }
 
@@ -165,7 +167,7 @@ transactions.get('/summary/category', async (c) => {
   const rows = await c.env.DB.prepare(`
     SELECT category, SUM(amount) as total
     FROM transactions t
-    WHERE ${condition} AND t.type = 'expense' AND t.category != '信用卡還款' AND t.date LIKE ?
+    WHERE ${condition} AND t.type = 'expense' AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷') AND t.date LIKE ?
     GROUP BY category ORDER BY total DESC
   `).bind(...params, `${month}%`).all();
   return c.json({ success: true, data: rows.results });
@@ -183,7 +185,7 @@ transactions.get('/summary/monthly', async (c) => {
   const rows = await c.env.DB.prepare(`
     SELECT strftime('%Y-%m', date) as month, type, SUM(amount) as total
     FROM transactions t
-    WHERE ${condition} AND t.category != '信用卡還款' AND t.date LIKE ?
+    WHERE ${condition} AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷') AND t.date LIKE ?
     GROUP BY month, type ORDER BY month ASC
   `).bind(...params, `${year}%`).all();
   return c.json({ success: true, data: rows.results });
@@ -204,7 +206,7 @@ transactions.get('/summary/household-shares', async (c) => {
     SELECT t.user_id, u.name as user_name, SUM(t.amount) as total
     FROM transactions t
     JOIN users u ON t.user_id = u.id
-    WHERE t.user_id IN (${placeholders}) AND t.is_shared = 1 AND t.type = 'expense' AND t.category != '信用卡還款' AND t.date LIKE ?
+    WHERE t.user_id IN (${placeholders}) AND t.is_shared = 1 AND t.type = 'expense' AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷') AND t.date LIKE ?
     GROUP BY t.user_id, u.name
     ORDER BY total DESC
   `).bind(...memberUserIds, `${month}%`).all();

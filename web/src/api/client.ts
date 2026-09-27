@@ -55,8 +55,8 @@ export const authApi = {
 
 // Accounts
 export const accountsApi = {
-  list: () => get<Account[]>('/accounts'),
-  balance: () => get<BalanceSummary>('/accounts/balance'),
+  list: (scope?: string) => get<Account[]>(scope ? `/accounts?scope=${scope}` : '/accounts'),
+  balance: (scope?: string) => get<BalanceSummary>(scope ? `/accounts/balance?scope=${scope}` : '/accounts/balance'),
   create: (body: Partial<Account>) => post<Account>('/accounts', body),
   update: (id: string, body: Partial<Account>) => put<Account>(`/accounts/${id}`, body),
   remove: (id: string) => del<null>(`/accounts/${id}`),
@@ -74,6 +74,17 @@ export const accountsApi = {
     card_balance: number;
     card_unbilled: number;
   }>('/accounts/pay-credit-card', body),
+  transfer: (body: {
+    from_account_id: string;
+    to_account_id: string;
+    amount: number;
+    date?: string;
+    note?: string;
+  }) => post<{
+    message: string;
+    from_balance: number;
+    to_balance: number;
+  }>('/accounts/transfer', body),
 };
 
 // Transactions
@@ -164,6 +175,26 @@ export const householdApi = {
   join: (code: string) => post<{ household: Household; role: string }>('/households/join', { code }),
   leave: () => del<{ message: string }>('/households/leave'),
   removeMember: (userId: string) => del<{ message: string }>(`/households/members/${userId}`),
+  advances: () => get<Array<{
+    user_id: string;
+    user_name: string;
+    email: string;
+    total_advanced: number;
+    total_reimbursed: number;
+    pending_reimburse: number;
+  }>>('/households/advances'),
+  reimburse: (body: {
+    target_user_id: string;
+    from_account_id: string;
+    to_account_id: string;
+    amount: number;
+    date?: string;
+    note?: string;
+  }) => post<{
+    message: string;
+    from_balance: number;
+    to_balance: number;
+  }>('/households/reimburse', body),
 };
 
 // Bot (LINE & Telegram 璈鈭?
@@ -180,7 +211,7 @@ export interface Account {
   id: string;
   user_id: string;
   name: string;
-  type: 'bank' | 'credit_card';
+  type: 'bank' | 'credit_card' | 'cash';
   balance: number;
   credit_limit?: number | null;
   statement_day?: number | null;
@@ -195,6 +226,7 @@ export interface Account {
 }
 
 export interface BalanceSummary {
+  cashTotal?: number;
   bankTotal: number;
   ccBilled: number;
   ccUnbilled: number;
