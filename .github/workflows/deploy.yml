@@ -71,4 +71,4 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: 'backend'
-          command: pages deploy ../web/dist --project-name=my-money
+          command: pages deploy ../web/dist --project-name=my-money-onion
