@@ -1,0 +1,22 @@
+{
+  "name": "my-money-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute my-money-db --local --file=src/db/schema.sql",
+    "db:seed": "wrangler d1 execute my-money-db --local --file=src/db/seed.sql"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241022.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^3.80.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "workerd", "@img/sharp-win32-x64", "@img/sharp-libvips-win32-x64"]
+  }
+}
