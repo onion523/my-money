@@ -1,4 +1,5 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
 import {
   LayoutDashboard,
@@ -13,7 +14,9 @@ import {
   Sun,
   Moon,
   LogOut,
-  BookHeart
+  BookHeart,
+  Menu,
+  X
 } from 'lucide-react'
 
 const navItems = [
@@ -30,7 +33,26 @@ const navItems = [
 
 export default function Layout() {
   const { user, theme, toggleTheme, logout } = useStore()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // 換頁時自動關閉行動端抽屜
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [location.pathname])
+
+  // 抽屜開啟時防止背景頁面滾動
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [mobileMenuOpen])
 
   const handleLogout = () => {
     logout()
@@ -39,16 +61,70 @@ export default function Layout() {
 
   return (
     <div className="layout">
-      <nav className="sidebar">
-        <div className="sidebar-logo">
-          <BookHeart size={24} />
+      {/* 行動端頂部 Header (<= 768px 顯示) */}
+      <header className="mobile-header">
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ padding: '6px 8px', minHeight: 'auto' }}
+          onClick={() => setMobileMenuOpen(true)}
+          aria-label="打開導覽選單"
+        >
+          <Menu size={22} />
+        </button>
+
+        <div className="mobile-header-title">
+          <BookHeart size={20} />
           <span>我的記帳本</span>
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ padding: '6px 8px', minHeight: 'auto' }}
+          onClick={toggleTheme}
+          aria-label="切換主題"
+        >
+          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+        </button>
+      </header>
+
+      {/* 行動端抽屜黑色遮罩 */}
+      {mobileMenuOpen && (
+        <div
+          className="mobile-drawer-overlay"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* 側邊導覽欄 (桌面端固定，行動端為滑動抽屜) */}
+      <nav className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
+        <div className="sidebar-logo" style={{ justifyContent: 'space-between' }}>
+          <div className="flex items-center gap-sm">
+            <BookHeart size={24} />
+            <span>我的記帳本</span>
+          </div>
+          <button
+            type="button"
+            className="sidebar-close-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="關閉選單"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', paddingTop: 8 }}>
           <div className="nav-section-title">主選單</div>
           {navItems.map(({ to, icon: Icon, label, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+              onClick={() => setMobileMenuOpen(false)}
+            >
               <Icon size={18} />
               <span>{label}</span>
             </NavLink>
@@ -71,9 +147,51 @@ export default function Layout() {
         </div>
       </nav>
 
+      {/* 主要內容區域 */}
       <main className="main-content">
         <Outlet />
       </main>
+
+      {/* 行動端底部導覽列 (<= 768px 顯示) */}
+      <nav className="mobile-bottom-nav">
+        <NavLink
+          to="/"
+          end
+          className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+        >
+          <LayoutDashboard size={20} />
+          <span>總覽</span>
+        </NavLink>
+        <NavLink
+          to="/transactions"
+          className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+        >
+          <ArrowLeftRight size={20} />
+          <span>明細</span>
+        </NavLink>
+        <NavLink
+          to="/accounts"
+          className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+        >
+          <CreditCard size={20} />
+          <span>帳戶</span>
+        </NavLink>
+        <NavLink
+          to="/analytics"
+          className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+        >
+          <BarChart2 size={20} />
+          <span>統計</span>
+        </NavLink>
+        <button
+          type="button"
+          className={`bottom-nav-item ${mobileMenuOpen ? 'active' : ''}`}
+          onClick={() => setMobileMenuOpen(prev => !prev)}
+        >
+          <Menu size={20} />
+          <span>更多</span>
+        </button>
+      </nav>
     </div>
   )
 }

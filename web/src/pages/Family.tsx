@@ -137,7 +137,7 @@ export default function Family() {
   return (
     <div className="fade-in">
       {/* 標題與說明 */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 24 }}>
+      <div className="page-header-row">
         <div>
           <h1 className="page-title">家庭協同管理 👨‍👩‍👧</h1>
           <p className="page-subtitle">與伴侶或家人共同管理即時資金、分擔開支與追蹤儲蓄進度</p>

@@ -437,19 +437,285 @@ a { text-decoration: none; color: inherit; }
   100% { background-position: 200% 0; }
 }
 
-/* ---- 響應式 ---- */
+/* ---- 響應式佈局輔助類 ---- */
+.grid-dashboard-main {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-lg);
+}
+.grid-forecast-main {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: var(--space-lg);
+}
+.page-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.scope-tab-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  margin-bottom: var(--space-md);
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.scope-tab-bar::-webkit-scrollbar {
+  display: none;
+}
+.scope-tab-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  font-size: 0.85rem;
+}
+
+/* 行動端專用元件（桌面端隱藏） */
+.mobile-header {
+  display: none;
+}
+.mobile-bottom-nav {
+  display: none;
+}
+.mobile-drawer-overlay {
+  display: none;
+}
+.sidebar-close-btn {
+  display: none;
+}
+
+/* ---- 平板與小型螢幕斷點 (<= 960px) ---- */
+@media (max-width: 960px) {
+  .grid-dashboard-main,
+  .grid-forecast-main {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+}
+
+/* ---- 手機與平板直向斷點 (<= 768px) ---- */
 @media (max-width: 768px) {
+  /* 頂部列 */
+  .mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    padding: 0 var(--space-md);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-color);
+    z-index: 120;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
+  }
+  .mobile-header-title {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  /* 底部固定導覽列 */
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(58px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border-color);
+    z-index: 150;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+  }
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.72rem;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+    padding: 6px 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bottom-nav-item.active {
+    color: var(--color-primary);
+    font-weight: 700;
+  }
+  .bottom-nav-item.active svg {
+    stroke: var(--color-primary);
+    transform: scale(1.1);
+  }
+
+  /* 抽屜黑色遮罩 */
+  .mobile-drawer-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    z-index: 199;
+    animation: fadeIn 0.2s ease;
+  }
+
+  /* 側邊欄抽屜化 */
   .sidebar {
     transform: translateX(-100%);
     z-index: 200;
+    width: 280px;
+    max-width: 85vw;
+    box-shadow: var(--shadow-lg);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .sidebar.open { transform: translateX(0); }
-  .main-content { margin-left: 0; max-width: 100vw; padding: var(--space-md); }
-  .grid-4 { grid-template-columns: repeat(2, 1fr); }
-  .grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .sidebar-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    padding: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+  }
+  .sidebar-close-btn:hover {
+    background: var(--bg-surface-2);
+    color: var(--text-primary);
+  }
+
+  /* 主要內容區域 */
+  .layout {
+    flex-direction: column;
+  }
+  .main-content {
+    margin-left: 0;
+    max-width: 100vw;
+    padding: var(--space-md) var(--space-md) calc(76px + env(safe-area-inset-bottom, 0px)) var(--space-md);
+    overflow-x: hidden;
+  }
+
+  /* 標題與字體微調 */
+  .page-title {
+    font-size: 1.35rem;
+  }
+  .page-subtitle {
+    font-size: 0.82rem;
+  }
+  .page-header-row {
+    margin-bottom: var(--space-md);
+  }
+
+  /* 卡片與統計資訊 */
+  .card {
+    padding: 16px 14px;
+    border-radius: var(--radius-md);
+  }
+  .stat-card {
+    padding: 12px 14px;
+  }
+  .stat-value {
+    font-size: 1.4rem;
+  }
+  .stat-label {
+    font-size: 0.75rem;
+  }
+  .stat-sub {
+    font-size: 0.75rem;
+  }
+
+  /* 格線斷點調適 */
+  .grid-4 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .grid-3 { grid-template-columns: 1fr; gap: 10px; }
+  .grid-2 { grid-template-columns: 1fr; gap: 10px; }
+
+  /* 彈出視窗調適 */
+  .modal-overlay {
+    padding: var(--space-sm);
+    align-items: center;
+  }
+  .modal-box {
+    padding: 18px 16px;
+    border-radius: var(--radius-lg);
+    max-height: 90vh;
+  }
+
+  /* 表格與列表項目緊湊化 */
+  .transaction-item {
+    padding: 10px 8px;
+    gap: 10px;
+  }
+  .tx-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+  }
+  .tx-amount {
+    font-size: 0.95rem;
+  }
+
+  /* 按鈕在行動端提供合適的觸控高度 */
+  .btn {
+    min-height: 36px;
+  }
+  .btn-sm {
+    min-height: 32px;
+  }
+  .btn-lg {
+    min-height: 44px;
+  }
+  .input {
+    min-height: 40px;
+    font-size: 0.95rem;
+  }
+
+  /* 範疇切換器在小螢幕滿寬滾動 */
+  .scope-tab-bar {
+    width: 100%;
+    margin-bottom: 14px;
+  }
 }
+
+/* ---- 超小手機螢幕斷點 (<= 480px) ---- */
 @media (max-width: 480px) {
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: 1fr; }
+  .header-actions { width: 100%; }
+  .header-actions > .btn { flex: 1; justify-content: center; }
+  .page-header-row > div:first-child { width: 100%; }
 }
 
 /* ---- 捲軸美化 ---- */

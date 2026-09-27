@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { accountsApi, txApi, recurringApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
@@ -131,7 +131,7 @@ export default function Dashboard() {
   return (
     <div className="fade-in">
       {/* 頁面標題 */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+      <div className="page-header-row">
         <div>
           <h1 className="page-title">早安，{user?.name || '朋友'} 👋</h1>
           <p className="page-subtitle">這裡是您本月的財務總覽與即時收支數據</p>
@@ -264,7 +264,7 @@ export default function Dashboard() {
       )}
 
       {/* 主要區塊：左 2/3 (帳戶 + 最近交易) + 右 1/3 (儲蓄目標 + 固定支出總覽) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+      <div className="grid-dashboard-main">
         <div className="flex-col gap-lg" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* 帳戶一覽 */}
           <div className="card">

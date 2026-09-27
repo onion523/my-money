@@ -1,4 +1,4 @@
-﻿// API ?澆撅??????fetch 隢??絞銝?亙
+// API ?澆撅??????fetch 隢??絞銝?亙
 const BASE = (import.meta as any).env?.VITE_API_URL || '/api';
 
 function getToken(): string | null {
@@ -15,8 +15,27 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...options.headers,
     },
   });
-  const data = await res.json();
-  if (!res.ok || !data.success) throw new Error(data.error || '隢?憭望?');
+
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    try {
+      localStorage.removeItem('mm_token');
+      localStorage.removeItem('mm_user');
+    } catch (_) {}
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+  }
+
+  let data: any = {};
+  try {
+    data = await res.json();
+  } catch (e) {
+    data = { success: false, error: res.statusText || '伺服器無回應' };
+  }
+
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || '請求失敗');
+  }
   return data.data as T;
 }
 
@@ -292,3 +311,4 @@ export interface BotBinding {
   display_name: string;
   created_at: string;
 }
+

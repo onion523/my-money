@@ -32,29 +32,56 @@ interface AppStore {
   setLoading: (loading: boolean) => void;
 }
 
-export const useStore = create<AppStore>((set) => {
-  // 初始化 auth
-  const token = localStorage.getItem('mm_token');
-  const userStr = localStorage.getItem('mm_user');
-  const user = userStr ? JSON.parse(userStr) : null;
+function getStoredAuth(): { user: User | null; token: string | null } {
+  try {
+    const token = localStorage.getItem('mm_token');
+    const userStr = localStorage.getItem('mm_user');
+    if (!token || !userStr) return { user: null, token: null };
+    const user = JSON.parse(userStr);
+    return { user, token };
+  } catch (e) {
+    try {
+      localStorage.removeItem('mm_token');
+      localStorage.removeItem('mm_user');
+    } catch (_) {}
+    return { user: null, token: null };
+  }
+}
 
-  // 初始化主題
-  const savedTheme = localStorage.getItem('mm_theme') as 'light' | 'dark' | null;
-  const theme = savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  document.documentElement.setAttribute('data-theme', theme);
+function getStoredTheme(): 'light' | 'dark' {
+  try {
+    const savedTheme = localStorage.getItem('mm_theme') as 'light' | 'dark' | null;
+    if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+  } catch (e) {}
+  return 'light';
+}
+
+export const useStore = create<AppStore>((set) => {
+  const { user, token } = getStoredAuth();
+  const theme = getStoredTheme();
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
 
   return {
     // Auth
     user,
     token,
     setAuth: (user, token) => {
-      localStorage.setItem('mm_token', token);
-      localStorage.setItem('mm_user', JSON.stringify(user));
+      try {
+        localStorage.setItem('mm_token', token);
+        localStorage.setItem('mm_user', JSON.stringify(user));
+      } catch (e) {}
       set({ user, token });
     },
     logout: () => {
-      localStorage.removeItem('mm_token');
-      localStorage.removeItem('mm_user');
+      try {
+        localStorage.removeItem('mm_token');
+        localStorage.removeItem('mm_user');
+      } catch (e) {}
       set({ user: null, token: null, accounts: [], transactions: [], recurring: [], goals: [], budgets: [], balance: null });
     },
 
@@ -62,8 +89,12 @@ export const useStore = create<AppStore>((set) => {
     theme,
     toggleTheme: () => set((state) => {
       const next = state.theme === 'light' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('mm_theme', next);
+      if (typeof document !== 'undefined') {
+        document.documentElement.setAttribute('data-theme', next);
+      }
+      try {
+        localStorage.setItem('mm_theme', next);
+      } catch (e) {}
       return { theme: next };
     }),
 

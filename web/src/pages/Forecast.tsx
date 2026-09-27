@@ -184,7 +184,7 @@ export default function Forecast() {
       </div>
 
       {/* 下方兩欄：左側 購買力檢查工具 + 右側 未來 30 天事件時間軸 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24 }}>
+      <div className="grid-forecast-main">
         {/* 模組 9：購買力檢查 */}
         <div className="card">
           <div className="flex items-center gap-xs" style={{ marginBottom: 12 }}>

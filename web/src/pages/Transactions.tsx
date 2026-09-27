@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { txApi, accountsApi, exportApi, Transaction, Account } from '../api/client'
 import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS } from '../components/utils'
 import Modal from '../components/Modal'
@@ -326,7 +326,7 @@ export default function Transactions() {
         </div>
 
         {/* 篩選結果加總橫條 */}
-        <div className="flex items-center justify-between" style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-color)', fontSize: '0.875rem' }}>
+        <div className="flex items-center justify-between" style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-color)', fontSize: '0.875rem', flexWrap: 'wrap', gap: 8 }}>
           <div>
             篩選筆數：<strong>{filtered.length}</strong> 筆
           </div>

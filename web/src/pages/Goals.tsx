@@ -165,7 +165,7 @@ export default function Goals() {
   return (
     <div className="fade-in">
       {/* 標題與操作按鈕 */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+      <div className="page-header-row">
         <div>
           <h1 className="page-title">儲蓄目標 🎯</h1>
           <p className="page-subtitle">設立旅行、購屋、緊急備用金等夢想目標，按月預留並逐步實現</p>

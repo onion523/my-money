@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import {
   txApi,
   budgetsApi,
@@ -142,7 +142,7 @@ export default function Analytics() {
   return (
     <div className="fade-in">
       {/* 標題與月份切換 */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
+      <div className="page-header-row">
         <div>
           <h1 className="page-title">統計與分析 📊</h1>
           <p className="page-subtitle">深入洞悉消費佔比、長期收支走勢與嚴格把關年度預算</p>
@@ -203,7 +203,7 @@ export default function Analytics() {
       {/* 家庭公費成員分攤與墊付統計 (當有家庭成員分攤數據時顯示) */}
       {(scope === 'household' || scope === 'all') && householdShares.length > 0 && (
         <div className="card" style={{ marginBottom: 24, background: 'linear-gradient(135deg, rgba(85,197,149,0.06) 0%, rgba(168,216,234,0.08) 100%)', border: '1px solid var(--border-color)' }}>
-          <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
             <h2 className="text-xl flex items-center gap-xs">
               <Coins size={20} color="var(--color-success)" />
               {currentMonth} 家庭成員公費墊付與分攤統計
