@@ -447,8 +447,8 @@ export default function Analytics() {
               <input
                 className="input"
                 type="number"
-                step="500"
-                min="100"
+                step="1"
+                min="1"
                 placeholder="例如 8000"
                 required
                 autoFocus

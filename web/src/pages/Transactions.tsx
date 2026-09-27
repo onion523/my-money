@@ -50,7 +50,7 @@ export default function Transactions() {
     try {
       setLoading(true)
       const [txs, accs] = await Promise.all([
-        txApi.list({ from: startDate, to: endDate, scope: scopeFilter }),
+        txApi.list({ from: startDate, to: endDate, scope: scopeFilter, limit: '200' }),
         accountsApi.list(),
       ])
       setTransactions(txs)
@@ -301,10 +301,7 @@ export default function Transactions() {
               onChange={e => setCategoryFilter(e.target.value)}
             >
               <option value="全部">全部分類</option>
-              {CATEGORIES.expense.map(c => (
-                <option key={c} value={c}>{CATEGORY_ICONS[c] || ''} {c}</option>
-              ))}
-              {CATEGORIES.income.map(c => (
+              {Array.from(new Set([...CATEGORIES.expense, ...CATEGORIES.income])).map(c => (
                 <option key={c} value={c}>{CATEGORY_ICONS[c] || ''} {c}</option>
               ))}
             </select>
@@ -416,22 +413,44 @@ export default function Transactions() {
                           {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                         </div>
                         <div className="flex gap-xs">
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            style={{ padding: 4 }}
-                            onClick={() => handleOpenEdit(tx)}
-                            title="編輯"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            style={{ padding: 4, color: 'var(--color-danger)' }}
-                            onClick={() => handleDelete(tx.id)}
-                            title="刪除"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {tx.category === '信用卡還款' ? (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                fontSize: '0.75rem',
+                                color: 'var(--text-muted)',
+                                background: 'var(--bg-surface-2)',
+                                border: '1px solid var(--border-color)',
+                                padding: '3px 8px',
+                                borderRadius: 6,
+                              }}
+                              title="🔒 系統內部平帳還款紀錄受保護。若金額有誤，請至帳戶管理校正餘額。"
+                            >
+                              <Lock size={12} />
+                              <span>系統保護</span>
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ padding: 4 }}
+                                onClick={() => handleOpenEdit(tx)}
+                                title="編輯"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ padding: 4, color: 'var(--color-danger)' }}
+                                onClick={() => handleDelete(tx.id)}
+                                title="刪除"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

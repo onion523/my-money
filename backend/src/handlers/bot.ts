@@ -14,6 +14,7 @@ export function parseNaturalMessage(text: string): {
   note?: string;
   accountKeyword?: string;
   pairingCode?: string;
+  isShared?: boolean;
 } {
   const trimmed = text.trim();
 
@@ -34,6 +35,8 @@ export function parseNaturalMessage(text: string): {
   }
 
   // 4. 收支記帳分析
+  // 判斷公私帳關鍵字 (公帳、公費、家用、家、公)
+  const isShared = /公帳|公費|家用|家/i.test(trimmed);
   // 範例: "午餐 120", "晚餐 180 現金", "薪水 60000 銀行", "加值 500 悠遊卡", "計程車 250"
   // 匹配: [項目/備註] [金額] [可選帳戶] 或 [金額] [項目]
   const amountMatch = trimmed.match(/(\d+(?:\.\d+)?)/);
@@ -62,7 +65,7 @@ export function parseNaturalMessage(text: string): {
   if (isIncome) {
     if (/獎金/.test(lower)) category = '獎金';
     else if (/投資|股息|股票/.test(lower)) category = '投資';
-    else if (/副業|兼職/.test(lower)) category = '副業';
+    else if (/副業|兼職/.test(lower)) category = '兼職';
     else category = '薪資';
   } else {
     if (/飯|麵|餐|吃|喝|早|午|晚|宵夜|咖啡|茶|飲料|麥當勞|肯德基|星巴克|壽司|拉麵|便當|火鍋|餐廳|披薩|全家|7-11/.test(lower)) {
@@ -82,7 +85,7 @@ export function parseNaturalMessage(text: string): {
     }
   }
 
-  return { type, amount, category, note, accountKeyword };
+  return { type, amount, category, note, accountKeyword, isShared };
 }
 
 // 產生配對碼 (需要登入)
@@ -267,11 +270,12 @@ async function handleBotAction(
     const category = parsed.category!;
     const note = parsed.note || '';
 
-    // 新增交易
+    // 新增交易 (Q7: 支援公帳 vs 私帳)
+    const isShared = (parsed as any).isShared ? 1 : 0;
     await db.prepare(`
-      INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(txId, userId, targetAccount.id, parsed.type, category, amount, note, today).run();
+      INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(txId, userId, targetAccount.id, parsed.type, category, amount, note, today, isShared).run();
 
     // 更新帳戶餘額
     if (targetAccount.type === 'bank') {
@@ -292,13 +296,14 @@ async function handleBotAction(
 
     const emojiMap: Record<string, string> = {
       '餐飲':'🍜', '交通':'🚇', '娛樂':'🎬', '購物':'🛍️', '生活':'🏠', '醫療':'💊', '教育':'📚', '其他':'📌',
-      '薪資':'💼', '獎金':'🎉', '投資':'📈', '副業':'💡'
+      '薪資':'💼', '獎金':'🎉', '投資':'📈', '兼職':'💼', '副業':'💼'
     };
 
     return `📝 記帳成功！\n` +
       `━━━━━━━━━━━━━━━\n` +
       `▫️ 項目：${note}\n` +
       `▫️ 類型：${parsed.type === 'income' ? '收入 📈' : '支出 📉'}\n` +
+      `▫️ 歸屬：${(parsed as any).isShared ? '🏠 家庭公帳（代墊）' : '👤 個人私帳'}\n` +
       `▫️ 分類：${emojiMap[category] || '📌'} ${category}\n` +
       `▫️ 金額：NT$ ${amount.toLocaleString()}\n` +
       `▫️ 帳戶：${targetAccount.name}\n` +

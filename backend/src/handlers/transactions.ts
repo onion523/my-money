@@ -106,6 +106,14 @@ transactions.put('/:id', async (c) => {
 
   if (!existing) return c.json({ success: false, error: '紀錄不存在' }, 404);
 
+  // Q5: 信用卡還款紀錄受保護
+  if (existing.category === '信用卡還款') {
+    return c.json({
+      success: false,
+      error: '「信用卡還款」為系統內部平帳紀錄，受系統保護禁止直接修改。若金額有誤，請至「帳戶管理」直接校正銀行或卡片餘額。'
+    }, 400);
+  }
+
   await c.env.DB.prepare(
     'UPDATE transactions SET account_id = ?, type = ?, category = ?, amount = ?, note = ?, date = ?, is_shared = ? WHERE id = ?'
   ).bind(account_id, type, category, amount, note, date, is_shared, id).run();
@@ -133,6 +141,14 @@ transactions.delete('/:id', async (c) => {
 
   if (!existing) return c.json({ success: false, error: '紀錄不存在' }, 404);
 
+  // Q5: 信用卡還款紀錄受保護
+  if (existing.category === '信用卡還款') {
+    return c.json({
+      success: false,
+      error: '「信用卡還款」為系統內部平帳紀錄，受系統保護禁止直接刪除。若金額有誤，請至「帳戶管理」直接校正銀行或卡片餘額。'
+    }, 400);
+  }
+
   await c.env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run();
   return c.json({ success: true, data: null });
 });
@@ -149,7 +165,7 @@ transactions.get('/summary/category', async (c) => {
   const rows = await c.env.DB.prepare(`
     SELECT category, SUM(amount) as total
     FROM transactions t
-    WHERE ${condition} AND t.type = 'expense' AND t.date LIKE ?
+    WHERE ${condition} AND t.type = 'expense' AND t.category != '信用卡還款' AND t.date LIKE ?
     GROUP BY category ORDER BY total DESC
   `).bind(...params, `${month}%`).all();
   return c.json({ success: true, data: rows.results });
@@ -167,7 +183,7 @@ transactions.get('/summary/monthly', async (c) => {
   const rows = await c.env.DB.prepare(`
     SELECT strftime('%Y-%m', date) as month, type, SUM(amount) as total
     FROM transactions t
-    WHERE ${condition} AND t.date LIKE ?
+    WHERE ${condition} AND t.category != '信用卡還款' AND t.date LIKE ?
     GROUP BY month, type ORDER BY month ASC
   `).bind(...params, `${year}%`).all();
   return c.json({ success: true, data: rows.results });
@@ -188,7 +204,7 @@ transactions.get('/summary/household-shares', async (c) => {
     SELECT t.user_id, u.name as user_name, SUM(t.amount) as total
     FROM transactions t
     JOIN users u ON t.user_id = u.id
-    WHERE t.user_id IN (${placeholders}) AND t.is_shared = 1 AND t.type = 'expense' AND t.date LIKE ?
+    WHERE t.user_id IN (${placeholders}) AND t.is_shared = 1 AND t.type = 'expense' AND t.category != '信用卡還款' AND t.date LIKE ?
     GROUP BY t.user_id, u.name
     ORDER BY total DESC
   `).bind(...memberUserIds, `${month}%`).all();

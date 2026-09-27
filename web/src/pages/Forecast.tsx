@@ -202,7 +202,7 @@ export default function Forecast() {
                   id="input-purchase-amount"
                   className="input"
                   type="number"
-                  step="100"
+                  step="1"
                   min="1"
                   placeholder="輸入預計消費金額，如 25000"
                   value={checkAmount}

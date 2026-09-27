@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { accountsApi, txApi, recurringApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
-import { formatCurrency, formatDate, today, CATEGORIES, CATEGORY_ICONS } from '../components/utils'
+import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS } from '../components/utils'
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
 import {
@@ -31,6 +31,7 @@ export default function Dashboard() {
   const [budgets, setBudgets] = useState<any[]>([])
   const [recurringList, setRecurringList] = useState<any[]>([])
   const [goalsList, setGoalsList] = useState<any[]>([])
+  const [monthlyStats, setMonthlyStats] = useState<any[]>([])
   const [viewScope, setViewScope] = useState<'all' | 'household' | 'personal'>('all')
   const navigate = useNavigate()
 
@@ -50,13 +51,15 @@ export default function Dashboard() {
   const loadData = async (scope = viewScope) => {
     try {
       setLoading(true)
-      const [bal, accs, txs, buds, rec, g] = await Promise.all([
+      const currentYear = thisMonth().slice(0, 4);
+      const [bal, accs, txs, buds, rec, g, monthlyStats] = await Promise.all([
         accountsApi.balance().catch(() => null),
         accountsApi.list().catch(() => []),
         txApi.list({ limit: '10', scope }).catch(() => []),
         budgetsApi.list().catch(() => []),
         recurringApi.list().catch(() => []),
         goalsApi.list().catch(() => []),
+        txApi.monthly(currentYear, scope).catch(() => []),
       ])
 
       if (bal) setBalance(bal)
@@ -65,6 +68,7 @@ export default function Dashboard() {
       setBudgets(buds)
       setRecurringList(rec)
       setGoalsList(g)
+      setMonthlyStats(monthlyStats)
 
       if (accs.length > 0 && !form.account_id) {
         setForm(p => ({ ...p, account_id: accs[0].id }))
@@ -122,8 +126,9 @@ export default function Dashboard() {
     if (viewScope === 'personal') return t.is_shared === 0
     return true
   })
-  const monthIncome = monthTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-  const monthExpense = monthTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+  const thisMonthData = monthlyStats.filter((m: any) => m.month === thisMonthStr)
+  const monthIncome = thisMonthData.find((m: any) => m.type === 'income')?.total || 0
+  const monthExpense = thisMonthData.find((m: any) => m.type === 'expense')?.total || 0
 
   // 警示預算
   const overBudgets = budgets.filter(b => b.over)

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { accountsApi, Account, BalanceSummary } from '../api/client'
-import { formatCurrency, ACCOUNT_COLORS } from '../components/utils'
+import { formatCurrency, ACCOUNT_COLORS, today } from '../components/utils'
 import Modal from '../components/Modal'
 import {
   Plus,
@@ -30,10 +30,23 @@ export default function Accounts() {
     statement_day: '',
     payment_due_day: '',
     unbilled: '',
+    is_joint: 0,
     color: ACCOUNT_COLORS[0],
   })
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  // 繳納卡費 Modal 狀態
+  const [payCardModal, setPayCardModal] = useState<Account | null>(null)
+  const [payForm, setPayForm] = useState({
+    bank_account_id: '',
+    amount: '',
+    date: today(),
+    note: '',
+    is_shared: 1,
+  })
+  const [paying, setPaying] = useState(false)
+  const [payError, setPayError] = useState('')
+
 
   const loadData = async () => {
     try {
@@ -65,6 +78,7 @@ export default function Accounts() {
       statement_day: type === 'credit_card' ? '15' : '',
       payment_due_day: type === 'credit_card' ? '5' : '',
       unbilled: '0',
+      is_joint: 0,
       color: ACCOUNT_COLORS[Math.floor(Math.random() * ACCOUNT_COLORS.length)],
     })
     setErrorMsg('')
@@ -81,6 +95,7 @@ export default function Accounts() {
       statement_day: acc.statement_day?.toString() || '',
       payment_due_day: acc.payment_due_day?.toString() || '',
       unbilled: acc.unbilled?.toString() || '0',
+      is_joint: acc.is_joint || 0,
       color: acc.color || ACCOUNT_COLORS[0],
     })
     setErrorMsg('')
@@ -112,6 +127,7 @@ export default function Accounts() {
           credit_limit: limit,
           statement_day: stmtDay,
           payment_due_day: dueDay,
+          is_joint: form.is_joint,
           color: form.color,
         })
       } else {
@@ -123,6 +139,7 @@ export default function Accounts() {
           credit_limit: limit,
           statement_day: stmtDay,
           payment_due_day: dueDay,
+          is_joint: form.is_joint,
           color: form.color,
         })
       }
@@ -132,6 +149,81 @@ export default function Accounts() {
       setErrorMsg(err.message || '儲存帳戶失敗')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+
+
+  const handleRollover = async (card: Account) => {
+    if (!window.confirm(`確定要將「${card.name}」的未出帳金額 NT$ ${card.unbilled.toLocaleString()} 結轉為本期已出帳待繳嗎？`)) {
+      return
+    }
+    try {
+      const res = await accountsApi.rolloverStatement(card.id)
+      alert(res.message || '結轉成功！')
+      loadData()
+    } catch (err: any) {
+      alert(err.message || '結轉失敗')
+    }
+  }
+
+  const handleOpenPay = (card: Account) => {
+    setPayCardModal(card)
+    const defaultBank = bankAccounts.find(b => b.balance > 0) || bankAccounts[0]
+    const defaultAmount = (card.balance || 0) > 0 ? card.balance : (card.unbilled || 0)
+    setPayForm({
+      bank_account_id: defaultBank ? defaultBank.id : '',
+      amount: defaultAmount > 0 ? defaultAmount.toString() : '',
+      date: today(),
+      note: `繳納【${card.name}】卡費`,
+      is_shared: (card.shared_debt || 0) >= (card.personal_debt || 0) ? 1 : 0,
+    })
+    setPayError('')
+  }
+
+  const handlePaySubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!payCardModal) return
+    setPayError('')
+
+    if (!payForm.bank_account_id) {
+      setPayError('請選擇扣款銀行帳戶')
+      return
+    }
+
+    const maxPayable = (payCardModal.balance || 0) + (payCardModal.unbilled || 0);
+    const amt = parseFloat(payForm.amount);
+    if (isNaN(amt) || amt <= 0) {
+      setPayError('請輸入大於 0 的繳款金額');
+      return;
+    }
+    if (amt > maxPayable && maxPayable > 0) {
+      setPayError(`繳款金額不可超過當前待繳總額 NT$ ${maxPayable.toLocaleString()}`);
+      return;
+    }
+    const selectedBank = bankAccounts.find(b => b.id === payForm.bank_account_id)
+    if (selectedBank && selectedBank.balance < amt) {
+      if (!window.confirm(`扣款帳戶「${selectedBank.name}」目前餘額為 NT$ ${selectedBank.balance.toLocaleString()}，小於繳納金額 NT$ ${amt.toLocaleString()}。確認仍要繼續扣款嗎？`)) {
+        return
+      }
+    }
+
+    try {
+      setPaying(true)
+      await accountsApi.payCreditCard({
+        bank_account_id: payForm.bank_account_id,
+        credit_card_id: payCardModal.id,
+        amount: amt,
+        date: payForm.date,
+        note: payForm.note,
+        is_shared: payForm.is_shared,
+      })
+      setPayCardModal(null)
+      await loadData()
+    } catch (err: any) {
+      setPayError(err.message || '繳款失敗')
+    } finally {
+      setPaying(false)
     }
   }
 
@@ -223,7 +315,14 @@ export default function Accounts() {
                 }}
               >
                 <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
-                  <div style={{ fontWeight: 600, fontSize: '1.05rem' }}>{acc.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600, fontSize: '1.05rem' }}>{acc.name}</span>
+                    {acc.is_joint === 1 && (
+                      <span className="badge" style={{ background: 'rgba(255, 193, 7, 0.18)', color: '#d97706', fontSize: '0.72rem', padding: '2px 8px', fontWeight: 600, border: '1px solid rgba(255, 193, 7, 0.4)' }}>
+                        🏠 家庭共同基金
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-xs">
                     <button className="btn btn-ghost btn-sm" style={{ padding: 4 }} onClick={() => handleOpenEdit(acc)}>
                       <Edit2 size={14} />
@@ -281,7 +380,29 @@ export default function Accounts() {
                         </span>
                       )}
                     </div>
-                    <div className="flex gap-xs">
+                    <div className="flex gap-xs items-center">
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '0.8rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          borderRadius: 6,
+                          background: totalDue > 0 ? 'rgba(255, 138, 138, 0.15)' : 'var(--bg-surface-2)',
+                          color: totalDue > 0 ? 'var(--color-danger)' : 'var(--text-muted)',
+                          border: totalDue > 0 ? '1px solid var(--color-danger)' : '1px solid var(--border-color)',
+                          cursor: totalDue > 0 ? 'pointer' : 'default',
+                          fontWeight: 600,
+                        }}
+                        onClick={() => handleOpenPay(cc)}
+                        title={totalDue > 0 ? '繳納此卡款項並沖銷欠款' : '此卡目前無待繳欠款'}
+                      >
+                        <CreditCard size={13} />
+                        <span>繳卡費</span>
+                      </button>
                       <button className="btn btn-ghost btn-sm" style={{ padding: 4 }} onClick={() => handleOpenEdit(cc)}>
                         <Edit2 size={14} />
                       </button>
@@ -290,6 +411,73 @@ export default function Accounts() {
                       </button>
                     </div>
                   </div>
+
+                  
+                  {/* Q1: 結帳日提醒與一鍵結轉 */}
+                  {cc.statement_day && (cc.unbilled || 0) > 0 && new Date().getDate() >= cc.statement_day && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: 'rgba(255, 193, 7, 0.12)',
+                      border: '1px solid rgba(255, 193, 7, 0.35)',
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                      marginBottom: 10,
+                      fontSize: '0.82rem',
+                    }}>
+                      <span style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
+                        📅 每月 {cc.statement_day} 號結帳日已過，有未出帳待結轉！
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '0.75rem',
+                          background: 'var(--color-warning)',
+                          color: '#000',
+                          fontWeight: 700,
+                          borderRadius: 6,
+                          border: 'none',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => handleRollover(cc)}
+                      >
+                        一鍵出帳
+                      </button>
+                    </div>
+                  )}
+
+                  
+                  {/* 欠款公私拆解標籤 */}
+                  {totalDue > 0 && (
+                    <div style={{
+                      background: 'var(--bg-surface-2)',
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                      marginBottom: 10,
+                      border: '1px solid var(--border-color)',
+                      fontSize: '0.82rem',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span className="text-muted" style={{ fontWeight: 500 }}>欠款公私拆解</span>
+                        <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
+                          {cc.shared_debt ? Math.round(((cc.shared_debt || 0) / totalDue) * 100) : 0}% 家庭公帳
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>🏠 家庭公帳：</span>
+                          <strong>{formatCurrency(cc.shared_debt || 0)}</strong>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>👤 個人私帳：</span>
+                          <strong>{formatCurrency(cc.personal_debt || 0)}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-2" style={{ gap: 10, marginBottom: 12 }}>
                     <div style={{ background: 'var(--bg-surface-2)', padding: '8px 12px', borderRadius: 8 }}>
@@ -324,6 +512,221 @@ export default function Accounts() {
           </div>
         )}
       </div>
+
+
+      {/* 繳納卡費 Modal */}
+      {payCardModal && (
+        <Modal
+          title={`繳納信用卡費 — ${payCardModal.name}`}
+          onClose={() => setPayCardModal(null)}
+        >
+          {payError && (
+            <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, color: 'var(--color-danger)', fontSize: '0.85rem' }}>
+              {payError}
+            </div>
+          )}
+
+          {/* 欠款明細卡片 */}
+          <div style={{
+            background: 'var(--bg-surface-2)',
+            borderRadius: 12,
+            padding: '14px 16px',
+            marginBottom: 16,
+            border: '1px solid var(--border-color)',
+            borderLeft: `4px solid ${payCardModal.color || 'var(--color-danger)'}`
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>待繳卡費總額</span>
+              <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--color-danger)' }}>
+                {formatCurrency((payCardModal.balance || 0) + (payCardModal.unbilled || 0))}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 16, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <div>已出帳待繳：<strong style={{ color: 'var(--color-danger)' }}>{formatCurrency(payCardModal.balance || 0)}</strong></div>
+              <div>未出帳消費：<strong style={{ color: 'var(--color-warning)' }}>{formatCurrency(payCardModal.unbilled || 0)}</strong></div>
+              <div>🏠 公帳代墊：<strong style={{ color: 'var(--color-primary)' }}>{formatCurrency(payCardModal.shared_debt || 0)}</strong></div>
+              <div>👤 個人私帳：<strong>{formatCurrency(payCardModal.personal_debt || 0)}</strong></div>
+            </div>
+          </div>
+
+          <form onSubmit={handlePaySubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* 扣款來源帳戶 */}
+            <div className="input-group">
+              <label className="input-label">扣款銀行 / 現金帳戶</label>
+              <select
+                id="pay-bank-select"
+                className="input"
+                required
+                value={payForm.bank_account_id}
+                onChange={e => setPayForm(p => ({ ...p, bank_account_id: e.target.value }))}
+              >
+                <option value="" disabled>請選擇扣款帳戶</option>
+                {bankAccounts.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}（可用餘額：{formatCurrency(b.balance)}）
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 繳款金額 */}
+            <div className="input-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label className="input-label" style={{ marginBottom: 0 }}>繳費金額 (NT$)</label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  
+                  {(payCardModal.shared_debt || 0) > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '0.75rem', background: 'rgba(59,130,246,0.12)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 6 }}
+                      onClick={() => {
+                        setPayForm(p => ({
+                          ...p,
+                          amount: (payCardModal.shared_debt || 0).toString(),
+                          is_shared: 1,
+                          bank_account_id: bankAccounts.find(b => b.is_joint === 1)?.id || p.bank_account_id
+                        }))
+                      }}
+                    >
+                      🏠 繳家庭代墊 {formatCurrency(payCardModal.shared_debt || 0)}
+                    </button>
+                  )}
+                  {(payCardModal.personal_debt || 0) > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '0.75rem', background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6 }}
+                      onClick={() => {
+                        setPayForm(p => ({
+                          ...p,
+                          amount: (payCardModal.personal_debt || 0).toString(),
+                          is_shared: 0,
+                          bank_account_id: bankAccounts.find(b => b.is_joint !== 1)?.id || p.bank_account_id
+                        }))
+                      }}
+                    >
+                      👤 繳個人私帳 {formatCurrency(payCardModal.personal_debt || 0)}
+                    </button>
+                  )}
+
+                  {(payCardModal.balance || 0) > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '0.75rem', background: 'var(--bg-surface-2)', border: '1px solid var(--border-color)', borderRadius: 6 }}
+                      onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.balance || 0).toString() }))}
+                    >
+                      繳已出帳 {formatCurrency(payCardModal.balance || 0)}
+                    </button>
+                  )}
+                  {((payCardModal.balance || 0) + (payCardModal.unbilled || 0)) > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '0.75rem', background: 'rgba(92,124,250,0.1)', color: 'var(--color-primary)', border: '1px solid rgba(92,124,250,0.3)', borderRadius: 6 }}
+                      onClick={() => setPayForm(p => ({ ...p, amount: ((payCardModal.balance || 0) + (payCardModal.unbilled || 0)).toString() }))}
+                    >
+                      全額結清 {formatCurrency((payCardModal.balance || 0) + (payCardModal.unbilled || 0))}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <input
+                id="pay-amount"
+                className="input"
+                type="number"
+                step="1"
+                min="1"
+                placeholder="請輸入繳款金額"
+                required
+                value={payForm.amount}
+                onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))}
+              />
+            </div>
+
+            {/* 扣款日期 */}
+            <div className="input-group">
+              <label className="input-label">扣款日期</label>
+              <input
+                id="pay-date"
+                className="input"
+                type="date"
+                required
+                value={payForm.date}
+                onChange={e => setPayForm(p => ({ ...p, date: e.target.value }))}
+              />
+            </div>
+
+            
+            {/* 還款紀錄歸屬選擇 */}
+            <div className="input-group">
+              <label className="input-label">還款帳務歸屬</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className={`btn btn-full ${payForm.is_shared === 1 ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: '0.85rem', padding: '8px' }}
+                  onClick={() => setPayForm(p => ({ ...p, is_shared: 1 }))}
+                >
+                  🏠 家庭公帳（共同基金沖銷）
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-full ${payForm.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: '0.85rem', padding: '8px' }}
+                  onClick={() => setPayForm(p => ({ ...p, is_shared: 0 }))}
+                >
+                  👤 個人私帳（自付薪轉）
+                </button>
+              </div>
+            </div>
+
+            {/* 備註說明 */}
+            <div className="input-group">
+              <label className="input-label">備註說明 (選填)</label>
+              <input
+                id="pay-note"
+                className="input"
+                type="text"
+                placeholder={`繳納【${payCardModal.name}】卡費`}
+                value={payForm.note}
+                onChange={e => setPayForm(p => ({ ...p, note: e.target.value }))}
+              />
+            </div>
+
+            {/* 會計提示說明 */}
+            <div style={{
+              background: 'rgba(92, 124, 250, 0.08)',
+              border: '1px solid rgba(92, 124, 250, 0.25)',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontSize: '0.82rem',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.5
+            }}>
+              💡 <strong>會計帳務說明：</strong>
+              繳納卡費屬於內部資金轉移沖銷，系統將自動自扣款銀行扣減存款，並沖銷信用卡欠款。此筆還款<strong>不會重複計入本月生活消費支出</strong>。
+            </div>
+
+            {payCardModal && parseFloat(payForm.amount) > ((payCardModal.balance || 0) + (payCardModal.unbilled || 0)) && (
+              <div style={{ color: 'var(--color-danger)', fontSize: '0.82rem', marginTop: -6 }}>
+                ⚠️ 繳款金額不可超過當前待繳總額 NT$ {formatCurrency((payCardModal.balance || 0) + (payCardModal.unbilled || 0))}
+              </div>
+            )}
+
+            <button
+              id="pay-submit"
+              type="submit"
+              className="btn btn-primary btn-full btn-lg"
+              disabled={paying || (!!payCardModal && parseFloat(payForm.amount) > ((payCardModal.balance || 0) + (payCardModal.unbilled || 0)))}
+              style={{ marginTop: 8 }}
+            >
+              {paying ? '繳款處理中…' : '確認扣款繳納'}
+            </button>
+          </form>
+        </Modal>
+      )}
 
       {/* 新增/編輯 Modal */}
       {showModal && (
@@ -447,6 +850,23 @@ export default function Accounts() {
                   </div>
                 </div>
               </>
+            )}
+
+            
+            {/* 家庭共同基金設定 */}
+            {form.type === 'bank' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: 'var(--bg-surface-2)', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <input
+                  id="acc-is-joint"
+                  type="checkbox"
+                  checked={form.is_joint === 1}
+                  onChange={e => setForm(p => ({ ...p, is_joint: e.target.checked ? 1 : 0 }))}
+                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>
+                  設為家庭共同基金帳戶 🏠（供家庭公帳採買扣款或代墊請款報銷）
+                </span>
+              </label>
             )}
 
             {/* 標籤顏色 */}

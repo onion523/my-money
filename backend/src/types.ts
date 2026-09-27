@@ -27,6 +27,9 @@ export interface Account {
   payment_due_day?: number;
   unbilled: number;
   color: string;
+  is_joint?: number;
+  shared_debt?: number;
+  personal_debt?: number;
   created_at: string;
 }
 

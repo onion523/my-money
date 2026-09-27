@@ -21,7 +21,7 @@ exportRouter.get('/csv', async (c) => {
   const BOM = '\uFEFF';
   const header = '日期,類型,分類,金額,備註,帳戶\n';
   const body = items.map(r =>
-    `${r.date},${r.type === 'income' ? '收入' : '支出'},${r.category},${r.amount},"${(r.note || '').replace(/"/g, '""')}",${r.account || ''}`
+    `${r.date},${r.type === 'income' ? '收入' : '支出'},"${(r.category || '').replace(/"/g, '""')}",${r.amount},"${(r.note || '').replace(/"/g, '""')}","${(r.account || '').replace(/"/g, '""')}"`
   ).join('\n');
   const csv = BOM + header + body;
   

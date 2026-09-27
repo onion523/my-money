@@ -50,6 +50,7 @@ export const authApi = {
     post<{ token: string; user: { id: string; email: string; name: string } }>('/auth/login', body),
   register: (body: { email: string; password: string; name: string }) =>
     post<{ token: string; user: { id: string; email: string; name: string } }>('/auth/register', body),
+  deleteAccount: () => del<{ message: string }>('/auth/account'),
 };
 
 // Accounts
@@ -59,6 +60,20 @@ export const accountsApi = {
   create: (body: Partial<Account>) => post<Account>('/accounts', body),
   update: (id: string, body: Partial<Account>) => put<Account>(`/accounts/${id}`, body),
   remove: (id: string) => del<null>(`/accounts/${id}`),
+  rolloverStatement: (id: string) => post<{ id: string; balance: number; unbilled: number; message: string }>(`/accounts/${id}/rollover-statement`),
+  payCreditCard: (body: {
+    bank_account_id: string;
+    credit_card_id: string;
+    amount: number;
+    date?: string;
+    note?: string;
+    is_shared?: number;
+  }) => post<{
+    transaction: Transaction;
+    bank_balance: number;
+    card_balance: number;
+    card_unbilled: number;
+  }>('/accounts/pay-credit-card', body),
 };
 
 // Transactions
@@ -172,6 +187,9 @@ export interface Account {
   payment_due_day?: number | null;
   unbilled: number;
   color: string;
+  is_joint?: number;
+  shared_debt?: number;
+  personal_debt?: number;
   created_at: string;
   owner_name?: string;
 }

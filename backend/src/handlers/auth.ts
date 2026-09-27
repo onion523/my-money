@@ -1,6 +1,6 @@
 ﻿import { Hono } from 'hono';
 import { Env } from '../types';
-import { hashPassword, generateSalt, generateId, createJWT } from '../middleware/jwt';
+import { hashPassword, generateSalt, generateId, createJWT, authMiddleware } from '../middleware/jwt';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -37,6 +37,19 @@ auth.post('/login', async (c) => {
 
   const token = await createJWT({ sub: user.id, email: user.email, name: user.name }, c.env.JWT_SECRET || 'dev-secret-key');
   return c.json({ success: true, data: { token, user: { id: user.id, email: user.email, name: user.name } } });
+});
+
+
+// DELETE /auth/account (App Store Review Guideline 5.1.1(v) 要求)
+auth.delete('/account', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+  const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first();
+  if (!user) return c.json({ success: false, error: '帳號不存在' }, 404);
+
+  // 刪除用戶 (外鍵 ON DELETE CASCADE 會自動連帶清除帳戶、交易、目標、預算、綁定等全部資料)
+  await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+
+  return c.json({ success: true, message: '帳號及其所有個人資料已全數刪除' });
 });
 
 export default auth;
