@@ -62,3 +62,14 @@ export const ACCOUNT_COLORS = [
   '#FF8A8A', '#FFD4A0', '#A8D8EA', '#95E1D3',
   '#F38181', '#FCE38A', '#EAFFD0', '#C9D6FF'
 ];
+
+export function formatLocalDate(utcDateStr?: string): string {
+  if (!utcDateStr) return '';
+  let iso = utcDateStr;
+  if (!iso.includes('T') && !iso.endsWith('Z')) {
+    iso = iso.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return utcDateStr.slice(0, 10);
+  return d.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}

@@ -31,6 +31,7 @@ import {
   ResponsiveContainer
 } from 'recharts'
 import {
+  AlertCircle,
   PieChart as PieIcon,
   BarChart2,
   TrendingUp,
@@ -57,6 +58,7 @@ export default function Analytics() {
   const [budgets, setBudgets] = useState<BudgetWithSpent[]>([])
   const [householdShares, setHouseholdShares] = useState<Array<{ user_id: string; user_name: string; total: number }>>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // 預算設定 Modal
   const [showBudgetModal, setShowBudgetModal] = useState(false)
@@ -67,18 +69,20 @@ export default function Analytics() {
   const loadData = async (month: string, currentScope: 'all' | 'household' | 'personal') => {
     try {
       setLoading(true)
+      setLoadError(null)
       const [sum, mStats, buds, shares] = await Promise.all([
-        txApi.summary(month, currentScope).catch(() => []),
-        txApi.monthly(undefined, currentScope).catch(() => []),
-        budgetsApi.list(month).catch(() => []),
-        txApi.householdShares(month).catch(() => []),
+        txApi.summary(month, currentScope),
+        txApi.monthly(undefined, currentScope),
+        budgetsApi.list(month),
+        txApi.householdShares(month),
       ])
       setCatSummary(sum)
       setMonthlyStats(mStats)
       setBudgets(buds)
       setHouseholdShares(shares)
-    } catch (e) {
-      console.error(e)
+    } catch (e: any) {
+      console.error('Failed to load analytics data:', e)
+      setLoadError(e.message || '統計資料載入失敗，請檢查連線')
     } finally {
       setLoading(false)
     }
@@ -141,6 +145,21 @@ export default function Analytics() {
 
   return (
     <div className="fade-in">
+      {loadError && (
+        <div className="alert alert-danger flex items-center justify-between" style={{ marginBottom: 20 }}>
+          <div className="flex items-center gap-2">
+            <AlertCircle size={18} />
+            <span>⚠️ <strong>統計資料載入失敗</strong>：{loadError}</span>
+          </div>
+          <button
+            className="btn btn-secondary"
+            onClick={() => loadData(currentMonth, scope)}
+            style={{ padding: '4px 12px', fontSize: '0.85rem' }}
+          >
+            重新嘗試
+          </button>
+        </div>
+      )}
       {/* 標題與月份切換 */}
       <div className="page-header-row">
         <div>

@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICON
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
 import {
+  AlertCircle,
   Wallet,
   PiggyBank,
   TrendingDown,
@@ -47,19 +48,21 @@ export default function Dashboard() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const loadData = async (scope = viewScope) => {
     try {
       setLoading(true)
+      setLoadError(null)
       const currentYear = thisMonth().slice(0, 4);
       const [bal, accs, txs, buds, rec, g, monthlyStats] = await Promise.all([
-        accountsApi.balance(scope).catch(() => null),
-        accountsApi.list(scope).catch(() => []),
-        txApi.list({ limit: '10', scope }).catch(() => []),
-        budgetsApi.list().catch(() => []),
-        recurringApi.list().catch(() => []),
-        goalsApi.list().catch(() => []),
-        txApi.monthly(currentYear, scope).catch(() => []),
+        accountsApi.balance(scope),
+        accountsApi.list(scope),
+        txApi.list({ limit: '10', scope }),
+        budgetsApi.list(),
+        recurringApi.list(),
+        goalsApi.list(),
+        txApi.monthly(currentYear, scope),
       ])
 
       if (bal) setBalance(bal)
@@ -73,8 +76,9 @@ export default function Dashboard() {
       if (accs.length > 0 && !form.account_id) {
         setForm(p => ({ ...p, account_id: accs[0].id }))
       }
-    } catch (e) {
-      console.error(e)
+    } catch (e: any) {
+      console.error('Failed to load dashboard data:', e)
+      setLoadError(e.message || '資料載入失敗，請檢查網路連線或伺服器狀態')
     } finally {
       setLoading(false)
     }
@@ -146,6 +150,21 @@ export default function Dashboard() {
 
   return (
     <div className="fade-in">
+      {loadError && (
+        <div className="alert alert-danger flex items-center justify-between" style={{ marginBottom: 20 }}>
+          <div className="flex items-center gap-2">
+            <AlertCircle size={18} />
+            <span>⚠️ <strong>資料載入失敗</strong>：{loadError}</span>
+          </div>
+          <button
+            className="btn btn-secondary"
+            onClick={() => loadData(viewScope)}
+            style={{ padding: '4px 12px', fontSize: '0.85rem' }}
+          >
+            重新嘗試
+          </button>
+        </div>
+      )}
       {/* 頁面標題 */}
       <div className="page-header-row">
         <div>

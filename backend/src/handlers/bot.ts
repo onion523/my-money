@@ -1,3 +1,4 @@
+import { getTaipeiDateString } from '../utils/date';
 ﻿import { Hono } from 'hono';
 import { Env, BotBinding, Transaction, Account } from '../types';
 import { authMiddleware, generateId } from '../middleware/jwt';
@@ -144,7 +145,8 @@ async function handleBotAction(
   platform: 'line' | 'telegram',
   platformUserId: string,
   text: string,
-  displayName = ''
+  displayName = '',
+  directUserId?: string
 ): Promise<string> {
   const parsed = parseNaturalMessage(text);
 
@@ -173,19 +175,24 @@ async function handleBotAction(
     return '🎉 綁定成功！\n\n您現在可以直接發送文字快速記帳：\n• 輸入「午餐 120」\n• 輸入「計程車 250 信用卡」\n• 輸入「薪水 70000 銀行」\n• 輸入「餘額」查詢即時資金！';
   }
 
-  // 2. 檢查使用者是否已綁定
-  const binding = await db.prepare(`
-    SELECT b.user_id, u.name as user_name
-    FROM bot_bindings b
-    JOIN users u ON b.user_id = u.id
-    WHERE b.platform = ? AND b.platform_user_id = ?
-  `).bind(platform, platformUserId).first<{ user_id: string; user_name: string }>();
+  // 2. 檢查使用者是否已綁定 (或由測試模擬直接傳入 userId)
+  let userId = directUserId;
+  let userName = displayName || '用戶';
 
-  if (!binding) {
-    return '👋 您好！您尚未綁定「我的記帳本」帳號。\n\n請依以下步驟完成設定：\n1. 開啟記帳網站登入您的帳號\n2. 點擊「機器人串接」並產生 6 位數配對碼\n3. 在此輸入「綁定 <code>」（例如：綁定 8K29M4）\n完成後即可開始智慧記帳！';
+  if (!userId) {
+    const binding = await db.prepare(`
+      SELECT b.user_id, u.name as user_name
+      FROM bot_bindings b
+      JOIN users u ON b.user_id = u.id
+      WHERE b.platform = ? AND b.platform_user_id = ?
+    `).bind(platform, platformUserId).first<{ user_id: string; user_name: string }>();
+
+    if (!binding) {
+      return '👋 您好！您尚未綁定「我的記帳本」帳號。\n\n請依以下步驟完成設定：\n1. 開啟記帳網站登入您的帳號\n2. 點擊「機器人串接」並產生 6 位數配對碼\n3. 在此輸入「綁定 <code>」（例如：綁定 8K29M4）\n完成後即可開始智慧記帳！';
+    }
+    userId = binding.user_id;
+    userName = binding.user_name;
   }
-
-  const userId = binding.user_id;
 
   // 3. 處理幫助說明
   if (parsed.type === 'help') {
@@ -198,7 +205,7 @@ async function handleBotAction(
       `【查帳功能】\n` +
       `• 輸入「餘額」或「查帳」：查看即時可用與可自由花用餘額\n\n` +
       `【目前綁定帳號】\n` +
-      `• ${binding.user_name}`;
+      `• ${userName}`;
   }
 
   // 4. 處理查帳 / 餘額
@@ -265,7 +272,7 @@ async function handleBotAction(
     }
 
     const txId = generateId();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTaipeiDateString();
     const amount = parsed.amount!;
     const category = parsed.category!;
     const note = parsed.note || '';
@@ -307,7 +314,7 @@ async function handleBotAction(
       `▫️ 分類：${emojiMap[category] || '📌'} ${category}\n` +
       `▫️ 金額：NT$ ${amount.toLocaleString()}\n` +
       `▫️ 帳戶：${targetAccount.name}\n` +
-      `▫️ 記帳人：${binding.user_name}\n` +
+      `▫️ 記帳人：${userName}\n` +
       `━━━━━━━━━━━━━━━\n` +
       `💰 目前可用餘額：NT$ ${currentAvailable.toLocaleString()}`;
   }
@@ -386,19 +393,13 @@ bot.post('/webhook/telegram', async (c) => {
 // 測試用模擬訊息發送端點（方便使用者在前端或開發測試 Bot 對話）
 bot.post('/test-simulate', authMiddleware, async (c) => {
   const userId = c.get('userId');
+  const user = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(userId).first<{ name: string }>();
+  const userName = user?.name || '模擬測試助手';
   const { text, platform = 'line' } = await c.req.json();
   if (!text) return c.json({ success: false, error: '請輸入測試訊息' }, 400);
 
-  // 找或創模擬平台 ID
-  const simulatedId = `sim_${userId}`;
-  // 自動綁定模擬 ID
-  const existing = await c.env.DB.prepare('SELECT id FROM bot_bindings WHERE platform_user_id = ?').bind(simulatedId).first();
-  if (!existing) {
-    await c.env.DB.prepare('INSERT INTO bot_bindings (id, user_id, platform, platform_user_id, display_name) VALUES (?, ?, ?, ?, ?)')
-      .bind(generateId(), userId, platform, simulatedId, '模擬測試助手').run();
-  }
-
-  const reply = await handleBotAction(c.env.DB, platform as any, simulatedId, text);
+  // 直接以認證通過之 userId 處理，不向 bot_bindings 寫入任何模擬假綁定資料
+  const reply = await handleBotAction(c.env.DB, platform as any, `sim_${userId}`, text, userName, userId);
   return c.json({ success: true, data: { input: text, reply } });
 });
 

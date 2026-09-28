@@ -27,10 +27,14 @@ goals.put('/:id', async (c) => {
   const userId = c.get('userId');
   const { id } = c.req.param();
   const { name, emoji, target_amount, monthly_reserve, deadline } = await c.req.json();
-  const existing = await c.env.DB.prepare('SELECT id FROM goals WHERE id = ? AND user_id = ?').bind(id, userId).first();
+  const existing = await c.env.DB.prepare('SELECT * FROM goals WHERE id = ? AND user_id = ?').bind(id, userId).first<{ saved_amount: number }>();
   if (!existing) return c.json({ success: false, error: '目標不存在' }, 404);
-  await c.env.DB.prepare('UPDATE goals SET name=?, emoji=?, target_amount=?, monthly_reserve=?, deadline=? WHERE id=? AND user_id=?')
-    .bind(name, emoji, target_amount, monthly_reserve, deadline ?? null, id, userId).run();
+  
+  const targetAmt = Number(target_amount);
+  const newSaved = Math.min(existing.saved_amount, targetAmt);
+
+  await c.env.DB.prepare('UPDATE goals SET name=?, emoji=?, target_amount=?, saved_amount=?, monthly_reserve=?, deadline=? WHERE id=? AND user_id=?')
+    .bind(name, emoji, targetAmt, newSaved, monthly_reserve, deadline ?? null, id, userId).run();
   const row = await c.env.DB.prepare('SELECT * FROM goals WHERE id = ?').bind(id).first();
   return c.json({ success: true, data: row });
 });

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { householdApi, HouseholdData, HouseholdMember, HouseholdAdvance, accountsApi, Account } from '../api/client'
-import { formatCurrency, today } from '../components/utils'
+import { formatCurrency, today, formatLocalDate } from '../components/utils'
 import Modal from '../components/Modal'
 import {
   Users,
@@ -664,7 +664,7 @@ export default function Family() {
                       <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)', marginTop: 2 }}>
                         <span><Mail size={12} style={{ display: 'inline', marginRight: 2 }} />{member.email}</span>
                         <span>•</span>
-                        <span>加入時間：{member.joined_at.slice(0, 10)}</span>
+                        <span>加入時間：{formatLocalDate(member.joined_at)}</span>
                       </div>
                     </div>
                   </div>

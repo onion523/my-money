@@ -1,6 +1,7 @@
 ﻿import { Hono } from 'hono';
 import { Env, RecurringItem } from '../types';
 import { authMiddleware } from '../middleware/jwt';
+import { getTaipeiDateString, getTaipeiForecastDays } from '../utils/date';
 
 type Vars = { userId: string; userEmail: string; userName: string };
 const forecast = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -10,17 +11,16 @@ const CYCLE_MONTHS: Record<string, number> = { monthly:1, bimonthly:2, quarterly
 
 function getDaysInForecast(items: RecurringItem[], days = 30): Array<{ date: string; name: string; type: string; amount: number }> {
   const events: Array<{ date: string; name: string; type: string; amount: number }> = [];
-  const today = new Date();
-  for (let d = 0; d < days; d++) {
-    const dt = new Date(today);
-    dt.setDate(today.getDate() + d);
-    const dom = dt.getDate();
-    const month = dt.getMonth() + 1;
+  const forecastDays = getTaipeiForecastDays(days);
+
+  for (const dayObj of forecastDays) {
+    const dom = dayObj.day;
+    const month = dayObj.month;
     for (const item of items) {
       const cycleM = CYCLE_MONTHS[item.cycle] || 1;
       const trigger = item.day_of_cycle;
       if (dom === trigger && month % cycleM === 0) {
-        events.push({ date: dt.toISOString().slice(0, 10), name: item.name, type: item.type, amount: item.amount });
+        events.push({ date: dayObj.dateStr, name: item.name, type: item.type, amount: item.amount });
       }
     }
   }
@@ -42,15 +42,13 @@ forecast.get('/', async (c) => {
   const events = getDaysInForecast(items, 30);
 
   // 逐日模擬
-  const today = new Date();
+  const forecastDays = getTaipeiForecastDays(30);
   const dailyBalances: Array<{ date: string; balance: number; events: typeof events }> = [];
   let minBalance = balance;
   let minDate = '';
 
   for (let d = 0; d < 30; d++) {
-    const dt = new Date(today);
-    dt.setDate(today.getDate() + d);
-    const dateStr = dt.toISOString().slice(0, 10);
+    const dateStr = forecastDays[d].dateStr;
     const dayEvents = events.filter(e => e.date === dateStr);
     dayEvents.forEach(e => { balance += e.type === 'income' ? e.amount : -e.amount; });
     if (balance < minBalance) { minBalance = balance; minDate = dateStr; }

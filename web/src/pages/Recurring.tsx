@@ -3,6 +3,7 @@ import { recurringApi, accountsApi, exportApi, RecurringItem, Account, AmortizeR
 import { formatCurrency, CYCLE_LABELS } from '../components/utils'
 import Modal from '../components/Modal'
 import {
+  AlertCircle,
   Plus,
   Download,
   Edit2,
@@ -42,20 +43,23 @@ export default function Recurring() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const loadData = async () => {
     try {
       setLoading(true)
+      setLoadError(null)
       const [recList, accs, amort] = await Promise.all([
         recurringApi.list(),
         accountsApi.list(),
-        recurringApi.amortize().catch(() => null),
+        recurringApi.amortize(),
       ])
       setItems(recList)
       setAccounts(accs)
       if (amort) setAmortize(amort)
-    } catch (err) {
-      console.error(err)
+    } catch (err: any) {
+      console.error('Failed to load recurring data:', err)
+      setLoadError(err.message || '固定收支資料載入失敗，請檢查連線')
     } finally {
       setLoading(false)
     }
@@ -152,6 +156,21 @@ export default function Recurring() {
 
   return (
     <div className="fade-in">
+      {loadError && (
+        <div className="alert alert-danger flex items-center justify-between" style={{ marginBottom: 20 }}>
+          <div className="flex items-center gap-2">
+            <AlertCircle size={18} />
+            <span>⚠️ <strong>固定收支資料載入失敗</strong>：{loadError}</span>
+          </div>
+          <button
+            className="btn btn-secondary"
+            onClick={() => loadData()}
+            style={{ padding: '4px 12px', fontSize: '0.85rem' }}
+          >
+            重新嘗試
+          </button>
+        </div>
+      )}
       {/* 標題與操作按鈕 */}
       <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
         <div>
