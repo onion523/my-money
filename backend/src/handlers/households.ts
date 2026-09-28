@@ -1,3 +1,4 @@
+import { getTaipeiDateString } from '../utils/date';
 ﻿import { Hono } from 'hono';
 import { Env, Household, HouseholdMember } from '../types';
 import { authMiddleware, generateId } from '../middleware/jwt';
@@ -257,6 +258,14 @@ households.get('/advances', async (c) => {
     const totalReimbursed = reimbRow?.total || 0;
     const pendingReimburse = Math.max(0, totalAdvanced - totalReimbursed);
 
+    // 該成員可用於收款之個人正資產私帳（脫敏處理，僅揭示 id, name, type，嚴格隱藏 balance 等金額）
+    const receivingAccountsResult = await c.env.DB.prepare(`
+      SELECT id, name, type
+      FROM accounts
+      WHERE user_id = ? AND is_joint = 0 AND type IN ('bank', 'cash')
+      ORDER BY created_at ASC
+    `).bind(m.user_id).all();
+
     return {
       user_id: m.user_id,
       user_name: m.name,
@@ -265,7 +274,8 @@ households.get('/advances', async (c) => {
       total_reimbursed: totalReimbursed,
       pending_reimburse: pendingReimburse,
       advance_items: advanceItemsResult.results || [],
-      reimbursement_items: reimbItemsResult.results || []
+      reimbursement_items: reimbItemsResult.results || [],
+      receiving_accounts: receivingAccountsResult.results || []
     };
   }));
 
@@ -279,7 +289,7 @@ households.post('/reimburse', async (c) => {
   if (!household) return c.json({ success: false, error: '尚未建立或加入家庭群組' }, 400);
 
   const body = await c.req.json();
-  const { target_user_id, from_account_id, to_account_id, amount, date = new Date().toISOString().slice(0, 10), note = '' } = body;
+  const { target_user_id, from_account_id, to_account_id, amount, date = getTaipeiDateString(), note = '' } = body;
   const amt = Number(amount);
 
   if (!target_user_id || !from_account_id || !to_account_id || isNaN(amt) || amt <= 0) {

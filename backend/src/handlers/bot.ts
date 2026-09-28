@@ -213,13 +213,17 @@ async function handleBotAction(
     const { memberUserIds } = await getUserHousehold(db, userId);
     const placeholders = memberUserIds.map(() => '?').join(',');
 
-    const accRows = await db.prepare(`SELECT * FROM accounts WHERE user_id IN (${placeholders})`).bind(...memberUserIds).all<Account>();
+    const accRows = await db.prepare(`
+      SELECT * FROM accounts 
+      WHERE user_id = ? OR (user_id IN (${placeholders}) AND is_joint = 1)
+    `).bind(userId, ...memberUserIds).all<Account>();
     const accounts = accRows.results;
 
+    const cashTotal = accounts.filter(a => a.type === 'cash').reduce((s, a) => s + a.balance, 0);
     const bankTotal = accounts.filter(a => a.type === 'bank').reduce((s, a) => s + a.balance, 0);
     const ccBilled = accounts.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.balance, 0);
     const ccUnbilled = accounts.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.unbilled, 0);
-    const available = bankTotal - ccBilled - ccUnbilled;
+    const available = cashTotal + bankTotal - ccBilled - ccUnbilled;
 
     // 固定收支月攤提
     const recRows = await db.prepare(`SELECT * FROM recurring_items WHERE user_id IN (${placeholders})`).bind(...memberUserIds).all<any>();
@@ -236,7 +240,8 @@ async function handleBotAction(
 
     return `📊 即時財務總覽\n` +
       `━━━━━━━━━━━━━━━\n` +
-      `🏦 銀行總餘額：NT$ ${bankTotal.toLocaleString()}\n` +
+      `💵 隨身現金：NT$ ${cashTotal.toLocaleString()}\n` +
+      `🏦 銀行活存：NT$ ${bankTotal.toLocaleString()}\n` +
       `💳 信用卡未出帳：NT$ ${ccUnbilled.toLocaleString()}\n` +
       `✨ 即時可用餘額：NT$ ${available.toLocaleString()}\n` +
       `━━━━━━━━━━━━━━━\n` +

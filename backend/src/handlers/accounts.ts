@@ -1,3 +1,4 @@
+import { getTaipeiDateString } from '../utils/date';
 
 let accountsMigrated = false;
 async function ensureAccountsSchema(db: any) {
@@ -199,7 +200,7 @@ accounts.post('/pay-credit-card', async (c) => {
 
   // 3. 建立交易紀錄（記錄銀行支出，分類為「信用卡還款」）
   const txId = generateId();
-  const txDate = date || new Date().toISOString().slice(0, 10);
+  const txDate = date || getTaipeiDateString();
   const txNote = (note && note.trim()) ? note.trim() : `繳納【${card.name}】卡費`;
 
   await c.env.DB.prepare(
@@ -301,7 +302,7 @@ accounts.post('/transfer', async (c) => {
   const placeholders = memberUserIds.map(() => '?').join(',');
 
   const body = await c.req.json();
-  const { from_account_id, to_account_id, amount, date = new Date().toISOString().slice(0, 10), note = '' } = body;
+  const { from_account_id, to_account_id, amount, date = getTaipeiDateString(), note = '' } = body;
 
   const amt = Number(amount);
   if (!from_account_id || !to_account_id || isNaN(amt) || amt <= 0) {

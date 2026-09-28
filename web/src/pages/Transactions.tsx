@@ -187,8 +187,14 @@ export default function Transactions() {
   const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a))
 
   // 計算篩選之收支加總
-  const totalIncome = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-  const totalExpense = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+  // 計算篩選後收支總額 (預設排除內部轉帳等非實質收支；若使用者主動篩選該分類則統計該分類)
+  const SYSTEM_CATEGORIES = ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'];
+  const totalIncome = filtered
+    .filter(t => t.type === 'income' && (categoryFilter !== '全部' || !SYSTEM_CATEGORIES.includes(t.category)))
+    .reduce((s, t) => s + t.amount, 0);
+  const totalExpense = filtered
+    .filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !SYSTEM_CATEGORIES.includes(t.category)))
+    .reduce((s, t) => s + t.amount, 0);
 
   return (
     <div className="fade-in">

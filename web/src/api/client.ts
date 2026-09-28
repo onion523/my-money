@@ -365,6 +365,12 @@ export interface HouseholdReimbursementItem {
   account_name: string;
 }
 
+export interface ReceivingAccount {
+  id: string;
+  name: string;
+  type: 'bank' | 'cash';
+}
+
 export interface HouseholdAdvance {
   user_id: string;
   user_name: string;
@@ -374,6 +380,7 @@ export interface HouseholdAdvance {
   pending_reimburse: number;
   advance_items?: HouseholdAdvanceItem[];
   reimbursement_items?: HouseholdReimbursementItem[];
+  receiving_accounts?: ReceivingAccount[];
 }
 
 export interface BotBinding {

@@ -462,7 +462,7 @@ export default function Recurring() {
                 <option value="">無特定帳戶</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.type === 'bank' ? '銀行' : '信用卡'})
+                    {acc.name} ({acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 銀行' : '💳 信用卡'})
                   </option>
                 ))}
               </select>

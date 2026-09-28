@@ -27,7 +27,7 @@ _Avoid_: 現金帳戶 (cash account)、活存帳戶 (deposit account)
 _Avoid_: 負債帳戶 (debt account)、卡片 (card)
 
 **Available Balance (淨可用餘額)**:
-名下活存銀行存款總額扣除所有信用卡總欠款（已出帳與未出帳）後的實質淨可用資產。
+名下隨身現金錢包與活存銀行存款總額，扣除所有信用卡總欠款（已出帳與未出帳）後的實質淨可用資產。
 _Avoid_: 淨值 (net worth)、可用額度 (credit limit)、總餘額 (total balance)
 
 **Disposable Cash (真實可支配現金)**:

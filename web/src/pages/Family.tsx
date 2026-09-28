@@ -114,7 +114,7 @@ export default function Family() {
   const handleOpenReimburse = (adv: any) => {
     setReimburseModalTarget(adv)
     const defaultJoint = jointAccounts.find(a => a.balance >= adv.pending_reimburse) || jointAccounts[0]
-    const memberPersonalAccounts = allAccounts.filter(a => a.user_id === adv.user_id && a.is_joint === 0)
+    const memberPersonalAccounts = adv.receiving_accounts || []
     const defaultTo = memberPersonalAccounts[0]
 
     setReimburseForm({
@@ -758,9 +758,9 @@ export default function Family() {
                 required
               >
                 <option value="">-- 請選擇收款個人帳戶 --</option>
-                {allAccounts.filter(a => a.user_id === reimburseModalTarget.user_id && a.is_joint === 0).map(a => (
+                {(reimburseModalTarget.receiving_accounts || []).map((a: any) => (
                   <option key={a.id} value={a.id}>
-                    {a.type === 'cash' ? '💵 現金' : '🏦 銀行'} - {a.name} (目前餘額: {formatCurrency(a.balance)})
+                    {a.type === 'cash' ? '💵 現金' : '🏦 銀行'} - {a.name}
                   </option>
                 ))}
               </select>

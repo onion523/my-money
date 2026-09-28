@@ -32,10 +32,11 @@ forecast.get('/', async (c) => {
   const userId = c.get('userId');
   const accs = await c.env.DB.prepare('SELECT * FROM accounts WHERE user_id = ?').bind(userId).all();
   const accList = accs.results as Array<{ type: string; balance: number; unbilled: number }>;
+  const cashTotal = accList.filter(a => a.type === 'cash').reduce((s, a) => s + a.balance, 0);
   const bankTotal = accList.filter(a => a.type === 'bank').reduce((s, a) => s + a.balance, 0);
   const ccBilled = accList.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.balance, 0);
   const ccUnbilled = accList.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.unbilled, 0);
-  let balance = bankTotal - ccBilled - ccUnbilled;
+  let balance = cashTotal + bankTotal - ccBilled - ccUnbilled;
 
   const recRows = await c.env.DB.prepare('SELECT * FROM recurring_items WHERE user_id = ?').bind(userId).all();
   const items = recRows.results as unknown as RecurringItem[];
@@ -66,10 +67,11 @@ forecast.post('/purchase-check', async (c) => {
 
   const accs = await c.env.DB.prepare('SELECT * FROM accounts WHERE user_id = ?').bind(userId).all();
   const accList = accs.results as Array<{ type: string; balance: number; unbilled: number }>;
+  const cashTotal = accList.filter(a => a.type === 'cash').reduce((s, a) => s + a.balance, 0);
   const bankTotal = accList.filter(a => a.type === 'bank').reduce((s, a) => s + a.balance, 0);
   const ccBilled = accList.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.balance, 0);
   const ccUnbilled = accList.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.unbilled, 0);
-  let balance = bankTotal - ccBilled - ccUnbilled - amount;
+  let balance = cashTotal + bankTotal - ccBilled - ccUnbilled - amount;
 
   // 儲蓄目標影響
   const goals = await c.env.DB.prepare('SELECT * FROM goals WHERE user_id = ?').bind(userId).all();
@@ -84,7 +86,7 @@ forecast.post('/purchase-check', async (c) => {
   events.forEach(e => { balance += e.type === 'income' ? e.amount : -e.amount; if (balance < minBalance) minBalance = balance; });
 
   const willOverdraft = minBalance < 0;
-  const affectsSavings = affectedGoals.length > 0 && (bankTotal - ccBilled - ccUnbilled - amount) < affectedGoals.reduce((s, g) => s + g.monthly_reserve, 0);
+  const affectsSavings = affectedGoals.length > 0 && (cashTotal + bankTotal - ccBilled - ccUnbilled - amount) < affectedGoals.reduce((s, g) => s + g.monthly_reserve, 0);
   
   let verdict: 'safe' | 'caution' | 'danger';
   if (willOverdraft) verdict = 'danger';
