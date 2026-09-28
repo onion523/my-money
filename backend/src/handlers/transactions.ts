@@ -41,6 +41,23 @@ transactions.get('/', async (c) => {
 });
 
 // POST /transactions
+
+// 帳戶餘額與未出帳連動輔助函數 (支援新增、編輯與刪除回滾)
+async function syncAccountBalance(db: any, accountId: string, type: string, amount: number, isRevert: boolean = false) {
+  const acc = await db.prepare('SELECT id, type FROM accounts WHERE id = ?').bind(accountId).first();
+  if (!acc) return;
+  const amt = Number(amount);
+  const factor = isRevert ? -1 : 1;
+
+  if (acc.type === 'bank' || acc.type === 'cash') {
+    const delta = (type === 'income' ? amt : -amt) * factor;
+    await db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(delta, accountId).run();
+  } else if (acc.type === 'credit_card') {
+    const delta = (type === 'expense' ? amt : -amt) * factor;
+    await db.prepare('UPDATE accounts SET unbilled = MAX(0, unbilled + ?) WHERE id = ?').bind(delta, accountId).run();
+  }
+}
+
 transactions.post('/', async (c) => {
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
@@ -66,14 +83,7 @@ transactions.post('/', async (c) => {
   ).bind(id, userId, account_id, type, category, amount, note, date, is_shared).run();
 
   // 更新帳戶餘額
-  const amt = Number(amount);
-  if (acc.type === 'bank' || acc.type === 'cash') {
-    const delta = type === 'income' ? amt : -amt;
-    await c.env.DB.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(delta, account_id).run();
-  } else {
-    const delta = type === 'expense' ? amt : -amt;
-    await c.env.DB.prepare('UPDATE accounts SET unbilled = MAX(0, unbilled + ?) WHERE id = ?').bind(delta, account_id).run();
-  }
+  await syncAccountBalance(c.env.DB, account_id, type, amount, false);
 
   const row = await c.env.DB.prepare(`
     SELECT t.*, a.name as account_name, u.name as user_name
@@ -115,6 +125,16 @@ transactions.put('/:id', async (c) => {
     }, 400);
   }
 
+  // 驗證新帳戶權限
+  const newAcc = await c.env.DB.prepare(
+    `SELECT id, type FROM accounts WHERE id = ? AND user_id IN (${placeholders})`
+  ).bind(account_id, ...memberUserIds).first();
+  if (!newAcc) return c.json({ success: false, error: '目標帳戶不存在或無權限' }, 404);
+
+  // 雙向回滾舊帳戶並認列新帳戶餘額
+  await syncAccountBalance(c.env.DB, existing.account_id as string, existing.type as string, Number(existing.amount), true);
+  await syncAccountBalance(c.env.DB, account_id, type, Number(amount), false);
+
   await c.env.DB.prepare(
     'UPDATE transactions SET account_id = ?, type = ?, category = ?, amount = ?, note = ?, date = ?, is_shared = ? WHERE id = ?'
   ).bind(account_id, type, category, amount, note, date, is_shared, id).run();
@@ -150,6 +170,9 @@ transactions.delete('/:id', async (c) => {
       error: `「${existing.category}」為系統內部平帳/轉帳紀錄，受系統保護禁止直接刪除。若金額有誤，請至「帳戶管理」進行資金校正。`,
     }, 400);
   }
+
+  // 全額回滾帳戶餘額或未出帳負債
+  await syncAccountBalance(c.env.DB, existing.account_id as string, existing.type as string, Number(existing.amount), true);
 
   await c.env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run();
   return c.json({ success: true, data: null });

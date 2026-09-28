@@ -174,6 +174,24 @@ export default function Accounts() {
     }
   }
 
+  const [reconcilingCardId, setReconcilingCardId] = useState<string | null>(null)
+
+  const handleReconcile = async (card: Account) => {
+    if (!window.confirm(`確定要依據「${card.name}」的當期消費明細，自動校準未出帳金額嗎？`)) {
+      return
+    }
+    setReconcilingCardId(card.id)
+    try {
+      const res = await accountsApi.reconcileCreditCard(card.id)
+      alert(res.message || '校準成功！')
+      loadData()
+    } catch (err: any) {
+      alert(err.message || '校準失敗')
+    } finally {
+      setReconcilingCardId(null)
+    }
+  }
+
   const handleRollover = async (card: Account) => {
     if (!window.confirm(`確定要將「${card.name}」的未出帳消費 NT$ ${card.unbilled.toLocaleString()} 結轉為本期已出帳待繳嗎？`)) {
       return
@@ -662,16 +680,28 @@ export default function Accounts() {
                       <div>
                         <div className="flex items-center justify-between">
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>未出帳（累計消費）</span>
-                          {unbilled > 0 && (
+                          <div className="flex gap-xs">
                             <button
+                              id={`btn-reconcile-${card.id}`}
                               className="btn btn-xs btn-secondary"
                               style={{ padding: '1px 6px', fontSize: '0.7rem' }}
-                              title="結帳日出帳結轉"
-                              onClick={() => handleRollover(card)}
+                              title="依當前消費紀錄自動校準未出帳金額"
+                              onClick={() => handleReconcile(card)}
+                              disabled={reconcilingCardId === card.id}
                             >
-                              結轉
+                              {reconcilingCardId === card.id ? '校準中...' : '🔄 校準'}
                             </button>
-                          )}
+                            {unbilled > 0 && (
+                              <button
+                                className="btn btn-xs btn-secondary"
+                                style={{ padding: '1px 6px', fontSize: '0.7rem' }}
+                                title="結帳日出帳結轉"
+                                onClick={() => handleRollover(card)}
+                              >
+                                結轉
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div style={{ fontWeight: 600 }}>{formatCurrency(unbilled)}</div>
                       </div>

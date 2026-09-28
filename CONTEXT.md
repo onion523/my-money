@@ -10,6 +10,10 @@
 帳簿中記載特定日期的資金流入、流出或審計轉帳紀錄。
 _Avoid_: 記帳紀錄 (entry)、流水帳 (log)、紀錄 (record)
 
+**Transaction Balance Synchronization (交易餘額雙向連動)**:
+在建立、編輯 (PUT) 或刪除 (DELETE) 交易時，系統必須嚴格維持交易金額與所屬資產帳戶餘額／信用卡未出帳金額的雙向即時同步。若交易編輯時變更所屬帳戶，舊帳戶必須全額回滾原交易金額，新帳戶則扣抵／認列新交易金額；若僅變更金額，則按差額補退；刪除交易時則全額回滾該帳戶之餘額或未出帳負債。
+_Avoid_: 單向更新 (unilateral update)、非連動記帳 (detached logging)
+
 **Account (資產帳戶)**:
 存放資金之個別實體或數位載體，例如現金皮夾、活存銀行帳戶、信用卡帳戶。
 _Avoid_: 錢包 (wallet)、卡片 (card)、總帳 (ledger)
@@ -61,6 +65,10 @@ _Avoid_: 繳卡費 (card payment)、清償 (debt clearance)、轉帳支出 (tran
 **Statement Rollover (結帳日出帳作業)**:
 結帳日到達後，使用者確認並將累積之未出帳金額一次性移轉合併至已出帳待繳款的結算程序。
 _Avoid_: 帳單重算 (recalculation)、滾入下期 (carryover)、手動對帳 (manual reconciliation)
+
+**Credit Card Balance Reconciliation (信用卡未出帳自動校準)**:
+針對信用卡帳戶，使用者可一鍵自動依據當前掛在該卡底下、且屬於最近一次結帳日（Statement Day）後的有效消費交易總和，自動校準並覆蓋 unbilled 餘額，以消除因歷史更動造成的帳務差額，並精準復原公私帳刷卡分流（shared_debt 與 personal_debt）。
+_Avoid_: 暴力重算 (hard reset)、人工對帳 (manual audit)
 
 ---
 

@@ -61,6 +61,7 @@ export const accountsApi = {
   update: (id: string, body: Partial<Account>) => put<Account>(`/accounts/${id}`, body),
   remove: (id: string) => del<null>(`/accounts/${id}`),
   rolloverStatement: (id: string) => post<{ id: string; balance: number; unbilled: number; message: string }>(`/accounts/${id}/rollover-statement`),
+  reconcileCreditCard: (id: string) => post<{ id: string; name: string; balance: number; unbilled: number; shared_debt: number; personal_debt: number; message: string }>(`/accounts/${id}/reconcile`),
   payCreditCard: (body: {
     bank_account_id: string;
     credit_card_id: string;

@@ -121,11 +121,21 @@ accounts.put('/:id', async (c) => {
   const body = await c.req.json();
   const { name, balance, credit_limit, statement_day, payment_due_day, unbilled, color, is_joint } = body;
   await ensureAccountsSchema(c.env.DB);
-  const existing = await c.env.DB.prepare(`SELECT id FROM accounts WHERE id = ? AND user_id IN (${placeholders})`).bind(id, ...memberUserIds).first();
+  const existing = await c.env.DB.prepare(`SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders})`).bind(id, ...memberUserIds).first<any>();
   if (!existing) return c.json({ success: false, error: '帳戶不存在' }, 404);
   await c.env.DB.prepare(
     'UPDATE accounts SET name = ?, balance = ?, credit_limit = ?, statement_day = ?, payment_due_day = ?, unbilled = ?, color = ?, is_joint = ? WHERE id = ?'
-  ).bind(name, balance, credit_limit ?? null, statement_day ?? null, payment_due_day ?? null, unbilled, color, is_joint !== undefined ? (Number(is_joint) ? 1 : 0) : 0, id).run();
+  ).bind(
+    name ?? existing.name,
+    balance !== undefined ? balance : existing.balance,
+    credit_limit !== undefined ? (credit_limit ?? null) : existing.credit_limit,
+    statement_day !== undefined ? (statement_day ?? null) : existing.statement_day,
+    payment_due_day !== undefined ? (payment_due_day ?? null) : existing.payment_due_day,
+    unbilled !== undefined ? unbilled : existing.unbilled,
+    color ?? existing.color,
+    is_joint !== undefined ? (Number(is_joint) ? 1 : 0) : existing.is_joint,
+    id
+  ).run();
   const row = await c.env.DB.prepare('SELECT * FROM accounts WHERE id = ?').bind(id).first();
   return c.json({ success: true, data: row });
 });
@@ -255,6 +265,95 @@ accounts.post('/:id/rollover-statement', async (c) => {
     }
   });
 });
+
+// POST /accounts/:id/reconcile — 信用卡未出帳自動校準
+accounts.post('/:id/reconcile', async (c) => {
+  const userId = c.get('userId');
+  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  const placeholders = memberUserIds.map(() => '?').join(',');
+  const id = c.req.param('id');
+
+  const card = await c.env.DB.prepare(
+    `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
+  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null }>();
+
+  if (!card) return c.json({ success: false, error: '信用卡不存在或無權限' }, 404);
+
+  // 計算當期結帳週期起點
+  let dateFilter = '';
+  let sqlParams: (string | number)[] = [id];
+
+  if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
+    const taipeiDateStr = getTaipeiDateString();
+    const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
+
+    let statementYear = currYear;
+    let statementMonth = currMonth;
+
+    if (currDay <= card.statement_day) {
+      // 本月結帳日未到，以「上個月的結帳日」為週期起點
+      statementMonth -= 1;
+      if (statementMonth === 0) {
+        statementMonth = 12;
+        statementYear -= 1;
+      }
+    }
+    const lastDayOfMonth = new Date(statementYear, statementMonth, 0).getDate();
+    const day = Math.min(card.statement_day, lastDayOfMonth);
+    const statementDate = `${statementYear}-${String(statementMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    dateFilter = ' AND date > ?';
+    sqlParams.push(statementDate);
+  }
+
+  // 統計當期有效消費總額（排除內部轉帳、信用卡還款、ATM提款、公帳代墊報銷）
+  const sumRow = await c.env.DB.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total_unbilled
+    FROM transactions
+    WHERE account_id = ? AND type = 'expense'
+      AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+      ${dateFilter}
+  `).bind(...sqlParams).first<{ total_unbilled: number }>();
+
+  const newUnbilled = sumRow ? Number(sumRow.total_unbilled) : 0;
+
+  // 更新 accounts.unbilled
+  await c.env.DB.prepare('UPDATE accounts SET unbilled = ? WHERE id = ?')
+    .bind(newUnbilled, id).run();
+
+  // 重算 shared_debt 與 personal_debt
+  const totalDue = (card.balance || 0) + newUnbilled;
+  let shared = 0;
+  let personal = 0;
+  if (totalDue > 0) {
+    const txs = await c.env.DB.prepare(
+      "SELECT amount, is_shared FROM transactions WHERE account_id = ? AND type = 'expense' ORDER BY date DESC, created_at DESC LIMIT 50"
+    ).bind(card.id).all();
+    let remaining = totalDue;
+    for (const tx of (txs.results as Array<{ amount: number; is_shared: number }>)) {
+      if (remaining <= 0) break;
+      const take = Math.min(remaining, tx.amount);
+      if (tx.is_shared === 1) shared += take;
+      else personal += take;
+      remaining -= take;
+    }
+    if (remaining > 0) personal += remaining;
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      id,
+      name: card.name,
+      balance: card.balance,
+      unbilled: newUnbilled,
+      shared_debt: shared,
+      personal_debt: personal,
+      message: `已自動校準「${card.name}」未出帳金額為 NT$ ${newUnbilled.toLocaleString()}`,
+    }
+  });
+});
+
 
 // GET /accounts/balance 淨可用資金
 accounts.get('/balance', async (c) => {
