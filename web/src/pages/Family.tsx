@@ -72,7 +72,7 @@ export default function Family() {
       setData(res)
       setAdvances(advList || [])
       setAllAccounts(accs || [])
-      setJointAccounts((accs || []).filter(a => a.is_joint === 1))
+      setJointAccounts((accs || []).filter(a => a.is_joint === 1 && (a.type === 'bank' || a.type === 'cash')))
       if (res.activeInvitation) {
         setInviteCode(res.activeInvitation.code)
         setInviteExpires(res.activeInvitation.expires_at)
@@ -104,7 +104,7 @@ export default function Family() {
       setCreateName('')
       await loadData()
     } catch (err: any) {
-      alert(err.message || '建立家庭失敗')
+      alert(err.message || '建立家庭群組失敗')
     } finally {
       setCreating(false)
     }
@@ -122,7 +122,7 @@ export default function Family() {
       to_account_id: defaultTo ? defaultTo.id : '',
       amount: adv.pending_reimburse.toString(),
       date: today(),
-      note: `家庭基金撥款報銷 ${adv.user_name} 代墊公帳`,
+      note: `家庭共同基金撥款報銷 ${adv.user_name} 代墊公帳`,
     })
     setReimburseError('')
   }
@@ -168,7 +168,7 @@ export default function Family() {
       setJoinCode('')
       await loadData()
     } catch (err: any) {
-      alert(err.message || '加入家庭失敗，請確認邀請碼是否正確')
+      alert(err.message || '加入家庭群組失敗，請確認邀請碼是否正確')
     } finally {
       setJoining(false)
     }
@@ -193,7 +193,7 @@ export default function Family() {
   }
 
   const handleLeave = async () => {
-    if (!confirm('確定要退出這個家庭群組嗎？退出後將無法查看此家庭的共用帳本。')) return
+    if (!confirm('確定要退出這個家庭群組嗎？退出後將無法查看此家庭的家庭群組帳本。')) return
     try {
       await householdApi.leave()
       await loadData()
@@ -203,7 +203,7 @@ export default function Family() {
   }
 
   const handleRemoveMember = async (member: HouseholdMember) => {
-    if (!confirm(`確定要將成員「${member.name}」移出家庭嗎？`)) return
+    if (!confirm(`確定要將成員「${member.name}」移出家庭群組嗎？`)) return
     try {
       await householdApi.removeMember(member.user_id)
       await loadData()
@@ -241,9 +241,9 @@ export default function Family() {
       )}
 
       {!hasHousehold ? (
-        /* 尚未建立或加入家庭 */
+        /* 尚未建立或加入家庭群組 */
         <div className="grid grid-2" style={{ gap: 24 }}>
-          {/* 建立家庭 */}
+          {/* 建立家庭群組 */}
           <div className="card" style={{ padding: 28 }}>
             <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
               <div style={{
@@ -254,7 +254,7 @@ export default function Family() {
                 <Home size={24} />
               </div>
               <div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>建立新家庭帳本</h3>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>建立新家庭群組帳本</h3>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>創建專屬空間並邀請另一半或家人加入</p>
               </div>
             </div>
@@ -273,7 +273,7 @@ export default function Family() {
               </div>
               <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 8 }} disabled={creating}>
                 <Sparkles size={18} />
-                <span>{creating ? '建立中...' : '立即建立家庭'}</span>
+                <span>{creating ? '建立中...' : '立即建立家庭群組'}</span>
               </button>
             </form>
           </div>
@@ -309,7 +309,7 @@ export default function Family() {
               </div>
               <button type="submit" className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }} disabled={joining}>
                 <Users size={18} />
-                <span>{joining ? '驗證加入中...' : '加入家庭帳本'}</span>
+                <span>{joining ? '驗證加入中...' : '加入家庭群組群組帳本'}</span>
               </button>
             </form>
           </div>
@@ -338,7 +338,7 @@ export default function Family() {
                   <div className="flex items-center gap-2">
                     <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{data.household?.name}</h2>
                     <span className="badge badge-default" style={{ fontSize: '0.75rem' }}>
-                      {data.myRole === 'admin' ? '👑 家庭管理員' : '👤 家庭成員'}
+                      {data.myRole === 'admin' ? '👑 家庭管理員' : '👤 家庭群組成員'}
                     </span>
                   </div>
                   <p className="text-sm" style={{ color: 'var(--text-muted)', marginTop: 4 }}>
@@ -354,7 +354,7 @@ export default function Family() {
                 </button>
                 <button className="btn btn-ghost" style={{ color: 'var(--color-danger)' }} onClick={handleLeave}>
                   <LogOut size={16} />
-                  <span>離開家庭</span>
+                  <span>離開家庭群組</span>
                 </button>
               </div>
             </div>
@@ -380,7 +380,7 @@ export default function Family() {
                 <Info size={28} style={{ display: 'block', margin: '0 auto 8px', opacity: 0.6 }} />
                 <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>暫無公帳代墊款紀錄</div>
                 <div className="text-xs" style={{ marginTop: 4 }}>
-                  當家庭成員使用個人私帳、私卡或個人現金錢包支付公帳支出時，系統將自動在此產生待報銷代墊款。
+                  當家庭群組成員使用個人個人私帳、私卡或個人現金錢包支付公帳支出時，系統將自動在此產生待報銷代墊款。
                 </div>
               </div>
             ) : (
@@ -490,7 +490,7 @@ export default function Family() {
                                 📌 個人代墊消費明細 ({advanceItems.length} 筆)
                               </h4>
                               <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                                僅計入自個人私帳、私卡或現金皮夾支付之公帳
+                                僅計入自個人個人私帳、私卡或現金錢包支付之公帳
                               </span>
                             </div>
 
@@ -623,7 +623,7 @@ export default function Family() {
 
           {/* 成員列表 */}
           <div className="card" style={{ padding: 24 }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 16 }}>家庭成員名冊</h3>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 16 }}>家庭群組成員名冊</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {data.members.map((member) => (
                 <div
@@ -671,7 +671,7 @@ export default function Family() {
                       className="btn btn-ghost btn-sm"
                       style={{ color: 'var(--color-danger)' }}
                       onClick={() => handleRemoveMember(member)}
-                      title="移出家庭"
+                      title="移出家庭群組"
                     >
                       <Trash2 size={16} />
                       <span className="text-xs">移除</span>
@@ -686,10 +686,10 @@ export default function Family() {
 
       {/* 邀請碼 Modal */}
       {showInviteModal && (
-        <Modal title="邀請家庭成員加入 💌" onClose={() => setShowInviteModal(false)}>
+        <Modal title="邀請家庭群組成員加入 💌" onClose={() => setShowInviteModal(false)}>
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
             <p className="text-sm" style={{ color: 'var(--text-muted)', marginBottom: 16 }}>
-              請將以下邀請碼分享給你的家人，對方登入網站後至「家庭協同」輸入即可加入共用帳本：
+              請將以下邀請碼分享給你的家人，對方登入網站後至「家庭協同」輸入即可加入家庭群組群組帳本：
             </p>
 
             <div style={{
@@ -740,10 +740,10 @@ export default function Family() {
                 onChange={e => setReimburseForm(p => ({ ...p, from_account_id: e.target.value }))}
                 required
               >
-                <option value="">-- 請選擇家庭共同基金公帳 --</option>
+                <option value="">-- 請選擇家庭共同基金帳戶 --</option>
                 {jointAccounts.map(j => (
                   <option key={j.id} value={j.id}>
-                    {j.name} (目前公款餘額: {formatCurrency(j.balance)})
+                    {j.name} (目前家庭共同基金餘額: {formatCurrency(j.balance)})
                   </option>
                 ))}
               </select>

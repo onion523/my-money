@@ -84,7 +84,7 @@ export default function Forecast() {
     <div className="fade-in">
       {/* 頁面標題 */}
       <div style={{ marginBottom: 24 }}>
-        <h1 className="page-title">現金流預測 & 購買力評估 🔮</h1>
+        <h1 className="page-title">現金流預測 & 購買力試算 🔮</h1>
         <p className="page-subtitle">模擬未來 30 天資金流向，精確防範透支風險，並提供智慧購物決策支援</p>
       </div>
 
@@ -194,10 +194,10 @@ export default function Forecast() {
         <div className="card">
           <div className="flex items-center gap-xs" style={{ marginBottom: 12 }}>
             <ShoppingCart size={20} color="var(--color-primary)" />
-            <h2 className="text-xl">智慧購買力評估 (Can I Buy It?)</h2>
+            <h2 className="text-xl">智慧購買力試算 (Can I Buy It?)</h2>
           </div>
           <p className="text-xs text-muted" style={{ marginBottom: 18 }}>
-            打算入手心儀物品或進行大額消費？輸入金額，系統將綜合未出帳信用卡、固定支出與儲蓄目標，為您評估可行性！
+            打算入手心儀物品或進行大額消費？輸入金額，系統將綜合未出帳信用卡、週期支出與儲蓄目標，為您評估可行性！
           </p>
 
           <form onSubmit={handlePurchaseCheck} style={{ marginBottom: 20 }}>
@@ -300,7 +300,7 @@ export default function Forecast() {
 
           {!forecast?.events || forecast.events.length === 0 ? (
             <div className="empty-state" style={{ padding: '24px 0' }}>
-              <p style={{ fontSize: '0.85rem' }}>未來 30 天無固定收支排程</p>
+              <p style={{ fontSize: '0.85rem' }}>未來 30 天無週期收支排程</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflowY: 'auto' }}>

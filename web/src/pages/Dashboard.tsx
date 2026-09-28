@@ -45,7 +45,7 @@ export default function Dashboard() {
     amount: '',
     note: '',
     date: today(),
-    is_shared: 1, // 1: 公帳, 0: 私帳
+    is_shared: 1, // 1: 公帳, 0: 個人私帳
   })
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -222,16 +222,16 @@ export default function Dashboard() {
           onClick={() => setViewScope('personal')}
         >
           <Lock size={15} />
-          <span>🔒 個人私帳</span>
+          <span>🔒 個人個人私帳</span>
         </button>
       </div>
 
       {/* 核心資產/可動用資訊欄位 */}
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
-        {/* 目前可用餘額 */}
+        {/* 淨可用餘額 */}
         <div className="stat-card" style={{ background: 'linear-gradient(135deg, rgba(255,138,138,0.15) 0%, rgba(255,212,160,0.15) 100%)' }}>
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-            <span className="stat-label">目前可用餘額</span>
+            <span className="stat-label">淨可用餘額</span>
             <div style={{ background: 'var(--color-primary)', color: 'white', padding: 6, borderRadius: '50%' }}>
               <Wallet size={18} />
             </div>
@@ -240,14 +240,14 @@ export default function Dashboard() {
             {formatCurrency(balance?.available ?? 0)}
           </div>
           <div className="stat-sub">
-            現金 {formatCurrency(balance?.cashTotal ?? 0)} + 活存 {formatCurrency(balance?.bankTotal ?? 0)} - 卡債 {formatCurrency((balance?.ccBilled ?? 0) + (balance?.ccUnbilled ?? 0))}
+            現金 {formatCurrency(balance?.cashTotal ?? 0)} + 銀行存款帳戶 {formatCurrency(balance?.bankTotal ?? 0)} - 卡債 {formatCurrency((balance?.ccBilled ?? 0) + (balance?.ccUnbilled ?? 0))}
           </div>
         </div>
 
-        {/* 扣除後可自由動用 */}
+        {/* 真實可支配現金 */}
         <div className="stat-card" style={{ background: 'linear-gradient(135deg, rgba(85,197,149,0.15) 0%, rgba(168,216,234,0.15) 100%)' }}>
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-            <span className="stat-label">扣除後可自由動用</span>
+            <span className="stat-label">真實可支配現金</span>
             <div style={{ background: 'var(--color-success)', color: 'white', padding: 6, borderRadius: '50%' }}>
               <Sparkles size={18} />
             </div>
@@ -264,7 +264,7 @@ export default function Dashboard() {
         <div className="stat-card">
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
             <span className="stat-label">
-              {viewScope === 'household' ? '當月公帳淨結算' : viewScope === 'personal' ? '當月私帳淨收支' : '當月淨收支'}
+              {viewScope === 'household' ? '當月公帳淨結算' : viewScope === 'personal' ? '當月個人私帳淨收支' : '當月淨收支'}
             </span>
             <div style={{ background: 'var(--color-secondary)', color: '#7a4e00', padding: 6, borderRadius: '50%' }}>
               {monthIncome - monthExpense >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
@@ -303,7 +303,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* 主要區塊：左 2/3 (帳戶 + 最近交易) + 右 1/3 (儲蓄目標 + 固定支出總覽) */}
+      {/* 主要區塊：左 2/3 (帳戶 + 最近交易) + 右 1/3 (儲蓄目標 + 週期支出總覽) */}
       <div className="grid-dashboard-main">
         <div className="flex-col gap-lg" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* 帳戶一覽 */}
@@ -321,9 +321,9 @@ export default function Dashboard() {
             {displayAccounts.length === 0 ? (
               <div className="empty-state" style={{ padding: '24px 0' }}>
                 <div className="emoji">💳</div>
-                <h3>{viewScope === 'household' ? '目前無家庭公用帳戶' : viewScope === 'personal' ? '目前無個人私帳' : '尚未建立帳戶'}</h3>
+                <h3>{viewScope === 'household' ? '目前無家庭共同基金帳戶' : viewScope === 'personal' ? '目前無個人個人私帳' : '尚未建立帳戶'}</h3>
                 <p style={{ fontSize: '0.875rem', marginBottom: 12 }}>
-                  {viewScope === 'household' ? '至帳戶管理將帳戶屬性設為「家庭公用」即可在此呈現' : '至帳戶管理新增你的銀行、現金或信用卡'}
+                  {viewScope === 'household' ? '至帳戶管理將帳戶屬性設為「家庭共同基金」即可在此呈現' : '至帳戶管理新增你的銀行、現金或信用卡'}
                 </p>
                 <Link to="/accounts" className="btn btn-primary btn-sm">前往帳戶管理</Link>
               </div>
@@ -363,11 +363,11 @@ export default function Dashboard() {
                             </span>
                           ) : (
                             <span className="badge badge-secondary" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
-                              👤 私帳
+                              👤 個人私帳
                             </span>
                           )}
                           <span className="badge" style={{ fontSize: '0.68rem', padding: '1px 5px', background: 'rgba(0,0,0,0.05)' }}>
-                            {isCash ? '現金' : isCc ? '信用卡' : '活存'}
+                            {isCash ? '現金' : isCc ? '信用卡' : '銀行存款帳戶'}
                           </span>
                         </div>
                       </div>
@@ -389,7 +389,7 @@ export default function Dashboard() {
                             <div className="flex items-center justify-between" style={{ background: 'rgba(0,0,0,0.03)', padding: '3px 6px', borderRadius: 4, marginBottom: 2 }}>
                               <span>🏠 代墊：<strong>{formatCurrency(acc.shared_debt || 0)}</strong></span>
                               <span>·</span>
-                              <span>👤 私帳：<strong>{formatCurrency(acc.personal_debt || 0)}</strong></span>
+                              <span>👤 個人私帳：<strong>{formatCurrency(acc.personal_debt || 0)}</strong></span>
                             </div>
                           ) : (
                             <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>卡費已全數結清</span>
@@ -419,7 +419,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
               <h2 className="text-xl flex items-center gap-xs">
                 <Calendar size={20} color="var(--color-primary)" />
-                最近交易明細 ({viewScope === 'household' ? '公帳' : viewScope === 'personal' ? '私帳' : '全部'})
+                最近交易記錄 ({viewScope === 'household' ? '公帳' : viewScope === 'personal' ? '個人私帳' : '全部'})
               </h2>
               <Link to="/transactions" className="btn btn-ghost btn-sm">
                 查看全部 <ChevronRight size={16} />
@@ -445,7 +445,7 @@ export default function Dashboard() {
                         <span>{tx.category} {tx.note ? `· ${tx.note}` : ''}</span>
                         {tx.is_shared === 0 ? (
                           <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.7rem', padding: '1px 6px' }}>
-                            🔒 私帳
+                            🔒 個人私帳
                           </span>
                         ) : (
                           <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px' }}>
@@ -488,7 +488,7 @@ export default function Dashboard() {
 
             {goalsList.length === 0 ? (
               <div className="text-sm text-muted" style={{ textAlign: 'center', padding: '16px 0' }}>
-                目前未設定儲蓄目標，點擊設定一個旅行或夢想基金吧！
+                目前未設定儲蓄目標，點擊設定一個旅行或儲蓄目標吧！
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -517,13 +517,13 @@ export default function Dashboard() {
             </h3>
             <ul style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', paddingLeft: 18, lineHeight: 1.8 }}>
               <li>
-                固定支出每月平均預算 <strong>{formatCurrency(balance?.monthlyFixed ?? 0)}</strong>，已自動從可動用餘額扣除。
+                週期支出每月平均預算 <strong>{formatCurrency(balance?.monthlyFixed ?? 0)}</strong>，已自動從真實可支配現金扣除。
               </li>
               <li>
                 每月計劃儲蓄金額 <strong>{formatCurrency(balance?.monthlyGoals ?? 0)}</strong>，建議按款項留存。
               </li>
               <li>
-                公帳由全體家庭成員共同分攤檢視，私帳僅個人專屬可見，彼此保有獨立財務隱私。
+                公帳由全體家庭成員共同分攤檢視，個人私帳僅個人專屬可見，彼此保有獨立財務隱私。
               </li>
             </ul>
           </div>
@@ -539,7 +539,7 @@ export default function Dashboard() {
             </div>
           )}
           <form onSubmit={handleQuickAdd} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* 帳本歸屬選擇器 (公帳 / 私帳) */}
+            {/* 帳本歸屬選擇器 (公帳 / 個人私帳) */}
             <div className="input-group">
               <label className="input-label" style={{ marginBottom: 6, fontWeight: 600 }}>帳本歸屬</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -559,7 +559,7 @@ export default function Dashboard() {
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
                   <Lock size={16} />
-                  <span>🔒 個人私帳 (隱私)</span>
+                  <span>🔒 個人個人私帳 (隱私)</span>
                 </button>
               </div>
             </div>
@@ -629,7 +629,7 @@ export default function Dashboard() {
               >
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 公帳' : '👤 私帳'})
+                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 銀行存款帳戶' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 公帳' : '👤 個人私帳'})
                   </option>
                 ))}
               </select>

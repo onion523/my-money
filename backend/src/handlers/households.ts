@@ -96,7 +96,7 @@ households.post('/', async (c) => {
 households.post('/invite', async (c) => {
   const userId = c.get('userId');
   const { household } = await getUserHousehold(c.env.DB, userId);
-  if (!household) return c.json({ success: false, error: '尚未建立或加入家庭' }, 400);
+  if (!household) return c.json({ success: false, error: '尚未建立或加入家庭群組' }, 400);
 
   // Generate 6-char random alphanumeric code
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -127,7 +127,7 @@ households.post('/join', async (c) => {
 
   // Check if user already in a household
   const existing = await c.env.DB.prepare('SELECT id FROM household_members WHERE user_id = ?').bind(userId).first();
-  if (existing) return c.json({ success: false, error: '你已經加入家庭群組，無法重複加入' }, 400);
+  if (existing) return c.json({ success: false, error: '你已經加入家庭群組群組，無法重複加入' }, 400);
 
   // Validate invitation
   const inv = await c.env.DB.prepare(`
@@ -175,7 +175,7 @@ households.delete('/leave', async (c) => {
     await c.env.DB.prepare('DELETE FROM household_members WHERE user_id = ?').bind(userId).run();
   }
 
-  return c.json({ success: true, message: '已離開家庭群組' });
+  return c.json({ success: true, message: '已離開家庭群組群組' });
 });
 
 // DELETE /households/members/:targetUserId
@@ -189,7 +189,7 @@ households.delete('/members/:targetUserId', async (c) => {
   }
 
   if (targetUserId === userId) {
-    return c.json({ success: false, error: '請使用離開家庭功能' }, 400);
+    return c.json({ success: false, error: '請使用離開家庭群組功能' }, 400);
   }
 
   await c.env.DB.prepare('DELETE FROM household_members WHERE household_id = ? AND user_id = ?')
@@ -286,7 +286,7 @@ households.get('/advances', async (c) => {
 households.post('/reimburse', async (c) => {
   const userId = c.get('userId');
   const { household, memberUserIds } = await getUserHousehold(c.env.DB, userId);
-  if (!household) return c.json({ success: false, error: '尚未建立或加入家庭群組' }, 400);
+  if (!household) return c.json({ success: false, error: '尚未建立或加入家庭群組群組' }, 400);
 
   const body = await c.req.json();
   const { target_user_id, from_account_id, to_account_id, amount, date = getTaipeiDateString(), note = '' } = body;
@@ -301,8 +301,8 @@ households.post('/reimburse', async (c) => {
     `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND is_joint = 1`
   ).bind(from_account_id, ...memberUserIds).first<any>();
 
-  if (!fromAcc) {
-    return c.json({ success: false, error: '撥款帳戶必須為家庭共同基金公帳 (公用帳戶)' }, 400);
+  if (!fromAcc || (fromAcc.type !== 'bank' && fromAcc.type !== 'cash')) {
+    return c.json({ success: false, error: '撥款帳戶必須為家庭共同基金之銀行存款帳戶或現金錢包' }, 400);
   }
   if (fromAcc.balance < amt) {
     return c.json({ success: false, error: `家庭共同基金餘額不足（目前餘額：NT$ ${fromAcc.balance.toLocaleString()}）` }, 400);
@@ -314,6 +314,9 @@ households.post('/reimburse', async (c) => {
 
   if (!toAcc) {
     return c.json({ success: false, error: '找不到收款成員之個人帳戶' }, 404);
+  }
+  if (toAcc.type !== 'bank' && toAcc.type !== 'cash') {
+    return c.json({ success: false, error: '收款帳戶必須為銀行存款帳戶或現金錢包' }, 400);
   }
 
   const targetUser = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(target_user_id).first<{ name: string }>();

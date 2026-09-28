@@ -60,7 +60,7 @@ export default function Recurring() {
       if (amort) setAmortize(amort)
     } catch (err: any) {
       console.error('Failed to load recurring data:', err)
-      setLoadError(err.message || '固定收支資料載入失敗，請檢查連線')
+      setLoadError(err.message || '週期收支資料載入失敗，請檢查連線')
     } finally {
       setLoading(false)
     }
@@ -143,7 +143,7 @@ export default function Recurring() {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`確定要刪除固定收支「${name}」嗎？`)) return
+    if (!window.confirm(`確定要刪除週期收支「${name}」嗎？`)) return
     try {
       await recurringApi.remove(id)
       loadData()
@@ -165,7 +165,7 @@ export default function Recurring() {
         <div className="alert alert-danger flex items-center justify-between" style={{ marginBottom: 20 }}>
           <div className="flex items-center gap-2">
             <AlertCircle size={18} />
-            <span>⚠️ <strong>固定收支資料載入失敗</strong>：{loadError}</span>
+            <span>⚠️ <strong>週期收支資料載入失敗</strong>：{loadError}</span>
           </div>
           <button
             className="btn btn-secondary"
@@ -179,8 +179,8 @@ export default function Recurring() {
       {/* 標題與操作按鈕 */}
       <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
         <div>
-          <h1 className="page-title">固定收支 🔄</h1>
-          <p className="page-subtitle">管理每月定期租金、水電、訂閱與薪資，自動計算平均月度攤提</p>
+          <h1 className="page-title">週期收支 🔄</h1>
+          <p className="page-subtitle">管理每月定期租金、水電、訂閱與薪資，自動計算平均月度分攤平滑</p>
         </div>
         <div className="flex gap-2">
           <button id="btn-export-recurring" className="btn btn-secondary" onClick={() => exportApi.recurringCsv()}>
@@ -194,10 +194,10 @@ export default function Recurring() {
         </div>
       </div>
 
-      {/* 月攤提統計卡片 */}
+      {/* 月分攤平滑統計卡片 */}
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
         <div className="stat-card">
-          <span className="stat-label">固定支出每月平均攤提</span>
+          <span className="stat-label">週期支出每月平均分攤平滑</span>
           <div className="stat-value" style={{ color: 'var(--color-danger)' }}>
             {formatCurrency(amortize?.monthly_expense ?? 0)}
           </div>
@@ -221,17 +221,17 @@ export default function Recurring() {
         </div>
       </div>
 
-      {/* 固定支出清單 */}
+      {/* 週期支出清單 */}
       <div style={{ marginBottom: 32 }}>
         <h2 className="text-xl flex items-center gap-xs" style={{ marginBottom: 14 }}>
           <TrendingDown size={20} color="var(--color-danger)" />
-          固定支出項目 ({expenseItems.length})
+          週期支出項目 ({expenseItems.length})
         </h2>
 
         {expenseItems.length === 0 ? (
           <div className="card empty-state">
             <div className="emoji">📝</div>
-            <h3>尚未新增固定支出</h3>
+            <h3>尚未新增週期支出</h3>
             <p style={{ fontSize: '0.875rem', marginBottom: 12 }}>如房租、網路費、Netflix 訂閱、保險費等</p>
             <button className="btn btn-primary btn-sm" onClick={handleOpenAdd}>立即新增</button>
           </div>
@@ -263,7 +263,7 @@ export default function Recurring() {
                       </div>
                       <div className="text-xs text-muted" style={{ marginTop: 4 }}>
                         {item.account_name ? `關聯扣款帳戶：${item.account_name}` : '未指定關聯帳戶'}
-                        {item.cycle !== 'monthly' && ` · 換算月攤提：${formatCurrency(monthlyShare)} / 月`}
+                        {item.cycle !== 'monthly' && ` · 換算月分攤平滑：${formatCurrency(monthlyShare)} / 月`}
                       </div>
                     </div>
 
@@ -357,7 +357,7 @@ export default function Recurring() {
       {/* 新增/編輯 Modal */}
       {showModal && (
         <Modal
-          title={editingItem ? '編輯固定收支' : '新增固定收支'}
+          title={editingItem ? '編輯週期收支' : '新增週期收支'}
           onClose={() => setShowModal(false)}
         >
           {errorMsg && (
@@ -374,7 +374,7 @@ export default function Recurring() {
                 className={`btn btn-full ${form.type === 'expense' ? 'btn-danger' : 'btn-secondary'}`}
                 onClick={() => setForm(p => ({ ...p, type: 'expense' }))}
               >
-                固定支出
+                週期支出
               </button>
               <button
                 type="button"
@@ -462,7 +462,7 @@ export default function Recurring() {
                 <option value="">無特定帳戶</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 銀行' : '💳 信用卡'})
+                    {acc.name} ({acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 銀行存款帳戶' : '💳 信用卡'})
                   </option>
                 ))}
               </select>

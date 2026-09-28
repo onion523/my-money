@@ -41,7 +41,7 @@ export default function Transactions() {
     amount: '',
     note: '',
     date: today(),
-    is_shared: 1, // 1: 公帳, 0: 私帳
+    is_shared: 1, // 1: 公帳, 0: 個人私帳
   })
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -150,7 +150,7 @@ export default function Transactions() {
 
   // 刪除交易
   const handleDelete = async (id: string) => {
-    if (!window.confirm('確定要刪除這筆交易紀錄嗎？')) return
+    if (!window.confirm('確定要刪除這筆交易記錄嗎？')) return
     try {
       await txApi.remove(id)
       loadData()
@@ -201,7 +201,7 @@ export default function Transactions() {
       {/* 標題與操作按鈕 */}
       <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
         <div>
-          <h1 className="page-title">交易紀錄 📜</h1>
+          <h1 className="page-title">交易記錄 📜</h1>
           <p className="page-subtitle">追蹤與管理所有收支明細、快速篩選與匯出明細</p>
         </div>
         <div className="flex gap-sm">
@@ -218,7 +218,7 @@ export default function Transactions() {
 
       {/* 篩選工具列 */}
       <div className="card" style={{ marginBottom: 20, padding: '16px 20px' }}>
-        {/* 帳本範疇切換 (公帳 / 私帳 / 全部) */}
+        {/* 帳本範疇切換 (公帳 / 個人私帳 / 全部) */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -251,7 +251,7 @@ export default function Transactions() {
             style={{ borderRadius: 8, padding: '4px 12px' }}
             onClick={() => setScopeFilter('personal')}
           >
-            <Lock size={14} /> 🔒 個人私帳
+            <Lock size={14} /> 🔒 個人個人私帳
           </button>
         </div>
 
@@ -396,7 +396,7 @@ export default function Transactions() {
                           {tx.note && <span className="text-muted" style={{ fontWeight: 400 }}>· {tx.note}</span>}
                           {tx.is_shared === 0 ? (
                             <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.7rem', padding: '1px 6px' }}>
-                              🔒 私帳
+                              🔒 個人私帳
                             </span>
                           ) : (
                             <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px' }}>
@@ -470,7 +470,7 @@ export default function Transactions() {
       {/* 新增/編輯 Modal */}
       {showModal && (
         <Modal
-          title={editingTx ? '編輯交易明細' : '新增交易明細'}
+          title={editingTx ? '編輯交易記錄' : '新增交易記錄'}
           onClose={() => setShowModal(false)}
         >
           {errorMsg && (
@@ -479,7 +479,7 @@ export default function Transactions() {
             </div>
           )}
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* 公帳 / 私帳 切換 */}
+            {/* 公帳 / 個人私帳 切換 */}
             <div className="input-group">
               <label className="input-label" style={{ fontWeight: 600, marginBottom: 6 }}>帳本歸屬</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -499,7 +499,7 @@ export default function Transactions() {
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
                   <Lock size={16} />
-                  <span>🔒 個人私帳 (隱私)</span>
+                  <span>🔒 個人個人私帳 (隱私)</span>
                 </button>
               </div>
             </div>
@@ -566,7 +566,7 @@ export default function Transactions() {
               >
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 家庭公用' : '👤 個人私帳'})
+                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 家庭共同基金' : '👤 個人個人私帳'})
                   </option>
                 ))}
               </select>

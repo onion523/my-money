@@ -7,6 +7,9 @@ async function ensureAccountsSchema(db: any) {
     await db.prepare('ALTER TABLE accounts ADD COLUMN is_joint INTEGER DEFAULT 0').run();
   } catch (_) {}
   try {
+    await db.prepare('ALTER TABLE accounts ADD COLUMN last_rollover_at DATETIME').run();
+  } catch (_) {}
+  try {
     const tableInfo = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'").first();
     if (tableInfo && tableInfo.sql && !tableInfo.sql.includes("'cash'")) {
       await db.prepare("PRAGMA foreign_keys = OFF").run();
@@ -217,6 +220,13 @@ accounts.post('/pay-credit-card', async (c) => {
     'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(txId, userId, bank_account_id, 'expense', '信用卡還款', payAmount, txNote, txDate, is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : 1).run();
 
+  // 信用卡端同步建立還款流水 (雙向沖帳紀錄)
+  const cardTxId = generateId();
+  const cardTxNote = `扣款還款 (來自【${bank.name}】)`;
+  await c.env.DB.prepare(
+    'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(cardTxId, userId, credit_card_id, 'income', '信用卡還款', payAmount, cardTxNote, txDate, is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : 1).run();
+
   const txRow = await c.env.DB.prepare(`
     SELECT t.*, a.name as account_name, u.name as user_name
     FROM transactions t
@@ -237,7 +247,7 @@ accounts.post('/pay-credit-card', async (c) => {
 });
 
 
-// POST /accounts/:id/rollover-statement — 結帳日一鍵結轉 (未出帳轉已出帳)
+// POST /accounts/:id/rollover-statement — 結帳日一鍵出帳作業 (未出帳轉已出帳)
 accounts.post('/:id/rollover-statement', async (c) => {
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
@@ -249,10 +259,10 @@ accounts.post('/:id/rollover-statement', async (c) => {
   ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number }>();
 
   if (!card) return c.json({ success: false, error: '信用卡不存在' }, 404);
-  if ((card.unbilled || 0) <= 0) return c.json({ success: false, error: '目前無未出帳金額需結轉' }, 400);
+  if ((card.unbilled || 0) <= 0) return c.json({ success: false, error: '目前無未出帳金額需出帳作業' }, 400);
 
   const newBalance = (card.balance || 0) + card.unbilled;
-  await c.env.DB.prepare('UPDATE accounts SET balance = ?, unbilled = 0 WHERE id = ?')
+  await c.env.DB.prepare('UPDATE accounts SET balance = ?, unbilled = 0, last_rollover_at = CURRENT_TIMESTAMP WHERE id = ?')
     .bind(newBalance, id).run();
 
   return c.json({
@@ -261,7 +271,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
       id,
       balance: newBalance,
       unbilled: 0,
-      message: `已將未出帳 NT$ ${card.unbilled.toLocaleString()} 成功結轉為已出帳待繳！`
+      message: `已將未出帳 NT$ ${card.unbilled.toLocaleString()} 成功出帳作業為已出帳待繳款！`
     }
   });
 });
@@ -279,19 +289,22 @@ accounts.post('/:id/reconcile', async (c) => {
 
   if (!card) return c.json({ success: false, error: '信用卡不存在或無權限' }, 404);
 
-  // 計算當期結帳週期起點
-  let dateFilter = '';
+  // 計算當期結帳週期起點 (優先依據最後出帳作業時間點)
+  let timeCondition = '';
   let sqlParams: (string | number)[] = [id];
 
-  if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
+  const cardWithRollover = await c.env.DB.prepare('SELECT last_rollover_at FROM accounts WHERE id = ?').bind(id).first<{ last_rollover_at: string | null }>();
+
+  if (cardWithRollover && cardWithRollover.last_rollover_at) {
+    timeCondition = ' AND created_at > ?';
+    sqlParams.push(cardWithRollover.last_rollover_at);
+  } else if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
     const taipeiDateStr = getTaipeiDateString();
     const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
-
     let statementYear = currYear;
     let statementMonth = currMonth;
 
     if (currDay <= card.statement_day) {
-      // 本月結帳日未到，以「上個月的結帳日」為週期起點
       statementMonth -= 1;
       if (statementMonth === 0) {
         statementMonth = 12;
@@ -302,20 +315,42 @@ accounts.post('/:id/reconcile', async (c) => {
     const day = Math.min(card.statement_day, lastDayOfMonth);
     const statementDate = `${statementYear}-${String(statementMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-    dateFilter = ' AND date > ?';
+    timeCondition = ' AND date > ?';
     sqlParams.push(statementDate);
   }
 
-  // 統計當期有效消費總額（排除內部轉帳、信用卡還款、ATM提款、公帳代墊報銷）
-  const sumRow = await c.env.DB.prepare(`
-    SELECT COALESCE(SUM(amount), 0) as total_unbilled
+  // 1. 當期消費支出總額
+  const expenseRow = await c.env.DB.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total
     FROM transactions
     WHERE account_id = ? AND type = 'expense'
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-      ${dateFilter}
-  `).bind(...sqlParams).first<{ total_unbilled: number }>();
+      ${timeCondition}
+  `).bind(...sqlParams).first<{ total: number }>();
 
-  const newUnbilled = sumRow ? Number(sumRow.total_unbilled) : 0;
+  // 2. 當期刷退收入總額 (卡片收入退貨)
+  const refundRow = await c.env.DB.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total
+    FROM transactions
+    WHERE account_id = ? AND type = 'income'
+      AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+      ${timeCondition}
+  `).bind(...sqlParams).first<{ total: number }>();
+
+  // 3. 當期還款總額 (category = '信用卡還款')
+  const repaymentRow = await c.env.DB.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total
+    FROM transactions
+    WHERE account_id = ? AND category = '信用卡還款'
+      ${timeCondition}
+  `).bind(...sqlParams).first<{ total: number }>();
+
+  const totalExp = expenseRow ? Number(expenseRow.total) : 0;
+  const totalRef = refundRow ? Number(refundRow.total) : 0;
+  const totalRepay = repaymentRow ? Number(repaymentRow.total) : 0;
+
+  // 未出帳 = MAX(0, 支出 - 刷退 - 當期已沖還款)
+  const newUnbilled = Math.max(0, totalExp - totalRef - totalRepay);
 
   // 更新 accounts.unbilled
   await c.env.DB.prepare('UPDATE accounts SET unbilled = ? WHERE id = ?')

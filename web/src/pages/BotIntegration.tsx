@@ -80,7 +80,7 @@ export default function BotIntegration() {
       setPairingCode(res.code)
       setCountdown(res.expires_in_seconds)
     } catch (err: any) {
-      alert(err.message || '產生配對碼失敗')
+      alert(err.message || '產生綁定驗證碼失敗')
     } finally {
       setGenerating(false)
     }
@@ -146,7 +146,7 @@ export default function BotIntegration() {
       </div>
 
       <div className="grid grid-2" style={{ gap: 24, marginBottom: 24 }}>
-        {/* 左側：配對綁定中心 */}
+        {/* 左側：綁定綁定中心 */}
         <div className="card" style={{ padding: 24 }}>
           <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
             <div style={{
@@ -157,7 +157,7 @@ export default function BotIntegration() {
               <Key size={22} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>配對綁定機器人</h3>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>機器人綁定</h3>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>產生專屬驗證碼，在聊天室中輸入即完成對接</p>
             </div>
           </div>
@@ -194,11 +194,11 @@ export default function BotIntegration() {
             ) : (
               <div>
                 <p className="text-sm" style={{ color: 'var(--text-muted)', marginBottom: 12 }}>
-                  點擊下方按鈕取得一組 6 位數臨時安全配對碼（有效期限 10 分鐘）：
+                  點擊下方按鈕取得一組 6 位數臨時安全綁定驗證碼（有效期限 10 分鐘）：
                 </p>
                 <button id="btn-generate-bot-code" className="btn btn-primary" onClick={handleGenerateCode} disabled={generating}>
                   <Sparkles size={16} />
-                  <span>{generating ? '產生中...' : '產生配對碼'}</span>
+                  <span>{generating ? '產生中...' : '產生綁定驗證碼'}</span>
                 </button>
               </div>
             )}
@@ -368,7 +368,7 @@ export default function BotIntegration() {
               </li>
               <li>開啟「<b>Use Webhook</b>」開關。</li>
               <li>在 Workers 環境變數設定 <code>LINE_CHANNEL_SECRET</code> 與 <code>LINE_CHANNEL_ACCESS_TOKEN</code>。</li>
-              <li>加機器人好友並傳送配對碼即可開始！</li>
+              <li>加機器人好友並傳送綁定驗證碼即可開始！</li>
             </ol>
           </div>
 
@@ -393,7 +393,7 @@ export default function BotIntegration() {
                   https://api.telegram.org/bot&lt;TOKEN&gt;/setWebhook?url={webhookBase}/api/bot/webhook/telegram
                 </div>
               </li>
-              <li>在 Telegram 私訊機器人發送配對碼即可啟用！</li>
+              <li>在 Telegram 私訊機器人發送綁定驗證碼即可啟用！</li>
             </ol>
           </div>
         </div>

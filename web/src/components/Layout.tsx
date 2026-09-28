@@ -23,7 +23,7 @@ const navItems = [
   { to: '/', icon: LayoutDashboard, label: '儀表板', end: true },
   { to: '/transactions', icon: ArrowLeftRight, label: '交易記錄' },
   { to: '/accounts', icon: CreditCard, label: '帳戶管理' },
-  { to: '/recurring', icon: RefreshCw, label: '固定收支' },
+  { to: '/recurring', icon: RefreshCw, label: '週期收支' },
   { to: '/goals', icon: Target, label: '儲蓄目標' },
   { to: '/analytics', icon: BarChart2, label: '統計圖表' },
   { to: '/forecast', icon: TrendingUp, label: '現金流預測' },

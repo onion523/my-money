@@ -128,7 +128,7 @@ export default function Accounts() {
     e.preventDefault()
     setErrorMsg('')
     if (!form.name.trim()) {
-      setErrorMsg('請輸入帳戶/錢包名稱')
+      setErrorMsg('請輸入資產帳戶名稱')
       return
     }
 
@@ -193,15 +193,15 @@ export default function Accounts() {
   }
 
   const handleRollover = async (card: Account) => {
-    if (!window.confirm(`確定要將「${card.name}」的未出帳消費 NT$ ${card.unbilled.toLocaleString()} 結轉為本期已出帳待繳嗎？`)) {
+    if (!window.confirm(`確定要將「${card.name}」的未出帳消費 NT$ ${card.unbilled.toLocaleString()} 出帳作業為本期已出帳待繳嗎？`)) {
       return
     }
     try {
       const res = await accountsApi.rolloverStatement(card.id)
-      alert(res.message || '結轉成功！')
+      alert(res.message || '出帳作業成功！')
       loadData()
     } catch (err: any) {
-      alert(err.message || '結轉失敗')
+      alert(err.message || '出帳作業失敗')
     }
   }
 
@@ -223,7 +223,7 @@ export default function Accounts() {
       bank_account_id: defaultBank ? defaultBank.id : '',
       amount: defaultAmount > 0 ? defaultAmount.toString() : '',
       date: today(),
-      note: `繳納 ${card.name} 卡費 (${payType === 'shared' ? '家庭代墊' : payType === 'personal' ? '個人私帳' : '全額'})`,
+      note: `信用卡扣款還款 ${card.name} 信用卡待繳款 (${payType === 'shared' ? '家庭代墊' : payType === 'personal' ? '個人個人私帳' : '全額'})`,
       is_shared: isSharedTarget,
     })
     setPayError('')
@@ -246,7 +246,7 @@ export default function Accounts() {
       return
     }
     if (amt > maxPayable && maxPayable > 0) {
-      setPayError(`還款金額不可超過卡片待繳總額 NT$ ${maxPayable.toLocaleString()}`)
+      setPayError(`還款金額不可超過信用卡待繳總額 NT$ ${maxPayable.toLocaleString()}`)
       return
     }
 
@@ -326,7 +326,7 @@ export default function Accounts() {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`確定要刪除「${name}」嗎？其關聯的交易紀錄亦會一併移除！`)) return
+    if (!window.confirm(`確定要刪除「${name}」嗎？其關聯的交易記錄亦會一併移除！`)) return
     try {
       await accountsApi.remove(id)
       loadData()
@@ -349,7 +349,7 @@ export default function Accounts() {
       <div className="flex items-center justify-between" style={{ marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 className="page-title">資產與帳戶管理 💼</h1>
-          <p className="page-subtitle">現金皮夾、銀行活存與信用卡分離管理，支援公私帳隔離與代墊調度</p>
+          <p className="page-subtitle">現金錢包、銀行活存與信用卡分離管理，支援公個人私帳隔離與代墊調度</p>
         </div>
         <div className="flex gap-sm" style={{ flexWrap: 'wrap' }}>
           <button id="btn-atm-transfer" className="btn btn-secondary" onClick={() => handleOpenTransfer()}>
@@ -358,11 +358,11 @@ export default function Accounts() {
           </button>
           <button id="btn-add-cash" className="btn btn-secondary" onClick={() => handleOpenAdd('cash')}>
             <Wallet size={16} />
-            <span>+ 新增現金皮夾</span>
+            <span>+ 新增現金錢包</span>
           </button>
           <button id="btn-add-bank" className="btn btn-secondary" onClick={() => handleOpenAdd('bank')}>
             <Building size={16} />
-            <span>+ 新增銀行帳戶</span>
+            <span>+ 新增銀行存款帳戶</span>
           </button>
           <button id="btn-add-cc" className="btn btn-primary" onClick={() => handleOpenAdd('credit_card')}>
             <Plus size={18} />
@@ -380,26 +380,26 @@ export default function Accounts() {
               className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setScope('all')}
             >
-              全部 (本人 + 家庭公用)
+              全部 (本人 + 家庭共同基金)
             </button>
             <button
               className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setScope('household')}
             >
               <Home size={14} style={{ marginRight: 4 }} />
-              🏠 家庭公用帳戶
+              🏠 家庭共同基金帳戶
             </button>
             <button
               className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setScope('personal')}
             >
               <User size={14} style={{ marginRight: 4 }} />
-              👤 個人私帳
+              👤 個人個人私帳
             </button>
           </div>
         </div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-          🔒 嚴格隱私保護：其他成員之個人私帳與錢包自動隱藏
+          🔒 嚴格隱私保護：其他成員之個人個人私帳與錢包自動隱藏
         </div>
       </div>
 
@@ -413,7 +413,7 @@ export default function Accounts() {
           <div className="stat-value" style={{ color: '#10B981' }}>
             {formatCurrency(balance?.cashTotal ?? 0)}
           </div>
-          <div className="stat-sub">{cashAccounts.length} 個現金皮夾 / 零用金盒</div>
+          <div className="stat-sub">{cashAccounts.length} 個現金錢包 / 零用金盒</div>
         </div>
 
         <div className="stat-card" style={{ borderLeft: '4px solid #3B82F6' }}>
@@ -424,7 +424,7 @@ export default function Accounts() {
           <div className="stat-value" style={{ color: 'var(--color-primary)' }}>
             {formatCurrency(balance?.bankTotal ?? 0)}
           </div>
-          <div className="stat-sub">{bankAccounts.length} 個活期存款帳戶</div>
+          <div className="stat-sub">{bankAccounts.length} 個銀行存款帳戶</div>
         </div>
 
         <div className="stat-card" style={{ borderLeft: '4px solid var(--color-danger)' }}>
@@ -443,7 +443,7 @@ export default function Accounts() {
         <div className="stat-card" style={{ background: 'linear-gradient(135deg, rgba(255,138,138,0.12) 0%, rgba(168,216,234,0.15) 100%)', borderLeft: '4px solid var(--text-primary)' }}>
           <span className="stat-label flex items-center gap-xs">
             <ShieldCheck size={16} color="var(--color-primary)" />
-            💎 實質淨可用資金
+            💎 淨可用餘額
           </span>
           <div className="stat-value" style={{ color: (balance?.available ?? 0) >= 0 ? 'var(--text-primary)' : 'var(--color-danger)' }}>
             {formatCurrency(balance?.available ?? 0)}
@@ -460,7 +460,7 @@ export default function Accounts() {
             💵 現金錢包 ({cashAccounts.length})
           </h2>
           <button className="btn btn-sm btn-secondary" onClick={() => handleOpenAdd('cash')}>
-            + 新增皮夾
+            + 新增現金錢包
           </button>
         </div>
 
@@ -468,9 +468,9 @@ export default function Accounts() {
           <div className="card empty-state">
             <div className="emoji">👛</div>
             <h3>目前此範圍無現金錢包</h3>
-            <p>建立你的個人隨身皮夾或客廳公用零用金盒，掌握實體現鈔流向！</p>
+            <p>建立你的個人隨身現金錢包或客廳公用零用金盒，掌握實體現鈔流向！</p>
             <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => handleOpenAdd('cash')}>
-              立即建立現金皮夾
+              立即建立現金錢包
             </button>
           </div>
         ) : (
@@ -493,7 +493,7 @@ export default function Accounts() {
                 </div>
 
                 <div className="account-balance-group" style={{ margin: '14px 0' }}>
-                  <span className="account-balance-label">皮夾現金餘額</span>
+                  <span className="account-balance-label">現金錢包餘額</span>
                   <div className="account-balance" style={{ color: '#10B981', fontSize: '1.75rem', fontWeight: 700 }}>
                     {formatCurrency(cash.balance)}
                   </div>
@@ -502,9 +502,9 @@ export default function Accounts() {
                 <div className="flex items-center justify-between pt-sm border-t" style={{ marginTop: 12 }}>
                   <div className="flex gap-xs">
                     {cash.is_joint === 1 ? (
-                      <span className="badge badge-primary">🏠 家庭公用</span>
+                      <span className="badge badge-primary">🏠 家庭共同基金</span>
                     ) : (
-                      <span className="badge badge-secondary">👤 個人私帳</span>
+                      <span className="badge badge-secondary">👤 個人個人私帳</span>
                     )}
                     {cash.owner_name && (
                       <span className="badge" style={{ background: 'rgba(0,0,0,0.06)' }}>
@@ -514,7 +514,7 @@ export default function Accounts() {
                   </div>
                   <button
                     className="btn btn-sm btn-secondary"
-                    title="從銀行 ATM 領錢至此皮夾"
+                    title="從銀行 ATM 領錢至此現金錢包"
                     onClick={() => handleOpenTransfer(undefined, cash.id)}
                   >
                     <ArrowDownRight size={14} style={{ marginRight: 2 }} />
@@ -532,7 +532,7 @@ export default function Accounts() {
         <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
           <h2 className="text-xl flex items-center gap-xs">
             <Building size={20} color="var(--color-primary)" />
-            🏦 銀行活存帳戶 ({bankAccounts.length})
+            🏦 銀行存款帳戶 ({bankAccounts.length})
           </h2>
           <button className="btn btn-sm btn-secondary" onClick={() => handleOpenAdd('bank')}>
             + 新增銀行
@@ -545,7 +545,7 @@ export default function Accounts() {
             <h3>目前此範圍無銀行帳戶</h3>
             <p>新增個人薪轉、活存或家庭共同基金帳戶，輕鬆追蹤儲蓄與扣款。</p>
             <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => handleOpenAdd('bank')}>
-              立即新增銀行帳戶
+              立即新增銀行存款帳戶
             </button>
           </div>
         ) : (
@@ -618,7 +618,7 @@ export default function Accounts() {
           <div className="card empty-state">
             <div className="emoji">💳</div>
             <h3>目前此範圍無信用卡</h3>
-            <p>新增信用卡可掌握家庭公帳代墊與個人私帳刷卡分流，避免突襲式卡費！</p>
+            <p>新增信用卡可掌握家庭公帳代墊與個人個人私帳刷卡分流，避免突襲式信用卡待繳款！</p>
             <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => handleOpenAdd('credit_card')}>
               立即新增信用卡
             </button>
@@ -641,7 +641,7 @@ export default function Accounts() {
                       <span className="account-color-dot" style={{ backgroundColor: card.color }} />
                       <h3 className="account-name">{card.name}</h3>
                       {card.is_joint === 1 ? (
-                        <span className="badge badge-primary">🏠 家庭卡</span>
+                        <span className="badge badge-primary">🏠 家庭信用卡</span>
                       ) : (
                         <span className="badge badge-secondary">👤 個人卡</span>
                       )}
@@ -672,7 +672,7 @@ export default function Accounts() {
 
                     <div className="grid grid-2 gap-sm" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed rgba(0,0,0,0.1)' }}>
                       <div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>已出帳（需繳款）</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>已出帳待繳款</div>
                         <div style={{ fontWeight: 600, color: billed > 0 ? 'var(--color-danger)' : 'var(--text-primary)' }}>
                           {formatCurrency(billed)}
                         </div>
@@ -695,10 +695,10 @@ export default function Accounts() {
                               <button
                                 className="btn btn-xs btn-secondary"
                                 style={{ padding: '1px 6px', fontSize: '0.7rem' }}
-                                title="結帳日出帳結轉"
+                                title="結帳日出帳出帳作業"
                                 onClick={() => handleRollover(card)}
                               >
-                                結轉
+                                出帳作業
                               </button>
                             )}
                           </div>
@@ -725,7 +725,7 @@ export default function Accounts() {
                     <div className="flex items-center justify-between" style={{ fontSize: '0.85rem' }}>
                       <span className="flex items-center gap-xs">
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6B7280' }} />
-                        👤 個人私帳消費：
+                        👤 個人個人個人私帳消費：
                       </span>
                       <span style={{ fontWeight: 700, color: '#4B5563' }}>
                         {formatCurrency(personalDebt)}
@@ -757,7 +757,7 @@ export default function Accounts() {
                         onClick={() => handleOpenPay(card, 'personal')}
                         disabled={personalDebt <= 0}
                       >
-                        👤 繳個人私帳
+                        👤 繳個人個人私帳
                       </button>
                       <button
                         className="btn btn-sm btn-primary"
@@ -769,7 +769,7 @@ export default function Accounts() {
                   ) : (
                     <div className="text-center" style={{ fontSize: '0.85rem', color: 'var(--color-success)', padding: '6px 0', fontWeight: 600 }}>
                       <CheckCircle2 size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-                      卡費已全數結清，無待繳款項
+                      信用卡待繳款已全數結清，無待繳款項
                     </div>
                   )}
                 </div>
@@ -820,11 +820,11 @@ export default function Accounts() {
             )}
 
             <div className="form-group">
-              <label className="form-label">{form.type === 'cash' ? '錢包名稱' : form.type === 'bank' ? '銀行名稱' : '卡片名稱'}</label>
+              <label className="form-label">{form.type === 'cash' ? '錢包名稱' : form.type === 'bank' ? '銀行名稱' : '信用卡名稱'}</label>
               <input
                 type="text"
                 className="input"
-                placeholder={form.type === 'cash' ? '例如：我的皮夾、客廳零用金盒' : form.type === 'bank' ? '例如：台新活存、家庭共同基金' : '例如：國泰世華 CUBE 卡'}
+                placeholder={form.type === 'cash' ? '例如：我的現金錢包、客廳零用金盒' : form.type === 'bank' ? '例如：台新活存、家庭共同基金' : '例如：國泰世華 CUBE 卡'}
                 value={form.name}
                 onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                 required
@@ -882,7 +882,7 @@ export default function Accounts() {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">每月繳款截止日 (1-31)</label>
+                    <label className="form-label">每月繳款日 (1-31)</label>
                     <input
                       type="number"
                       min="1"
@@ -906,7 +906,7 @@ export default function Accounts() {
                   onClick={() => setForm(p => ({ ...p, is_joint: 0 }))}
                 >
                   <User size={14} style={{ marginRight: 4 }} />
-                  👤 個人私帳 (隱私保護)
+                  👤 個人個人私帳 (隱私保護)
                 </button>
                 <button
                   type="button"
@@ -914,11 +914,11 @@ export default function Accounts() {
                   onClick={() => setForm(p => ({ ...p, is_joint: 1 }))}
                 >
                   <Home size={14} style={{ marginRight: 4 }} />
-                  🏠 家庭公用 (全體可見)
+                  🏠 家庭共同基金 (全體可見)
                 </button>
               </div>
               <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 4 }}>
-                {form.is_joint === 0 ? '個人私帳僅你本人可見，其他家庭成員無法檢視餘額。' : '家庭公用帳戶將對家庭群組全體成員公開。'}
+                {form.is_joint === 0 ? '個人個人私帳僅你本人可見，其他家庭成員無法檢視餘額。' : '家庭共同基金帳戶將對家庭群組全體成員公開。'}
               </small>
             </div>
 
@@ -968,7 +968,7 @@ export default function Accounts() {
             {transferError && <div className="alert alert-danger" style={{ marginBottom: 14 }}>{transferError}</div>}
 
             <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.85rem', color: '#166534' }}>
-              💡 帳戶間互轉或 ATM 提領現鈔純屬資產調度，<strong>不會</strong>被列為生活消費支出，淨可用資產維持準確！
+              💡 帳戶間互轉或 ATM 提領現鈔純屬資產調度，<strong>不會</strong>被列為生活消費支出，淨可用餘額維持準確！
             </div>
 
             {/* 快速情境切換 */}
@@ -982,11 +982,11 @@ export default function Accounts() {
                     const firstBank = bankAccounts[0]?.id || ''
                     const firstCash = cashAccounts[0]?.id || ''
                     if (firstBank && firstCash) {
-                      setTransferForm(p => ({ ...p, from_account_id: firstBank, to_account_id: firstCash, note: 'ATM 提領現鈔至皮夾' }))
+                      setTransferForm(p => ({ ...p, from_account_id: firstBank, to_account_id: firstCash, note: 'ATM 提領現鈔至現金錢包' }))
                     }
                   }}
                 >
-                  🏧 ATM 提款至皮夾
+                  🏧 ATM 提款至現金錢包
                 </button>
                 <button
                   type="button"
@@ -1094,13 +1094,13 @@ export default function Accounts() {
         <Modal
           
           onClose={() => setPayCardModal(null)}
-          title={`💳 繳納 ${payCardModal.name} 信用卡費`}
+          title={`💳 信用卡扣款還款 ${payCardModal.name} 信用信用卡待繳款`}
         >
           <form onSubmit={handlePaySubmit}>
             {payError && <div className="alert alert-danger" style={{ marginBottom: 14 }}>{payError}</div>}
 
             <div className="form-group">
-              <label className="form-label">扣款銀行活存帳戶</label>
+              <label className="form-label">扣款銀行存款帳戶</label>
               <select
                 className="input"
                 value={payForm.bank_account_id}
@@ -1156,7 +1156,7 @@ export default function Accounts() {
                   className={`btn ${payForm.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setPayForm(p => ({ ...p, is_shared: 0 }))}
                 >
-                  👤 個人私帳 (個人消費結清)
+                  👤 個人個人私帳 (個人消費結清)
                 </button>
               </div>
             </div>
@@ -1176,7 +1176,7 @@ export default function Accounts() {
                 取消
               </button>
               <button type="submit" className="btn btn-primary" disabled={paying}>
-                {paying ? '繳款扣款中...' : '確認繳納卡費'}
+                {paying ? '繳款扣款中...' : '確認信用卡扣款還款信用卡待繳款'}
               </button>
             </div>
           </form>

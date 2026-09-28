@@ -346,7 +346,7 @@ export default function Goals() {
                 type="number"
                 step="100"
                 min="0"
-                placeholder="例如 5000（將自每月可自由支配金額扣除）"
+                placeholder="例如 5000（將自每月真實可支配現金扣除）"
                 value={form.monthly_reserve}
                 onChange={e => setForm(p => ({ ...p, monthly_reserve: e.target.value }))}
               />

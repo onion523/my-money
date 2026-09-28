@@ -63,11 +63,15 @@ _Avoid_: 到期日 (due date)、繳納日 (payment date)、截止日 (deadline)
 _Avoid_: 繳卡費 (card payment)、清償 (debt clearance)、轉帳支出 (transfer expense)
 
 **Statement Rollover (結帳日出帳作業)**:
-結帳日到達後，使用者確認並將累積之未出帳金額一次性移轉合併至已出帳待繳款的結算程序。
-_Avoid_: 帳單重算 (recalculation)、滾入下期 (carryover)、手動對帳 (manual reconciliation)
+結帳日到達後，使用者確認並將累積之未出帳金額一次性移轉合併至已出帳待繳款的結算程序，系統並記錄結轉時間點以作為下期未出帳之起算邊界。
+_Avoid_: 帳單重算 (recalculation)、滾入下期 (carryover)、手動對帳 (manual reconciliation)、結轉 (rollover)
+
+**Two-Tier Debt Rollback (雙層負債回退)**:
+當編輯或刪除歷史刷卡消費交易時，負債回退程序優先扣減未出帳款（Unbilled Debt）；若未出帳款已不足扣（款項已於結帳日出帳作業中結轉至已出帳或已被還款沖銷），剩餘回退差額自動溢出扣減已出帳待繳款（Billed Debt），確保欠款全額精準返還。
+_Avoid_: 夾零截斷 (zero clamping)、已出帳凍結 (billed freeze)
 
 **Credit Card Balance Reconciliation (信用卡未出帳自動校準)**:
-針對信用卡帳戶，使用者可一鍵自動依據當前掛在該卡底下、且屬於最近一次結帳日（Statement Day）後的有效消費交易總和，自動校準並覆蓋 unbilled 餘額，以消除因歷史更動造成的帳務差額，並精準復原公私帳刷卡分流（shared_debt 與 personal_debt）。
+針對信用卡帳戶，使用者可一鍵自動依據當前掛在該卡底下、最後結帳出帳時間點之後的「有效消費支出 - 刷退收入 - 當期未出帳還款沖抵額」，精準校準並覆蓋 unbilled 餘額，消除歷史落差並即刻復原公私帳刷卡分流（shared_debt 與 personal_debt）。
 _Avoid_: 暴力重算 (hard reset)、人工對帳 (manual audit)
 
 ---

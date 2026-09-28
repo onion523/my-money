@@ -42,20 +42,51 @@ transactions.get('/', async (c) => {
 
 // POST /transactions
 
-// 帳戶餘額與未出帳連動輔助函數 (支援新增、編輯與刪除回滾)
-async function syncAccountBalance(db: any, accountId: string, type: string, amount: number, isRevert: boolean = false) {
-  const acc = await db.prepare('SELECT id, type FROM accounts WHERE id = ?').bind(accountId).first();
-  if (!acc) return;
+// 帳戶餘額與未出帳連動輔助函數 (支援雙層溢出回退與 D1 原子事務 Batch)
+async function getSyncAccountStatements(db: any, accountId: string, type: string, amount: number, isRevert: boolean = false) {
+  const acc = (await db.prepare('SELECT id, type, balance, unbilled FROM accounts WHERE id = ?').bind(accountId).first()) as { id: string; type: string; balance: number; unbilled: number } | null;
+  if (!acc) return [];
   const amt = Number(amount);
-  const factor = isRevert ? -1 : 1;
 
   if (acc.type === 'bank' || acc.type === 'cash') {
+    const factor = isRevert ? -1 : 1;
     const delta = (type === 'income' ? amt : -amt) * factor;
-    await db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(delta, accountId).run();
+    return [db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(delta, accountId)];
   } else if (acc.type === 'credit_card') {
-    const delta = (type === 'expense' ? amt : -amt) * factor;
-    await db.prepare('UPDATE accounts SET unbilled = MAX(0, unbilled + ?) WHERE id = ?').bind(delta, accountId).run();
+    if (isRevert) {
+      if (type === 'expense') {
+        // 雙層負債溢出回退：優先扣減未出帳，未出帳歸零後溢出扣減已出帳待繳款
+        let newUnbilled = acc.unbilled || 0;
+        let newBalance = acc.balance || 0;
+        if (newUnbilled >= amt) {
+          newUnbilled -= amt;
+        } else {
+          const remainder = amt - newUnbilled;
+          newUnbilled = 0;
+          newBalance = Math.max(0, newBalance - remainder);
+        }
+        return [db.prepare('UPDATE accounts SET unbilled = ?, balance = ? WHERE id = ?').bind(newUnbilled, newBalance, accountId)];
+      } else {
+        return [db.prepare('UPDATE accounts SET unbilled = unbilled + ? WHERE id = ?').bind(amt, accountId)];
+      }
+    } else {
+      if (type === 'expense') {
+        return [db.prepare('UPDATE accounts SET unbilled = unbilled + ? WHERE id = ?').bind(amt, accountId)];
+      } else {
+        let newUnbilled = acc.unbilled || 0;
+        let newBalance = acc.balance || 0;
+        if (newUnbilled >= amt) {
+          newUnbilled -= amt;
+        } else {
+          const remainder = amt - newUnbilled;
+          newUnbilled = 0;
+          newBalance = Math.max(0, newBalance - remainder);
+        }
+        return [db.prepare('UPDATE accounts SET unbilled = ?, balance = ? WHERE id = ?').bind(newUnbilled, newBalance, accountId)];
+      }
+    }
   }
+  return [];
 }
 
 transactions.post('/', async (c) => {
@@ -83,7 +114,8 @@ transactions.post('/', async (c) => {
   ).bind(id, userId, account_id, type, category, amount, note, date, is_shared).run();
 
   // 更新帳戶餘額
-  await syncAccountBalance(c.env.DB, account_id, type, amount, false);
+  const stmts = await getSyncAccountStatements(c.env.DB, account_id, type, amount, false);
+  if (stmts.length > 0) await c.env.DB.batch(stmts);
 
   const row = await c.env.DB.prepare(`
     SELECT t.*, a.name as account_name, u.name as user_name
@@ -114,7 +146,7 @@ transactions.put('/:id', async (c) => {
     `SELECT * FROM transactions WHERE id = ? AND user_id IN (${placeholders})`
   ).bind(id, ...memberUserIds).first();
 
-  if (!existing) return c.json({ success: false, error: '紀錄不存在' }, 404);
+  if (!existing) return c.json({ success: false, error: '交易記錄不存在' }, 404);
 
   // Q5: 信用卡還款紀錄受保護
   const protectedCategories = ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'];
@@ -131,13 +163,14 @@ transactions.put('/:id', async (c) => {
   ).bind(account_id, ...memberUserIds).first();
   if (!newAcc) return c.json({ success: false, error: '目標帳戶不存在或無權限' }, 404);
 
-  // 雙向回滾舊帳戶並認列新帳戶餘額
-  await syncAccountBalance(c.env.DB, existing.account_id as string, existing.type as string, Number(existing.amount), true);
-  await syncAccountBalance(c.env.DB, account_id, type, Number(amount), false);
-
-  await c.env.DB.prepare(
+  // 雙向回滾舊帳戶並認列新帳戶餘額 (透過 D1 batch 原子事務執行)
+  const oldStmts = await getSyncAccountStatements(c.env.DB, existing.account_id as string, existing.type as string, Number(existing.amount), true);
+  const newStmts = await getSyncAccountStatements(c.env.DB, account_id, type, Number(amount), false);
+  const updateTxStmt = c.env.DB.prepare(
     'UPDATE transactions SET account_id = ?, type = ?, category = ?, amount = ?, note = ?, date = ?, is_shared = ? WHERE id = ?'
-  ).bind(account_id, type, category, amount, note, date, is_shared, id).run();
+  ).bind(account_id, type, category, amount, note, date, is_shared, id);
+
+  await c.env.DB.batch([...oldStmts, ...newStmts, updateTxStmt]);
 
   const row = await c.env.DB.prepare(`
     SELECT t.*, a.name as account_name, u.name as user_name
@@ -160,7 +193,7 @@ transactions.delete('/:id', async (c) => {
     `SELECT * FROM transactions WHERE id = ? AND user_id IN (${placeholders})`
   ).bind(id, ...memberUserIds).first();
 
-  if (!existing) return c.json({ success: false, error: '紀錄不存在' }, 404);
+  if (!existing) return c.json({ success: false, error: '交易記錄不存在' }, 404);
 
   // Q5: 信用卡還款紀錄受保護
   const protectedCategories = ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'];
@@ -171,10 +204,11 @@ transactions.delete('/:id', async (c) => {
     }, 400);
   }
 
-  // 全額回滾帳戶餘額或未出帳負債
-  await syncAccountBalance(c.env.DB, existing.account_id as string, existing.type as string, Number(existing.amount), true);
+  // 全額回滾帳戶餘額或未出帳負債 (透過 D1 batch 原子事務執行)
+  const revertStmts = await getSyncAccountStatements(c.env.DB, existing.account_id as string, existing.type as string, Number(existing.amount), true);
+  const deleteTxStmt = c.env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(id);
 
-  await c.env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run();
+  await c.env.DB.batch([...revertStmts, deleteTxStmt]);
   return c.json({ success: true, data: null });
 });
 
