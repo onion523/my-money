@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { householdApi, HouseholdData, HouseholdMember, accountsApi, Account } from '../api/client'
+import { householdApi, HouseholdData, HouseholdMember, HouseholdAdvance, accountsApi, Account } from '../api/client'
 import { formatCurrency, today } from '../components/utils'
 import Modal from '../components/Modal'
 import {
@@ -19,7 +19,11 @@ import {
   DollarSign,
   CheckCircle2,
   ArrowRightLeft,
-  Wallet
+  Wallet,
+  ChevronDown,
+  ChevronUp,
+  Receipt,
+  History
 } from 'lucide-react'
 
 export default function Family() {
@@ -41,16 +45,10 @@ export default function Family() {
   const [joinCode, setJoinCode] = useState('')
   const [joining, setJoining] = useState(false)
   // 代墊與報銷狀態
-  const [advances, setAdvances] = useState<Array<{
-    user_id: string;
-    user_name: string;
-    email: string;
-    total_advanced: number;
-    total_reimbursed: number;
-    pending_reimburse: number;
-  }>>([])
+  const [advances, setAdvances] = useState<HouseholdAdvance[]>([])
   const [jointAccounts, setJointAccounts] = useState<Account[]>([])
   const [allAccounts, setAllAccounts] = useState<Account[]>([])
+  const [expandedMemberIds, setExpandedMemberIds] = useState<Record<string, boolean>>({})
   const [reimburseModalTarget, setReimburseModalTarget] = useState<any | null>(null)
   const [reimburseForm, setReimburseForm] = useState({
     from_account_id: '',
@@ -62,12 +60,18 @@ export default function Family() {
   const [reimbursing, setReimbursing] = useState(false)
   const [reimburseError, setReimburseError] = useState('')
 
-
   const loadData = async () => {
     try {
       setLoading(true)
-      const res = await householdApi.current()
+      const [res, advList, accs] = await Promise.all([
+        householdApi.current(),
+        householdApi.advances(),
+        accountsApi.list()
+      ])
       setData(res)
+      setAdvances(advList || [])
+      setAllAccounts(accs || [])
+      setJointAccounts((accs || []).filter(a => a.is_joint === 1))
       if (res.activeInvitation) {
         setInviteCode(res.activeInvitation.code)
         setInviteExpires(res.activeInvitation.expires_at)
@@ -77,6 +81,13 @@ export default function Family() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const toggleExpand = (userId: string) => {
+    setExpandedMemberIds(prev => ({
+      ...prev,
+      [userId]: !prev[userId]
+    }))
   }
 
   useEffect(() => {
@@ -368,69 +379,247 @@ export default function Family() {
             </div>
 
             {advances.length === 0 ? (
-              <div className="text-center" style={{ padding: 20, color: 'var(--text-secondary)' }}>
-                暫無公帳代墊款紀錄
+              <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-secondary)' }}>
+                <Info size={28} style={{ display: 'block', margin: '0 auto 8px', opacity: 0.6 }} />
+                <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>暫無公帳代墊款紀錄</div>
+                <div className="text-xs" style={{ marginTop: 4 }}>
+                  當家庭成員使用個人私帳、私卡或個人現金錢包支付公帳支出時，系統將自動在此產生待報銷代墊款。
+                </div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {advances.map(adv => (
-                  <div
-                    key={adv.user_id}
-                    style={{
-                      padding: '16px 20px',
-                      borderRadius: 12,
-                      background: adv.pending_reimburse > 0 ? 'rgba(255, 138, 138, 0.06)' : 'var(--bg-surface-2)',
-                      border: adv.pending_reimburse > 0 ? '1px solid rgba(255, 138, 138, 0.3)' : '1px solid var(--border-color)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: 16
-                    }}
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{adv.user_name}</span>
-                        {adv.pending_reimburse > 0 ? (
-                          <span className="badge badge-danger">有待請款代墊</span>
-                        ) : (
-                          <span className="badge badge-success">
-                            <CheckCircle2 size={12} style={{ display: 'inline', marginRight: 2 }} />
-                            已全數報銷
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-secondary)', marginTop: 6 }}>
-                        <span>累計公帳墊付：{formatCurrency(adv.total_advanced)}</span>
-                        <span>·</span>
-                        <span>已獲撥款報銷：{formatCurrency(adv.total_reimbursed)}</span>
-                      </div>
-                    </div>
+                {advances.map(adv => {
+                  const isExpanded = !!expandedMemberIds[adv.user_id]
+                  const advanceItems = adv.advance_items || []
+                  const reimbItems = adv.reimbursement_items || []
 
-                    <div className="flex items-center gap-4">
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>待報銷代墊總額</div>
-                        <div style={{
-                          fontSize: '1.4rem',
-                          fontWeight: 800,
-                          color: adv.pending_reimburse > 0 ? 'var(--color-danger)' : 'var(--color-success)'
-                        }}>
-                          {formatCurrency(adv.pending_reimburse)}
+                  return (
+                    <div
+                      key={adv.user_id}
+                      style={{
+                        borderRadius: 12,
+                        background: adv.pending_reimburse > 0 ? 'rgba(255, 138, 138, 0.05)' : 'var(--bg-surface-2)',
+                        border: adv.pending_reimburse > 0 ? '1px solid rgba(255, 138, 138, 0.3)' : '1px solid var(--border-color)',
+                        overflow: 'hidden',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {/* 頂部成員代墊概覽 */}
+                      <div
+                        style={{
+                          padding: '16px 20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 16
+                        }}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{adv.user_name}</span>
+                            {adv.pending_reimburse > 0 ? (
+                              <span className="badge badge-danger">有待請款代墊</span>
+                            ) : (
+                              <span className="badge badge-success">
+                                <CheckCircle2 size={12} style={{ display: 'inline', marginRight: 2 }} />
+                                已全數結清
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-secondary)', marginTop: 6 }}>
+                            <span>累計公帳墊付：{formatCurrency(adv.total_advanced)}</span>
+                            <span>·</span>
+                            <span>已獲撥款報銷：{formatCurrency(adv.total_reimbursed)}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <div style={{ textAlign: 'right', marginRight: 4 }}>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>待報銷代墊總額</div>
+                            <div style={{
+                              fontSize: '1.35rem',
+                              fontWeight: 800,
+                              color: adv.pending_reimburse > 0 ? 'var(--color-danger)' : 'var(--color-success)'
+                            }}>
+                              {formatCurrency(adv.pending_reimburse)}
+                            </div>
+                          </div>
+
+                          {adv.pending_reimburse > 0 && (
+                            <button
+                              className="btn btn-primary"
+                              onClick={() => handleOpenReimburse(adv)}
+                              style={{ padding: '7px 14px', fontSize: '0.9rem' }}
+                            >
+                              <ArrowRightLeft size={15} style={{ marginRight: 4 }} />
+                              從共同基金一鍵報銷
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => toggleExpand(adv.user_id)}
+                            style={{ padding: '7px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 4 }}
+                          >
+                            {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                            {isExpanded ? '收起明細' : '查看代墊明細'}
+                            <span style={{
+                              background: 'rgba(0,0,0,0.1)',
+                              borderRadius: 10,
+                              padding: '1px 6px',
+                              fontSize: '0.75rem',
+                              marginLeft: 2
+                            }}>
+                              {advanceItems.length}
+                            </span>
+                          </button>
                         </div>
                       </div>
 
-                      {adv.pending_reimburse > 0 && (
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => handleOpenReimburse(adv)}
-                        >
-                          <ArrowRightLeft size={16} style={{ marginRight: 4 }} />
-                          從共同基金一鍵報銷
-                        </button>
+                      {/* 就地展開明細區塊 */}
+                      {isExpanded && (
+                        <div style={{
+                          borderTop: '1px solid var(--border-color)',
+                          background: 'rgba(0, 0, 0, 0.02)',
+                          padding: '16px 20px'
+                        }}>
+                          {/* 1. 代墊消費明細清單 */}
+                          <div style={{ marginBottom: 20 }}>
+                            <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+                              <h4 style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                                <Receipt size={16} color="var(--color-primary)" />
+                                📌 個人代墊消費明細 ({advanceItems.length} 筆)
+                              </h4>
+                              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                僅計入自個人私帳、私卡或現金皮夾支付之公帳
+                              </span>
+                            </div>
+
+                            {advanceItems.length === 0 ? (
+                              <div className="text-xs text-secondary" style={{ padding: '12px 14px', background: 'var(--bg-surface-2)', borderRadius: 8 }}>
+                                尚未有任何個人代墊公帳消費紀錄。
+                              </div>
+                            ) : (
+                              <div style={{
+                                background: 'var(--bg-surface)',
+                                borderRadius: 8,
+                                border: '1px solid var(--border-color)',
+                                overflow: 'hidden'
+                              }}>
+                                <div style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '100px 1fr 140px 110px',
+                                  padding: '8px 14px',
+                                  background: 'var(--bg-surface-2)',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 600,
+                                  color: 'var(--text-secondary)',
+                                  borderBottom: '1px solid var(--border-color)'
+                                }}>
+                                  <div>消費日期</div>
+                                  <div>類別與備註</div>
+                                  <div>墊付扣款帳戶</div>
+                                  <div style={{ textAlign: 'right' }}>代墊金額</div>
+                                </div>
+                                {advanceItems.map(item => (
+                                  <div
+                                    key={item.id}
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '100px 1fr 140px 110px',
+                                      padding: '10px 14px',
+                                      fontSize: '0.85rem',
+                                      alignItems: 'center',
+                                      borderBottom: '1px solid var(--border-color)'
+                                    }}
+                                  >
+                                    <div style={{ color: 'var(--text-secondary)' }}>{item.date}</div>
+                                    <div>
+                                      <span style={{ fontWeight: 600, marginRight: 6 }}>{item.category}</span>
+                                      {item.note && <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.note}</span>}
+                                    </div>
+                                    <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                      {item.account_name}
+                                    </div>
+                                    <div style={{ textAlign: 'right', fontWeight: 700, color: 'var(--color-danger)' }}>
+                                      {formatCurrency(item.amount)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 2. 歷史撥款報銷沖帳紀錄 */}
+                          <div>
+                            <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+                              <h4 style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                                <History size={16} color="var(--color-success)" />
+                                💸 共同基金撥款沖帳紀錄 ({reimbItems.length} 筆)
+                              </h4>
+                              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                從家庭共同基金撥回該成員個人帳戶之已報銷紀錄
+                              </span>
+                            </div>
+
+                            {reimbItems.length === 0 ? (
+                              <div className="text-xs text-secondary" style={{ padding: '12px 14px', background: 'var(--bg-surface-2)', borderRadius: 8 }}>
+                                尚未有自共同基金撥款報銷之歷史沖帳紀錄。
+                              </div>
+                            ) : (
+                              <div style={{
+                                background: 'var(--bg-surface)',
+                                borderRadius: 8,
+                                border: '1px solid var(--border-color)',
+                                overflow: 'hidden'
+                              }}>
+                                <div style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '100px 140px 1fr 110px',
+                                  padding: '8px 14px',
+                                  background: 'var(--bg-surface-2)',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 600,
+                                  color: 'var(--text-secondary)',
+                                  borderBottom: '1px solid var(--border-color)'
+                                }}>
+                                  <div>撥款日期</div>
+                                  <div>撥入收款帳戶</div>
+                                  <div>說明備註</div>
+                                  <div style={{ textAlign: 'right' }}>已沖銷金額</div>
+                                </div>
+                                {reimbItems.map(item => (
+                                  <div
+                                    key={item.id}
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '100px 140px 1fr 110px',
+                                      padding: '10px 14px',
+                                      fontSize: '0.85rem',
+                                      alignItems: 'center',
+                                      borderBottom: '1px solid var(--border-color)'
+                                    }}
+                                  >
+                                    <div style={{ color: 'var(--text-secondary)' }}>{item.date}</div>
+                                    <div className="text-xs" style={{ fontWeight: 600 }}>{item.account_name}</div>
+                                    <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                      {item.note || '撥款報銷代墊款'}
+                                    </div>
+                                    <div style={{ textAlign: 'right', fontWeight: 700, color: 'var(--color-success)' }}>
+                                      +{formatCurrency(item.amount)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

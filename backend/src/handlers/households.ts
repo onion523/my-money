@@ -198,7 +198,7 @@ households.delete('/members/:targetUserId', async (c) => {
 });
 
 
-// GET /households/advances (家庭代墊款待報銷統計)
+// GET /households/advances (家庭代墊款待報銷統計與明細)
 households.get('/advances', async (c) => {
   const userId = c.get('userId');
   const { household, memberUserIds } = await getUserHousehold(c.env.DB, userId);
@@ -212,13 +212,30 @@ households.get('/advances', async (c) => {
   `).bind(household.id).all();
 
   const advances = await Promise.all((membersResult.results as any[]).map(async (m) => {
-    // 個人為家庭公帳墊付支出總額 (排除信用卡還款、轉帳、報銷)
+    // 個人為家庭公帳墊付支出總額 (僅限個人帳戶/私卡 is_joint = 0，排除共同基金帳戶與轉帳、還款、報銷)
     const advRow = await c.env.DB.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total
-      FROM transactions
-      WHERE user_id = ? AND is_shared = 1 AND type = 'expense'
-        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+      SELECT COALESCE(SUM(t.amount), 0) as total
+      FROM transactions t
+      LEFT JOIN accounts a ON t.account_id = a.id
+      WHERE t.user_id = ? 
+        AND t.is_shared = 1 
+        AND t.type = 'expense'
+        AND (a.is_joint = 0 OR a.is_joint IS NULL)
+        AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
     `).bind(m.user_id).first<{ total: number }>();
+
+    // 代墊消費明細清單
+    const advanceItemsResult = await c.env.DB.prepare(`
+      SELECT t.id, t.date, t.category, t.note, t.amount, COALESCE(a.name, '個人帳戶') as account_name, COALESCE(a.type, 'other') as account_type
+      FROM transactions t
+      LEFT JOIN accounts a ON t.account_id = a.id
+      WHERE t.user_id = ? 
+        AND t.is_shared = 1 
+        AND t.type = 'expense'
+        AND (a.is_joint = 0 OR a.is_joint IS NULL)
+        AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+      ORDER BY t.date DESC, t.created_at DESC
+    `).bind(m.user_id).all();
 
     // 個人已收到之公帳代墊報銷款
     const reimbRow = await c.env.DB.prepare(`
@@ -226,6 +243,15 @@ households.get('/advances', async (c) => {
       FROM transactions
       WHERE user_id = ? AND category = '公帳代墊報銷' AND type = 'income'
     `).bind(m.user_id).first<{ total: number }>();
+
+    // 歷史報銷撥款紀錄
+    const reimbItemsResult = await c.env.DB.prepare(`
+      SELECT t.id, t.date, t.amount, t.note, COALESCE(a.name, '收款帳戶') as account_name
+      FROM transactions t
+      LEFT JOIN accounts a ON t.account_id = a.id
+      WHERE t.user_id = ? AND t.category = '公帳代墊報銷' AND t.type = 'income'
+      ORDER BY t.date DESC, t.created_at DESC
+    `).bind(m.user_id).all();
 
     const totalAdvanced = advRow?.total || 0;
     const totalReimbursed = reimbRow?.total || 0;
@@ -237,7 +263,9 @@ households.get('/advances', async (c) => {
       email: m.email,
       total_advanced: totalAdvanced,
       total_reimbursed: totalReimbursed,
-      pending_reimburse: pendingReimburse
+      pending_reimburse: pendingReimburse,
+      advance_items: advanceItemsResult.results || [],
+      reimbursement_items: reimbItemsResult.results || []
     };
   }));
 

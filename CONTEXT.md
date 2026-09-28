@@ -1,129 +1,135 @@
-# My-Money (?�人?�家庭�?帳本)
+# My-Money (個人與家庭雙帳本)
 
-一?��??�個人?�伴�?家庭設�??�全?��??�代記帳系統，涵?�即?��??��??�平衡、信?�卡�???�內?��??�、家庭共?�基?�管?�、週�??�支?��??��?，以??LINE / Telegram 對話式智?��?帳�?
+一套專為個人與伴侶／家庭設計的全方位現代記帳系統，涵蓋即時現金流、資產負債平衡、信用卡出帳管理、內部轉帳、家庭共同基金管理、週期收支平攤預測，以及 LINE / Telegram 對話式智慧記帳。
 
 ## Language
 
-### ?��?帳�??�總�?(Core Ledger & Accounts)
+### 核心帳簿與總覽 (Core Ledger & Accounts)
 
-**Transaction (交�?紀??**:
-?��??��??�特定日?��?資�?流入?��??�審計�??��?
-_Avoid_: 記帳紀??(entry)?��?水�? (log)?��?�?(record)
+**Transaction (交易記錄)**:
+帳簿中記載特定日期的資金流入、流出或審計轉帳紀錄。
+_Avoid_: 記帳紀錄 (entry)、流水帳 (log)、紀錄 (record)
 
-**Account (資�?帳戶)**:
-存放資�??��??��??��?實�??�數位�?體�??��??�活存�?行帳?��?信用?�帳?��?
-_Avoid_: ?��? (wallet)?�卡??(card)?�總�?(ledger)
+**Account (資產帳戶)**:
+存放資金之個別實體或數位載體，例如現金皮夾、活存銀行帳戶、信用卡帳戶。
+_Avoid_: 錢包 (wallet)、卡片 (card)、總帳 (ledger)
 
-**Cash Wallet (?��??��?)**:
-?�員存放實�??��?之正資產帳戶，�?設歸屬�??�個人私帳管�?，用?��?市場?��??��?實�??�常?��??��??�_Avoid_: ?�錢??(coin pouch)?�皮�?(wallet)?�現?�帳 (cash ledger)
+**Cash Wallet (現金錢包)**:
+成員存放實體現鈔之正資產帳戶，預設歸屬於個人私帳管理，用於菜市場、小吃攤等實體日常零錢支付。
+_Avoid_: 零錢包 (coin pouch)、皮夾 (wallet)、現金帳 (cash ledger)
 
-**Bank Account (?�行�?款帳??**:
-�?��?��??�活?��?款�??��?帳戶之正資產帳戶??
-_Avoid_: ?��?帳戶 (cash account)?�活存帳??(deposit account)
+**Bank Account (銀行存款帳戶)**:
+個人或共同持有的活期存款正資產帳戶。
+_Avoid_: 現金帳戶 (cash account)、活存帳戶 (deposit account)
 
-**Credit Card (信用?�帳??**:
-�?��?�卡?�行�?予�?循環信用額度?��??�帳?��?
-_Avoid_: 負債帳戶 (debt account)?�卡??(card)
+**Credit Card (信用卡帳戶)**:
+發卡機構授予循環信用額度之負債帳戶。
+_Avoid_: 負債帳戶 (debt account)、卡片 (card)
 
-**Available Balance (淨可?��???**:
-?�?�活存�?行�?款總?�扣?��??�信?�卡總�?款�?已出帳�??�出帳�?後�?實質淨�??��??��?
-_Avoid_: 淨�???(net worth)?�可?��?�?(credit limit)?�總餘�? (total balance)
+**Available Balance (淨可用餘額)**:
+名下活存銀行存款總額扣除所有信用卡總欠款（已出帳與未出帳）後的實質淨可用資產。
+_Avoid_: 淨值 (net worth)、可用額度 (credit limit)、總餘額 (total balance)
 
-**Disposable Cash (?�實?�支?�現??**:
-淨可?��??�進�?步扣?�當?�固定支?�攤?��??��??�進�?中儲?�目標�??��?後�??�頭?�自?�花費�??��???
-_Avoid_: ?�用??(pocket money)?��?餘�???(free cash)?��?置�???(idle cash)
-
----
-
-### 信用?�帳?��?結�? (Credit Card Debt & Settlement)
-
-**Billed Debt (已出帳�?繳�?�?**:
-?�卡?�行已完�?結帳並�??�帳?��??��??�於繳款?��?繳�?之確定�??��?
-_Avoid_: 帳單?��? (statement balance)?�本?��?�?(invoice)?��?繳款 (current bill)
-
-**Unbilled Debt (?�出帳�?�?**:
-?��?近�?次�?帳日後刷?�產?�、�??��??�正式帳?��??��?累�?消費負債??
-_Avoid_: 浮�?欠款 (floating debt)?�未?�帳 (pending charges)?�暫估款 (accrued)
-
-**Statement Day (結帳??**:
-?�卡機�?每�??��??�出帳�?費並?�出帳單之固定�??�日?��?
-_Avoid_: ?�帳??(closing date)?��?帳日 (cut-off date)?��?費週�? (billing cycle)
-
-**Payment Due Day (繳款??**:
-?�卡人�??�繳清本?�已?�帳待繳?��?以�??��?循環?�息之�?後繳納�??�日??
-_Avoid_: ?��???(due date)?�繳納日 (payment date)?�截止日 (deadline)
-
-**Credit Card Repayment (信用?��?款�???**:
-?��?定�?行�?款扣款以?��?信用?��??��??�部轉帳程�?，�??�被?��?計入?�活消費?�出??
-_Avoid_: 繳卡�?(card payment)?��???(debt clearance)?��?帳支??(transfer expense)
-
-**Statement Rollover (結帳?�出帳�?�?**:
-?��?帳日?��?後�??�使?�者確認並將累積�??�出帳�?額�?次性移轉�?併至已出帳�?繳�?結�?程�???
-_Avoid_: 帳單?��? (recalculation)?��??�帳 (carryover)?��??��?�?(manual reconciliation)
+**Disposable Cash (真實可支配現金)**:
+淨可用餘額進一步扣除當期固定收支平攤預留與進行中儲蓄目標款項後的安全自由花費餘額。
+_Avoid_: 零用錢 (pocket money)、空閒餘額 (free cash)、閒置資金 (idle cash)
 
 ---
 
-### 家庭?�帳?�共?�基??(Household & Joint Fund)
+### 信用卡帳務與結算 (Credit Card Debt & Settlement)
 
-**Household (家庭群�?)**:
-?��?位使?�者�??�、能?�享家庭?�帳?�支並檢視�??�財?�數?��??�聯組�???
-_Avoid_: ?��? (team)?�群�?(group)?�家??(family)
+**Billed Debt (已出帳待繳款)**:
+發卡銀行已完成結帳並發送帳單，約定於繳款日前繳納之確定欠款額。
+_Avoid_: 帳單餘額 (statement balance)、本期帳單 (invoice)、應繳款 (current bill)
 
-**Shared Expense (家庭?�帳)**:
-?�家庭全體利?��??��??�活?�?��??��?記為?��??�員?�享之�?費支?��?
-_Avoid_: ?��??�銷 (joint expense)?�公�?(public cost)?�公�?(group cost)
+**Unbilled Debt (未出帳款)**:
+自最近一次結帳日後刷卡產生、尚未列入正式帳單的累計消費負債。
+_Avoid_: 浮動欠款 (floating debt)、未入帳 (pending charges)、暫估款 (accrued)
 
-**Personal Expense (?�人私帳)**:
-?��?家庭中個別?�員?�人享�??��?家庭?��??�活?��?之�??�支?��?
-_Avoid_: 私帳 (private expense)?�個人?�出 (self expense)?�自付�? (own cost)
+**Statement Day (結帳日)**:
+發卡機構每月結算消費並產出帳單的固定排程日。
+_Avoid_: 關帳日 (closing date)、截帳日 (cut-off date)、計費週期 (billing cycle)
 
-**Joint Fund (家庭?��??��?)**:
-標�??�家庭公?��??��??�行帳?��??��??��??��?額注?��?專�??�於?��??�帳?�買?�撥付代墊款?�銷??
-_Avoid_: ?�費�?(common pool)?�家庭帳??(family account)?�公�?(public fund)
+**Payment Due Day (繳款日)**:
+持卡人應繳清本期已出帳待繳款以避免循環利息的最後繳納期限日。
+_Avoid_: 到期日 (due date)、繳納日 (payment date)、截止日 (deadline)
 
-**Personal Cash Advance (?�人?��??�帳�??)**:
-?�別?�員?�日常�?活中?�出?�人?��??�夾?�家庭公帳支付支?��?系統?��??�個人?�夾??��?��??�家庭支?��?並登記為?�帳�??款�??�銷?�_Avoid_: 墊現??(cash upfront)?�自?�腰??(out-of-pocket)
+**Credit Card Repayment (信用卡扣款還款)**:
+從指定銀行存款扣款以償還信用卡欠款的內部轉帳程序，不會被重複計入生活消費支出。
+_Avoid_: 繳卡費 (card payment)、清償 (debt clearance)、轉帳支出 (transfer expense)
 
-**Advanced Payment (?�帳�??�?**:
-?�個別?�員?�以?�人信用?��??��??��??�家庭公帳�?付�?�?��款�???
-_Avoid_: ?��? (upfront pay)?�個人?�支 (loan to family)?�代付款 (advance)
-
-**Reimbursement (�??請款?�銷)**:
-?�家庭共?�基?�直?�撥款�?帳至?�人帳戶，以沖銷?�員?��??�家庭代墊款?��?平帳?��???
-_Avoid_: 結�? (settlement)?�退�?(refund)?��???(payback)
+**Statement Rollover (結帳日出帳作業)**:
+結帳日到達後，使用者確認並將累積之未出帳金額一次性移轉合併至已出帳待繳款的結算程序。
+_Avoid_: 帳單重算 (recalculation)、滾入下期 (carryover)、手動對帳 (manual reconciliation)
 
 ---
 
-### 規�??��?�?(Planning & Forecasting)
+### 家庭公帳與共同基金 (Household & Joint Fund)
 
-**Recurring Item (?��??�支)**:
-?��?規�??��??��??�、�??�、季?��?年、年）�??�定�??��??��??��??��??�收?��??��?
-_Avoid_: 訂閱 (subscription)?��?額支??(fixed expense)?�週�??��? (contract)
+**Household (家庭群組)**:
+兩位使用者綁定、能共享家庭公帳收支並檢視家庭財務數據的關聯組織。
+_Avoid_: 團隊 (team)、群組 (group)、家庭 (family)
 
-**Amortization (?��??��?)**:
-將年繳、季繳�??�週�??��??�出平攤轉�??��??��??��??��??�度資�?負�?之�?算�?程�?
-_Avoid_: ?��? (installment)?�平滑�? (smoothing)?��???(proration)
+**Shared Expense (家庭公帳)**:
+為家庭全體利益與生活日常支出，標記為全體成員共享之消費支出。
+_Avoid_: 共同開銷 (joint expense)、公費 (public cost)、公攤 (group cost)
 
-**Savings Goal (?��??��?)**:
-使用?�設定具?�目標總額�??��??��??��?專�?資產?��?，其每�??��?額�?實質?��??�支?�現?��?
-_Avoid_: 存錢�?(piggy bank)?�夢?�基??(fund target)?��???(wish)
+**Personal Expense (個人私帳)**:
+僅家庭中個別成員個人享受、非家庭共用之獨立收支。
+_Avoid_: 私帳 (private expense)、個人支出 (self expense)、自付額 (own cost)
 
-**Budget (?��??��?)**:
-?��??��??�份?�特定�?費�??��?設�?之支?��??��?並具?��??��?警監?��?
-_Avoid_: 額度 (spending limit)?�花費�???(cap)?��?�?(allowance)
+**Joint Fund (家庭共同基金)**:
+標記為家庭公帳專用之銀行帳戶或公款現金，成員定額注資，專門用於家庭公帳買單或撥付代墊款報銷。
+_Avoid_: 公費池 (common pool)、家庭帳戶 (family account)、公款 (public fund)
 
-**Affordability Check (購買?�試�?**:
-?�使?�者�??�大額�?費�?，即?��?算扣?�該筆�??��??�支?�現?�是?��?大於?��?安全檢查??
-_Avoid_: 購買模擬 (purchase simulation)?��?算檢??(budget check)?�試�?(simulation)
+**Personal Cash Advance (個人現金公帳代墊)**:
+個別成員在日常生活中掏出個人現金錢包為家庭公帳支付支出，系統自個人現金錢包扣款並登記為家庭支出，並登記為公帳代墊款待報銷。扣款帳戶若為家庭共同帳戶則屬於家庭直接開銷，不計入代墊。
+_Avoid_: 墊現鈔 (cash upfront)、自掏腰包 (out-of-pocket)
+
+**Advanced Payment (公帳代墊款)**:
+個別成員以個人私帳、個人信用卡或個人現金為家庭公帳代付之款項。凡扣款帳戶為個人帳戶（is_joint = 0）之公帳支出即為代墊款；直接由共同基金（is_joint = 1）扣款者為家庭直接開銷，嚴格排除於代墊款之外。
+_Avoid_: 代付 (upfront pay)、個人借款 (loan to family)、代付款 (advance)
+
+**Reimbursement (撥款請款報銷)**:
+從家庭共同基金直接撥款轉帳至個人帳戶，以沖銷成員累積之家庭代墊款的平帳程序。
+_Avoid_: 結算 (settlement)、退款 (refund)、還錢 (payback)
+
+**Advance Items Breakdown (代墊與報銷明細)**:
+家庭頁面中各成員的透明流水帳明細，包含「個人墊付公帳消費清單（日期、類別、備註、扣款個人帳戶、金額）」以及「共同基金撥款報銷沖帳紀錄」，便於雙方隨時核帳與檢驗結清狀態。
+_Avoid_: 報銷單 (expense report)、請款單 (invoice)、明細表 (detail sheet)
 
 ---
 
-### 機器人�?�?(Bot Integration)
+### 規劃與預測 (Planning & Forecasting)
 
-**Bot Binding (機器人�?�?**:
-?��?軟�?帳�?（LINE ??Telegram）�?記帳?�使?�者帳?��??��?專屬驗�?碼建立�??�聯??
-_Avoid_: ?��? (auth)?��?? (connection)?��?�?(pairing)
+**Recurring Item (週期收支)**:
+按規律頻率（月、雙月、季、半年、年）固定重複發生的週期性收入或支出。
+_Avoid_: 訂閱 (subscription)、固定支出 (fixed expense)、週期契約 (contract)
 
-**Natural Message (?�然語�??�令)**:
-使用?�於?��??�天室輸?��??��?構�??�常語句（�??�好市�? 3200 ?�帳?��?，由�???��?譯為記帳交�???
-_Avoid_: ?�天?�令 (chat command)?��?示�? (prompt)?�快?��?�?(quick entry)
+**Amortization (分攤平滑)**:
+將年繳、季繳等長週期大額支出平攤轉化為每月或每日的額度資金負擔之試算過程。
+_Avoid_: 分期 (installment)、平滑化 (smoothing)、攤提 (proration)
+
+**Savings Goal (儲蓄目標)**:
+使用者設定具有目標總額與預計達成日的專項資產目標，其每月提撥額實質鎖定可支配現金。
+_Avoid_: 存錢筒 (piggy bank)、夢想基金 (fund target)、願望 (wish)
+
+**Budget (預算額度)**:
+針對特定月份與特定消費類別所設定之支出上限，並具備即時預警監控。
+_Avoid_: 額度 (spending limit)、花費上限 (cap)、配額 (allowance)
+
+**Affordability Check (購買力試算)**:
+使用者面臨大額消費前，即時試算扣除該筆開銷後可支配現金是否仍大於零的安全檢查。
+_Avoid_: 購買模擬 (purchase simulation)、預算檢查 (budget check)、試算 (simulation)
+
+---
+
+### 機器人整合 (Bot Integration)
+
+**Bot Binding (機器人綁定)**:
+通訊軟體帳號（LINE 或 Telegram）與記帳使用者帳號透過專屬驗證碼建立之連結。
+_Avoid_: 授權 (auth)、連線 (connection)、配對 (pairing)
+
+**Natural Message (自然語言指令)**:
+使用者於通訊聊天室輸入非結構化日常語句（例如：好市多 3200 公帳玉山），由系統解析為記帳交易。
+_Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick entry)

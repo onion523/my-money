@@ -175,14 +175,7 @@ export const householdApi = {
   join: (code: string) => post<{ household: Household; role: string }>('/households/join', { code }),
   leave: () => del<{ message: string }>('/households/leave'),
   removeMember: (userId: string) => del<{ message: string }>(`/households/members/${userId}`),
-  advances: () => get<Array<{
-    user_id: string;
-    user_name: string;
-    email: string;
-    total_advanced: number;
-    total_reimbursed: number;
-    pending_reimburse: number;
-  }>>('/households/advances'),
+  advances: () => get<HouseholdAdvance[]>('/households/advances'),
   reimburse: (body: {
     target_user_id: string;
     from_account_id: string;
@@ -352,6 +345,35 @@ export interface HouseholdData {
   members: HouseholdMember[];
   myRole: 'admin' | 'member' | null;
   activeInvitation: { code: string; expires_at: string } | null;
+}
+
+export interface HouseholdAdvanceItem {
+  id: string;
+  date: string;
+  category: string;
+  note: string;
+  amount: number;
+  account_name: string;
+  account_type: string;
+}
+
+export interface HouseholdReimbursementItem {
+  id: string;
+  date: string;
+  amount: number;
+  note: string;
+  account_name: string;
+}
+
+export interface HouseholdAdvance {
+  user_id: string;
+  user_name: string;
+  email: string;
+  total_advanced: number;
+  total_reimbursed: number;
+  pending_reimburse: number;
+  advance_items?: HouseholdAdvanceItem[];
+  reimbursement_items?: HouseholdReimbursementItem[];
 }
 
 export interface BotBinding {
