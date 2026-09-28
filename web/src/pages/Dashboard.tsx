@@ -1,3 +1,4 @@
+import { DashboardSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
@@ -147,6 +148,10 @@ export default function Dashboard() {
     }
     return true;
   });
+
+  if (loading && !balance) {
+    return <DashboardSkeleton />
+  }
 
   return (
     <div className="fade-in">

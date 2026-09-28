@@ -1,3 +1,4 @@
+import { AccountsSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { accountsApi, Account, BalanceSummary } from '../api/client'
 import { formatCurrency, ACCOUNT_COLORS, today } from '../components/utils'
@@ -319,6 +320,10 @@ export default function Accounts() {
   const cashAccounts = accounts.filter(a => a.type === 'cash')
   const bankAccounts = accounts.filter(a => a.type === 'bank')
   const creditCards = accounts.filter(a => a.type === 'credit_card')
+
+  if (loading && !balance) {
+    return <AccountsSkeleton />
+  }
 
   return (
     <div className="fade-in">

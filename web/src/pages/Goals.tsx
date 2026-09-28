@@ -1,3 +1,4 @@
+import { GoalsSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { goalsApi, Goal } from '../api/client'
 import { formatCurrency, formatDate } from '../components/utils'
@@ -161,6 +162,10 @@ export default function Goals() {
 
   const timedGoals = goals.filter(g => !!g.deadline)
   const untimedGoals = goals.filter(g => !g.deadline)
+
+  if (loading && goals.length === 0) {
+    return <GoalsSkeleton />
+  }
 
   return (
     <div className="fade-in">

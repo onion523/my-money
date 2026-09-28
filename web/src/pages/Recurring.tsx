@@ -1,3 +1,4 @@
+import { RecurringSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { recurringApi, accountsApi, exportApi, RecurringItem, Account, AmortizeResult } from '../api/client'
 import { formatCurrency, CYCLE_LABELS } from '../components/utils'
@@ -153,6 +154,10 @@ export default function Recurring() {
 
   const expenseItems = items.filter(i => i.type === 'expense')
   const incomeItems = items.filter(i => i.type === 'income')
+
+  if (loading && items.length === 0) {
+    return <RecurringSkeleton />
+  }
 
   return (
     <div className="fade-in">

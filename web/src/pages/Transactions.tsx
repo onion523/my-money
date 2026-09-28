@@ -1,3 +1,4 @@
+import { TransactionsSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { txApi, accountsApi, exportApi, Transaction, Account } from '../api/client'
 import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS } from '../components/utils'
@@ -344,10 +345,8 @@ export default function Transactions() {
       </div>
 
       {/* 交易清單 (依日期分組) */}
-      {loading ? (
-        <div className="loading" style={{ height: 200 }}>
-          <div className="spinner" />
-        </div>
+      {loading && transactions.length === 0 ? (
+        <TransactionsSkeleton />
       ) : sortedDates.length === 0 ? (
         <div className="card empty-state">
           <div className="emoji">🔍</div>

@@ -1,3 +1,4 @@
+import { FamilySkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { householdApi, HouseholdData, HouseholdMember, HouseholdAdvance, accountsApi, Account } from '../api/client'
 import { formatCurrency, today, formatLocalDate } from '../components/utils'
@@ -212,11 +213,7 @@ export default function Family() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center" style={{ minHeight: 300 }}>
-        <div style={{ color: 'var(--text-muted)' }}>載入家庭資料中...</div>
-      </div>
-    )
+    return <FamilySkeleton />
   }
 
   const hasHousehold = !!data?.household

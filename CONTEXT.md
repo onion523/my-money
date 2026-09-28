@@ -133,3 +133,23 @@ _Avoid_: 授權 (auth)、連線 (connection)、配對 (pairing)
 **Natural Message (自然語言指令)**:
 使用者於通訊聊天室輸入非結構化日常語句（例如：好市多 3200 公帳玉山），由系統解析為記帳交易。
 _Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick entry)
+
+---
+
+### 前端載入體驗與狀態 (Frontend Loading & UX State)
+
+**Skeleton Screen (骨架屏)**:
+在非同步資料載入完成前，呈現與真實頁面結構 1:1 佈局相仿的微光佔位區塊，用於防止版面跳動 (CLS) 並提供流暢的等待視覺回饋。
+_Avoid_: 載入轉圈 (spinner)、空白佔位 (blank placeholder)、假資料 (mock data)
+
+**Initial Mount Loading (初次載入狀態)**:
+使用者首次進入頁面或完全重新整理時，在所有初始資料請求完成前呈現全頁骨架屏的狀態。
+_Avoid_: 全頁轉圈 (page loading)、冷啟動 (cold start)
+
+**Inline Refetch Transition (二度篩選過渡狀態)**:
+頁面已完成初次載入後，使用者在同頁面進行篩選條件（如公私帳切換、月份切換）變更時，保留當前視圖並以輕量局部過渡（或半透明微光）更新資料的狀態，避免全頁閃爍。
+_Avoid_: 二次骨架 (secondary skeleton)、重新載入 (reload)
+
+**Shimmer Effect (微光動效)**:
+骨架屏表面以 45 度線形漸變高光自左至右循環流動的 CSS 動態效果，適配淺色與深色主題。
+_Avoid_: 呼吸燈 (pulse)、跑馬燈 (marquee)

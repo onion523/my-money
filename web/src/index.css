@@ -737,3 +737,60 @@ a { text-decoration: none; color: inherit; }
   border: 1px solid rgba(255, 107, 107, 0.3);
   color: var(--color-danger);
 }
+
+
+/* ---- 骨架屏與微光動效 (Skeleton Screens & Shimmer Animation) ---- */
+:root {
+  --skeleton-bg: rgba(0, 0, 0, 0.06);
+  --skeleton-shimmer: rgba(255, 255, 255, 0.6);
+}
+
+[data-theme="dark"] {
+  --skeleton-bg: rgba(255, 255, 255, 0.08);
+  --skeleton-shimmer: rgba(255, 255, 255, 0.16);
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--skeleton-bg);
+  border-radius: var(--radius-sm);
+  display: block;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--skeleton-shimmer) 50%,
+    transparent 100%
+  );
+  animation: shimmer 1.6s infinite ease-in-out;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-text {
+  height: 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+}
+
+.skeleton-rect {
+  border-radius: var(--radius-md);
+}
+
+.skeleton-circle {
+  border-radius: 50%;
+}

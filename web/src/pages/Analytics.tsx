@@ -1,3 +1,4 @@
+import { AnalyticsSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import {
   txApi,
@@ -141,6 +142,10 @@ export default function Analytics() {
     setSelectedCat(cat)
     setBudgetAmount(existingAmount ? existingAmount.toString() : '5000')
     setShowBudgetModal(true)
+  }
+
+  if (loading && !catSummary.length && !monthlyStats.length) {
+    return <AnalyticsSkeleton />
   }
 
   return (

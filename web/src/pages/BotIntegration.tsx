@@ -1,3 +1,4 @@
+import { Skeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { botApi, BotBinding } from '../api/client'
 import {
@@ -207,7 +208,10 @@ export default function BotIntegration() {
           <div>
             <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 12 }}>已綁定對話帳號</h4>
             {loading ? (
-              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>載入中...</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Skeleton variant="rect" height={52} borderRadius={8} />
+                <Skeleton variant="rect" height={52} borderRadius={8} />
+              </div>
             ) : bindings.length === 0 ? (
               <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '8px 0' }}>
                 尚未綁定任何 LINE 或 Telegram 機器人。

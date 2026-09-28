@@ -1,3 +1,4 @@
+import { ForecastSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { forecastApi, ForecastResult, PurchaseCheckResult } from '../api/client'
 import { formatCurrency, formatDate } from '../components/utils'
@@ -74,6 +75,10 @@ export default function Forecast() {
     date: d.date.slice(5), // MM-DD
     balance: d.balance,
   })) || []
+
+  if (loading && !forecast) {
+    return <ForecastSkeleton />
+  }
 
   return (
     <div className="fade-in">
