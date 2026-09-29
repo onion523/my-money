@@ -220,17 +220,17 @@ export default function Analytics() {
           onClick={() => setScope('personal')}
         >
           <Lock size={15} />
-          <span>🔒 個人個人私帳</span>
+          <span>🔒 個人私帳</span>
         </button>
       </div>
 
-      {/* 家庭家庭公帳成員分攤與墊付統計 (當有家庭成員分攤數據時顯示) */}
+      {/* 家庭公帳成員分攤與墊付統計 (當有家庭成員分攤數據時顯示) */}
       {(scope === 'household' || scope === 'all') && householdShares.length > 0 && (
         <div className="card" style={{ marginBottom: 24, background: 'linear-gradient(135deg, rgba(85,197,149,0.06) 0%, rgba(168,216,234,0.08) 100%)', border: '1px solid var(--border-color)' }}>
           <div className="flex items-center justify-between" style={{ marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
             <h2 className="text-xl flex items-center gap-xs">
               <Coins size={20} color="var(--color-success)" />
-              {currentMonth} 家庭成員家庭公帳墊付與分攤統計
+              {currentMonth} 家庭成員公帳墊付與分攤統計
             </h2>
             <div className="text-sm">
               當月家庭公帳總額：<strong style={{ color: 'var(--color-danger)' }}>{formatCurrency(totalSharedExpense)}</strong>

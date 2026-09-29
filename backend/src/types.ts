@@ -43,6 +43,7 @@ export interface Transaction {
   note: string;
   date: string;
   is_shared: number;
+  unbilled_offset?: number;
   created_at: string;
   user_name?: string;
 }

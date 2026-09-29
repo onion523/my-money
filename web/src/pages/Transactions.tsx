@@ -251,7 +251,7 @@ export default function Transactions() {
             style={{ borderRadius: 8, padding: '4px 12px' }}
             onClick={() => setScopeFilter('personal')}
           >
-            <Lock size={14} /> 🔒 個人個人私帳
+            <Lock size={14} /> 🔒 個人私帳
           </button>
         </div>
 
@@ -499,7 +499,7 @@ export default function Transactions() {
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
                   <Lock size={16} />
-                  <span>🔒 個人個人私帳 (隱私)</span>
+                  <span>🔒 個人私帳 (隱私)</span>
                 </button>
               </div>
             </div>
@@ -566,7 +566,7 @@ export default function Transactions() {
               >
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 家庭共同基金' : '👤 個人個人私帳'})
+                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? (acc.type === 'credit_card' ? '🏠 家庭信用卡' : '🏠 家庭共同基金') : '👤 個人私帳'})
                   </option>
                 ))}
               </select>

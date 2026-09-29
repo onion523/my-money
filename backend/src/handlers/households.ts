@@ -127,7 +127,7 @@ households.post('/join', async (c) => {
 
   // Check if user already in a household
   const existing = await c.env.DB.prepare('SELECT id FROM household_members WHERE user_id = ?').bind(userId).first();
-  if (existing) return c.json({ success: false, error: '你已經加入家庭群組群組，無法重複加入' }, 400);
+  if (existing) return c.json({ success: false, error: '你已經加入家庭群組，無法重複加入' }, 400);
 
   // Validate invitation
   const inv = await c.env.DB.prepare(`
@@ -175,7 +175,7 @@ households.delete('/leave', async (c) => {
     await c.env.DB.prepare('DELETE FROM household_members WHERE user_id = ?').bind(userId).run();
   }
 
-  return c.json({ success: true, message: '已離開家庭群組群組' });
+  return c.json({ success: true, message: '已離開家庭群組' });
 });
 
 // DELETE /households/members/:targetUserId
@@ -286,7 +286,7 @@ households.get('/advances', async (c) => {
 households.post('/reimburse', async (c) => {
   const userId = c.get('userId');
   const { household, memberUserIds } = await getUserHousehold(c.env.DB, userId);
-  if (!household) return c.json({ success: false, error: '尚未建立或加入家庭群組群組' }, 400);
+  if (!household) return c.json({ success: false, error: '尚未建立或加入家庭群組' }, 400);
 
   const body = await c.req.json();
   const { target_user_id, from_account_id, to_account_id, amount, date = getTaipeiDateString(), note = '' } = body;

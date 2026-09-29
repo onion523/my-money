@@ -67,12 +67,12 @@ _Avoid_: 繳卡費 (card payment)、清償 (debt clearance)、轉帳支出 (tran
 _Avoid_: 帳單重算 (recalculation)、滾入下期 (carryover)、手動對帳 (manual reconciliation)、結轉 (rollover)
 
 **Two-Tier Debt Rollback (雙層負債回退)**:
-當編輯或刪除歷史刷卡消費交易時，負債回退程序優先扣減未出帳款（Unbilled Debt）；若未出帳款已不足扣（款項已於結帳日出帳作業中結轉至已出帳或已被還款沖銷），剩餘回退差額自動溢出扣減已出帳待繳款（Billed Debt），確保欠款全額精準返還。
-_Avoid_: 夾零截斷 (zero clamping)、已出帳凍結 (billed freeze)
+當編輯或刪除歷史刷卡消費交易時，負債回退程序優先扣減未出帳款（Unbilled Debt）；若未出帳款已不足扣（款項已於結帳日出帳作業中結轉至已出帳或已被還款沖銷），剩餘回退差額自動溢出扣減已出帳待繳款（Billed Debt），確保欠款全額精準返還。若為同帳戶編輯，應先計算新舊交易之單一淨差額（Single Net Delta）再行回退或認列，嚴禁分步覆蓋。
+_Avoid_: 雙步覆蓋 (two-step overwrite)、夾零截斷 (zero clamping)、已出帳凍結 (billed freeze)
 
 **Credit Card Balance Reconciliation (信用卡未出帳自動校準)**:
-針對信用卡帳戶，使用者可一鍵自動依據當前掛在該卡底下、最後結帳出帳時間點之後的「有效消費支出 - 刷退收入 - 當期未出帳還款沖抵額」，精準校準並覆蓋 unbilled 餘額，消除歷史落差並即刻復原公私帳刷卡分流（shared_debt 與 personal_debt）。
-_Avoid_: 暴力重算 (hard reset)、人工對帳 (manual audit)
+針對信用卡帳戶，使用者可一鍵自動依據當前掛在該卡底下、最後帳單結轉時間點之後的「有效消費支出 - 刷退收入 - 當期未出帳還款沖抵額（unbilled_offset）」，精準校準並覆蓋 unbilled 餘額，消除歷史落差並即刻復原公私帳刷卡分流（shared_debt 與 personal_debt）。
+_Avoid_: 全額還款扣減 (full repayment deduction)、暴力重算 (hard reset)、人工對帳 (manual audit)
 
 ---
 
@@ -90,9 +90,17 @@ _Avoid_: 共同開銷 (joint expense)、公費 (public cost)、公攤 (group cos
 僅家庭中個別成員個人享受、非家庭共用之獨立收支。
 _Avoid_: 私帳 (private expense)、個人支出 (self expense)、自付額 (own cost)
 
+**Account Ownership (帳戶歸屬)**:
+帳戶所屬之會計主體標記（is_joint），劃分為「個人私帳 (is_joint = 0)」與「家庭公用 (is_joint = 1)」。
+_Avoid_: 私有歸屬 (private owner)、群組共有 (group owned)
+
 **Joint Fund (家庭共同基金)**:
-標記為家庭公帳專用之銀行帳戶或公款現金，成員定額注資，專門用於家庭公帳買單或撥付代墊款報銷。
+歸屬於家庭公用（is_joint = 1）之正資產帳戶（包含銀行存款帳戶與公款現金錢包），成員定額注資，專門用於家庭公帳買單或撥付代墊款報銷。
 _Avoid_: 公費池 (common pool)、家庭帳戶 (family account)、公款 (public fund)
+
+**Joint Credit Card (家庭信用卡)**:
+歸屬於家庭公用（is_joint = 1）之信用卡負債帳戶，全體家庭成員共同檢視未出帳款與刷卡消費流水。
+_Avoid_: 共享卡 (shared card)、附卡 (supplementary card)
 
 **Personal Cash Advance (個人現金公帳代墊)**:
 個別成員在日常生活中掏出個人現金錢包為家庭公帳支付支出，系統自個人現金錢包扣款並登記為家庭支出，並登記為公帳代墊款待報銷。扣款帳戶若為家庭共同帳戶則屬於家庭直接開銷，不計入代墊。

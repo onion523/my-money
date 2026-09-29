@@ -163,14 +163,58 @@ transactions.put('/:id', async (c) => {
   ).bind(account_id, ...memberUserIds).first();
   if (!newAcc) return c.json({ success: false, error: '目標帳戶不存在或無權限' }, 404);
 
-  // 雙向回滾舊帳戶並認列新帳戶餘額 (透過 D1 batch 原子事務執行)
-  const oldStmts = await getSyncAccountStatements(c.env.DB, existing.account_id as string, existing.type as string, Number(existing.amount), true);
-  const newStmts = await getSyncAccountStatements(c.env.DB, account_id, type, Number(amount), false);
+  // 單卡單一淨差額運算 (Single Net Delta) 或跨帳戶原子同步，避免同卡編輯兩次讀取互相覆蓋
+  let accountStmts: any[] = [];
+  const oldAmt = Number(existing.amount);
+  const newAmt = Number(amount);
+
+  if (existing.account_id === account_id) {
+    const acc = await c.env.DB.prepare('SELECT id, type, balance, unbilled FROM accounts WHERE id = ?')
+      .bind(account_id).first<{ id: string; type: string; balance: number; unbilled: number }>();
+    if (acc) {
+      if (acc.type === 'bank' || acc.type === 'cash') {
+        const oldSigned = (existing.type === 'income' ? 1 : -1) * oldAmt;
+        const newSigned = (type === 'income' ? 1 : -1) * newAmt;
+        const netDelta = newSigned - oldSigned;
+        if (netDelta !== 0) {
+          accountStmts.push(c.env.DB.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(netDelta, account_id));
+        }
+      } else if (acc.type === 'credit_card') {
+        const oldDebtEffect = existing.type === 'expense' ? oldAmt : -oldAmt;
+        const newDebtEffect = type === 'expense' ? newAmt : -newAmt;
+        const netDebtDelta = newDebtEffect - oldDebtEffect;
+
+        if (netDebtDelta > 0) {
+          // 負債增加 -> 直接加在未出帳
+          accountStmts.push(c.env.DB.prepare('UPDATE accounts SET unbilled = unbilled + ? WHERE id = ?').bind(netDebtDelta, account_id));
+        } else if (netDebtDelta < 0) {
+          // 負債減少 -> 雙層溢出回退：優先扣減未出帳，未出帳歸零後溢出扣減已出帳待繳款
+          const decreaseAmt = Math.abs(netDebtDelta);
+          let newUnbilled = acc.unbilled || 0;
+          let newBalance = acc.balance || 0;
+          if (newUnbilled >= decreaseAmt) {
+            newUnbilled -= decreaseAmt;
+          } else {
+            const remainder = decreaseAmt - newUnbilled;
+            newUnbilled = 0;
+            newBalance = Math.max(0, newBalance - remainder);
+          }
+          accountStmts.push(c.env.DB.prepare('UPDATE accounts SET unbilled = ?, balance = ? WHERE id = ?').bind(newUnbilled, newBalance, account_id));
+        }
+      }
+    }
+  } else {
+    // 跨帳戶變更：回滾舊帳戶並認列新帳戶餘額
+    const oldStmts = await getSyncAccountStatements(c.env.DB, existing.account_id as string, existing.type as string, oldAmt, true);
+    const newStmts = await getSyncAccountStatements(c.env.DB, account_id, type, newAmt, false);
+    accountStmts = [...oldStmts, ...newStmts];
+  }
+
   const updateTxStmt = c.env.DB.prepare(
     'UPDATE transactions SET account_id = ?, type = ?, category = ?, amount = ?, note = ?, date = ?, is_shared = ? WHERE id = ?'
   ).bind(account_id, type, category, amount, note, date, is_shared, id);
 
-  await c.env.DB.batch([...oldStmts, ...newStmts, updateTxStmt]);
+  await c.env.DB.batch([...accountStmts, updateTxStmt]);
 
   const row = await c.env.DB.prepare(`
     SELECT t.*, a.name as account_name, u.name as user_name

@@ -222,7 +222,7 @@ export default function Dashboard() {
           onClick={() => setViewScope('personal')}
         >
           <Lock size={15} />
-          <span>🔒 個人個人私帳</span>
+          <span>🔒 個人私帳</span>
         </button>
       </div>
 
@@ -321,9 +321,9 @@ export default function Dashboard() {
             {displayAccounts.length === 0 ? (
               <div className="empty-state" style={{ padding: '24px 0' }}>
                 <div className="emoji">💳</div>
-                <h3>{viewScope === 'household' ? '目前無家庭共同基金帳戶' : viewScope === 'personal' ? '目前無個人個人私帳' : '尚未建立帳戶'}</h3>
+                <h3>{viewScope === 'household' ? '目前無家庭公用帳戶' : viewScope === 'personal' ? '目前無個人私帳' : '尚未建立帳戶'}</h3>
                 <p style={{ fontSize: '0.875rem', marginBottom: 12 }}>
-                  {viewScope === 'household' ? '至帳戶管理將帳戶屬性設為「家庭共同基金」即可在此呈現' : '至帳戶管理新增你的銀行、現金或信用卡'}
+                  {viewScope === 'household' ? '至帳戶管理將帳戶屬性設為家庭公用（共同基金或家庭卡）即可在此呈現' : '至帳戶管理新增你的銀行、現金或信用卡'}
                 </p>
                 <Link to="/accounts" className="btn btn-primary btn-sm">前往帳戶管理</Link>
               </div>
@@ -559,7 +559,7 @@ export default function Dashboard() {
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
                   <Lock size={16} />
-                  <span>🔒 個人個人私帳 (隱私)</span>
+                  <span>🔒 個人私帳 (隱私)</span>
                 </button>
               </div>
             </div>

@@ -146,7 +146,7 @@ export default function BotIntegration() {
       </div>
 
       <div className="grid grid-2" style={{ gap: 24, marginBottom: 24 }}>
-        {/* 左側：綁定綁定中心 */}
+        {/* 左側：綁定中心 */}
         <div className="card" style={{ padding: 24 }}>
           <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
             <div style={{

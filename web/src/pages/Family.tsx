@@ -309,7 +309,7 @@ export default function Family() {
               </div>
               <button type="submit" className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }} disabled={joining}>
                 <Users size={18} />
-                <span>{joining ? '驗證加入中...' : '加入家庭群組群組帳本'}</span>
+                <span>{joining ? '驗證加入中...' : '加入家庭帳本'}</span>
               </button>
             </form>
           </div>
@@ -380,7 +380,7 @@ export default function Family() {
                 <Info size={28} style={{ display: 'block', margin: '0 auto 8px', opacity: 0.6 }} />
                 <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>暫無公帳代墊款紀錄</div>
                 <div className="text-xs" style={{ marginTop: 4 }}>
-                  當家庭群組成員使用個人個人私帳、私卡或個人現金錢包支付公帳支出時，系統將自動在此產生待報銷代墊款。
+                  當家庭群組成員使用個人私帳、私卡或個人現金錢包支付公帳支出時，系統將自動在此產生待報銷代墊款。
                 </div>
               </div>
             ) : (
@@ -490,7 +490,7 @@ export default function Family() {
                                 📌 個人代墊消費明細 ({advanceItems.length} 筆)
                               </h4>
                               <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                                僅計入自個人個人私帳、私卡或現金錢包支付之公帳
+                                僅計入自個人私帳、私卡或現金錢包支付之公帳
                               </span>
                             </div>
 
@@ -689,7 +689,7 @@ export default function Family() {
         <Modal title="邀請家庭群組成員加入 💌" onClose={() => setShowInviteModal(false)}>
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
             <p className="text-sm" style={{ color: 'var(--text-muted)', marginBottom: 16 }}>
-              請將以下邀請碼分享給你的家人，對方登入網站後至「家庭協同」輸入即可加入家庭群組群組帳本：
+              請將以下邀請碼分享給你的家人，對方登入網站後至「家庭協同」輸入即可加入家庭帳本：
             </p>
 
             <div style={{

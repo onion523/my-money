@@ -223,7 +223,7 @@ export default function Accounts() {
       bank_account_id: defaultBank ? defaultBank.id : '',
       amount: defaultAmount > 0 ? defaultAmount.toString() : '',
       date: today(),
-      note: `信用卡扣款還款 ${card.name} 信用卡待繳款 (${payType === 'shared' ? '家庭代墊' : payType === 'personal' ? '個人個人私帳' : '全額'})`,
+      note: `扣繳【${card.name}】卡費 (${payType === 'shared' ? '家庭公帳代墊' : payType === 'personal' ? '個人私帳' : '全額'})`,
       is_shared: isSharedTarget,
     })
     setPayError('')
@@ -349,7 +349,7 @@ export default function Accounts() {
       <div className="flex items-center justify-between" style={{ marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 className="page-title">資產與帳戶管理 💼</h1>
-          <p className="page-subtitle">現金錢包、銀行活存與信用卡分離管理，支援公個人私帳隔離與代墊調度</p>
+          <p className="page-subtitle">現金錢包、銀行活存與信用卡分離管理，支援公私帳隔離與代墊調度</p>
         </div>
         <div className="flex gap-sm" style={{ flexWrap: 'wrap' }}>
           <button id="btn-atm-transfer" className="btn btn-secondary" onClick={() => handleOpenTransfer()}>
@@ -380,26 +380,26 @@ export default function Accounts() {
               className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setScope('all')}
             >
-              全部 (本人 + 家庭共同基金)
+              全部 (本人 + 家庭公用)
             </button>
             <button
               className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setScope('household')}
             >
               <Home size={14} style={{ marginRight: 4 }} />
-              🏠 家庭共同基金帳戶
+              🏠 家庭公用 (共同基金/家庭卡)
             </button>
             <button
               className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setScope('personal')}
             >
               <User size={14} style={{ marginRight: 4 }} />
-              👤 個人個人私帳
+              👤 個人私帳
             </button>
           </div>
         </div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-          🔒 嚴格隱私保護：其他成員之個人個人私帳與錢包自動隱藏
+          🔒 嚴格隱私保護：其他成員之個人私帳與私卡自動隱藏
         </div>
       </div>
 
@@ -504,7 +504,7 @@ export default function Accounts() {
                     {cash.is_joint === 1 ? (
                       <span className="badge badge-primary">🏠 家庭共同基金</span>
                     ) : (
-                      <span className="badge badge-secondary">👤 個人個人私帳</span>
+                      <span className="badge badge-secondary">👤 個人私帳</span>
                     )}
                     {cash.owner_name && (
                       <span className="badge" style={{ background: 'rgba(0,0,0,0.06)' }}>
@@ -618,7 +618,7 @@ export default function Accounts() {
           <div className="card empty-state">
             <div className="emoji">💳</div>
             <h3>目前此範圍無信用卡</h3>
-            <p>新增信用卡可掌握家庭公帳代墊與個人個人私帳刷卡分流，避免突襲式信用卡待繳款！</p>
+            <p>新增信用卡可掌握家庭公帳代墊與個人私帳刷卡分流，避免突襲式信用卡待繳款！</p>
             <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => handleOpenAdd('credit_card')}>
               立即新增信用卡
             </button>
@@ -695,7 +695,7 @@ export default function Accounts() {
                               <button
                                 className="btn btn-xs btn-secondary"
                                 style={{ padding: '1px 6px', fontSize: '0.7rem' }}
-                                title="結帳日出帳出帳作業"
+                                title="結帳日出帳作業"
                                 onClick={() => handleRollover(card)}
                               >
                                 出帳作業
@@ -725,7 +725,7 @@ export default function Accounts() {
                     <div className="flex items-center justify-between" style={{ fontSize: '0.85rem' }}>
                       <span className="flex items-center gap-xs">
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6B7280' }} />
-                        👤 個人個人個人私帳消費：
+                        👤 個人私帳消費：
                       </span>
                       <span style={{ fontWeight: 700, color: '#4B5563' }}>
                         {formatCurrency(personalDebt)}
@@ -757,7 +757,7 @@ export default function Accounts() {
                         onClick={() => handleOpenPay(card, 'personal')}
                         disabled={personalDebt <= 0}
                       >
-                        👤 繳個人個人私帳
+                        👤 繳個人私帳
                       </button>
                       <button
                         className="btn btn-sm btn-primary"
@@ -906,7 +906,7 @@ export default function Accounts() {
                   onClick={() => setForm(p => ({ ...p, is_joint: 0 }))}
                 >
                   <User size={14} style={{ marginRight: 4 }} />
-                  👤 個人個人私帳 (隱私保護)
+                  👤 個人私帳 (隱私保護)
                 </button>
                 <button
                   type="button"
@@ -914,11 +914,15 @@ export default function Accounts() {
                   onClick={() => setForm(p => ({ ...p, is_joint: 1 }))}
                 >
                   <Home size={14} style={{ marginRight: 4 }} />
-                  🏠 家庭共同基金 (全體可見)
+                  {form.type === 'credit_card' ? '🏠 家庭信用卡 (家庭公用)' : '🏠 家庭共同基金 (家庭公用)'}
                 </button>
               </div>
               <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 4 }}>
-                {form.is_joint === 0 ? '個人個人私帳僅你本人可見，其他家庭成員無法檢視餘額。' : '家庭共同基金帳戶將對家庭群組全體成員公開。'}
+                {form.is_joint === 0
+                  ? '個人私帳僅你本人可見，其他家庭成員無法檢視餘額。'
+                  : form.type === 'credit_card'
+                    ? '家庭信用卡帳戶將對家庭群組全體成員公開。'
+                    : '家庭共同基金帳戶將對家庭群組全體成員公開。'}
               </small>
             </div>
 
@@ -1094,7 +1098,7 @@ export default function Accounts() {
         <Modal
           
           onClose={() => setPayCardModal(null)}
-          title={`💳 信用卡扣款還款 ${payCardModal.name} 信用信用卡待繳款`}
+          title={`💳 信用卡扣款還款 ${payCardModal.name} 信用卡待繳款`}
         >
           <form onSubmit={handlePaySubmit}>
             {payError && <div className="alert alert-danger" style={{ marginBottom: 14 }}>{payError}</div>}
@@ -1156,7 +1160,7 @@ export default function Accounts() {
                   className={`btn ${payForm.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setPayForm(p => ({ ...p, is_shared: 0 }))}
                 >
-                  👤 個人個人私帳 (個人消費結清)
+                  👤 個人私帳 (個人消費結清)
                 </button>
               </div>
             </div>

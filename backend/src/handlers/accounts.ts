@@ -10,6 +10,9 @@ async function ensureAccountsSchema(db: any) {
     await db.prepare('ALTER TABLE accounts ADD COLUMN last_rollover_at DATETIME').run();
   } catch (_) {}
   try {
+    await db.prepare('ALTER TABLE transactions ADD COLUMN unbilled_offset REAL DEFAULT 0').run();
+  } catch (_) {}
+  try {
     const tableInfo = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'").first();
     if (tableInfo && tableInfo.sql && !tableInfo.sql.includes("'cash'")) {
       await db.prepare("PRAGMA foreign_keys = OFF").run();
@@ -196,15 +199,17 @@ accounts.post('/pay-credit-card', async (c) => {
   await c.env.DB.prepare('UPDATE accounts SET balance = ? WHERE id = ?')
     .bind(newBankBalance, bank_account_id).run();
 
-  // 2. 沖銷信用卡欠款：優先沖銷已出帳 (balance)，剩餘沖銷未出帳 (unbilled)
+  // 2. 沖銷信用卡欠款：優先沖銷已出帳 (balance)，剩餘沖銷未出帳 (unbilled) 並記錄沖減未出帳額
   let newCardBalance = card.balance;
   let newCardUnbilled = card.unbilled;
+  let unbilledOffset = 0;
 
   if (newCardBalance >= payAmount) {
     newCardBalance -= payAmount;
   } else {
     const remainder = payAmount - newCardBalance;
     newCardBalance = 0;
+    unbilledOffset = Math.min(newCardUnbilled, remainder);
     newCardUnbilled = Math.max(0, newCardUnbilled - remainder);
   }
 
@@ -220,12 +225,12 @@ accounts.post('/pay-credit-card', async (c) => {
     'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(txId, userId, bank_account_id, 'expense', '信用卡還款', payAmount, txNote, txDate, is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : 1).run();
 
-  // 信用卡端同步建立還款流水 (雙向沖帳紀錄)
+  // 信用卡端同步建立還款流水 (雙向沖帳紀錄，記錄 unbilled_offset 供校準抵扣)
   const cardTxId = generateId();
   const cardTxNote = `扣款還款 (來自【${bank.name}】)`;
   await c.env.DB.prepare(
-    'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(cardTxId, userId, credit_card_id, 'income', '信用卡還款', payAmount, cardTxNote, txDate, is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : 1).run();
+    'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, unbilled_offset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(cardTxId, userId, credit_card_id, 'income', '信用卡還款', payAmount, cardTxNote, txDate, is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : 1, unbilledOffset).run();
 
   const txRow = await c.env.DB.prepare(`
     SELECT t.*, a.name as account_name, u.name as user_name
@@ -259,7 +264,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
   ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number }>();
 
   if (!card) return c.json({ success: false, error: '信用卡不存在' }, 404);
-  if ((card.unbilled || 0) <= 0) return c.json({ success: false, error: '目前無未出帳金額需出帳作業' }, 400);
+  if ((card.unbilled || 0) <= 0) return c.json({ success: false, error: '目前無未出帳金額需出帳' }, 400);
 
   const newBalance = (card.balance || 0) + card.unbilled;
   await c.env.DB.prepare('UPDATE accounts SET balance = ?, unbilled = 0, last_rollover_at = CURRENT_TIMESTAMP WHERE id = ?')
@@ -271,7 +276,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
       id,
       balance: newBalance,
       unbilled: 0,
-      message: `已將未出帳 NT$ ${card.unbilled.toLocaleString()} 成功出帳作業為已出帳待繳款！`
+      message: `帳單出帳作業完成！已轉入已出帳待繳款。`
     }
   });
 });
@@ -337,9 +342,9 @@ accounts.post('/:id/reconcile', async (c) => {
       ${timeCondition}
   `).bind(...sqlParams).first<{ total: number }>();
 
-  // 3. 當期還款總額 (category = '信用卡還款')
+  // 3. 當期還款沖抵未出帳總額 (category = '信用卡還款'，僅加總 unbilled_offset，避免誤扣沖銷已出帳之款項)
   const repaymentRow = await c.env.DB.prepare(`
-    SELECT COALESCE(SUM(amount), 0) as total
+    SELECT COALESCE(SUM(unbilled_offset), 0) as total
     FROM transactions
     WHERE account_id = ? AND category = '信用卡還款'
       ${timeCondition}
@@ -347,10 +352,10 @@ accounts.post('/:id/reconcile', async (c) => {
 
   const totalExp = expenseRow ? Number(expenseRow.total) : 0;
   const totalRef = refundRow ? Number(refundRow.total) : 0;
-  const totalRepay = repaymentRow ? Number(repaymentRow.total) : 0;
+  const totalUnbilledOffset = repaymentRow ? Number(repaymentRow.total) : 0;
 
-  // 未出帳 = MAX(0, 支出 - 刷退 - 當期已沖還款)
-  const newUnbilled = Math.max(0, totalExp - totalRef - totalRepay);
+  // 未出帳 = MAX(0, 支出 - 刷退 - 當期已沖未出帳還款)
+  const newUnbilled = Math.max(0, totalExp - totalRef - totalUnbilledOffset);
 
   // 更新 accounts.unbilled
   await c.env.DB.prepare('UPDATE accounts SET unbilled = ? WHERE id = ?')
