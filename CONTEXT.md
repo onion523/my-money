@@ -120,6 +120,24 @@ _Avoid_: 報銷單 (expense report)、請款單 (invoice)、明細表 (detail sh
 
 ---
 
+### 交易分類體系 (Category Taxonomy)
+
+**Curated Category Taxonomy (標準擴充分類庫)**:
+系統內建定義之標準收支分類集合，覆蓋日常生活高頻場景，具備標準 Emoji 圖示、語意推薦關鍵字庫與統計圖表適配，不開放建立零碎自訂資料表以確保家庭成員在統計、預算與圓餅圖上擁有統一的分析維度。
+_Avoid_: 自訂分類表 (custom category table)、動態標籤 (dynamic tags)、未分類 (unclassified)
+
+**Standard Category Set (標準分類清單)**:
+系統內建定義之標準收支分類集合，包含 16 項支出（餐飲 🍜、交通 🚇、汽機車輛 🚗、居家水電 ⚡、數位訂閱 📱、購物 🛍️、生活 💡、娛樂 🎮、美妝保養 💄、醫療 💊、教育 📚、寵物毛孩 🐱、旅行度假 ✈️、社交人情 🧧、保險稅費 📑、其他 📦）以及 8 項收入（薪資 💵、獎金 🎁、投資 📈、兼職 💼、政府補貼 🏛️、禮金餽贈 🧧、二手出清 ♻️、其他 📦）。
+_Avoid_: 自由輸入類別 (freeform category)、舊版八大類 (legacy 8 categories)
+
+**Two-Tier Category Recommendation (雙層分類推薦引擎)**:
+在使用者輸入交易備註或通訊軟體自然語句時，自動推測最合適分類的雙層架構：第一層優先檢索個人/家庭近期歷史交易備註（Historical Note Memory），若有歷史同名或包含紀錄則優先採納個人既有習慣；第二層若無歷史紀錄，則落入內建生活語意關鍵字庫（Lexicon Fallback，涵蓋高頻品牌、交通、水電、訂閱、寵物等名詞）進行精準匹配。
+_Avoid_: 純關鍵字暴力匹配 (hardcoded keyword matching only)、全盲隨機猜測 (blind guess)
+
+**Adaptive Category Preselection (自適應分類預選與鎖定保護)**:
+前端記帳表單在使用者鍵入交易備註或商家名稱時，即時調用雙層分類推薦引擎自動切換分類下拉選單並顯示「✨ 已智慧推薦為【類別】」柔和微光徽章。若使用者在該次填表中主動手動點選更換過分類，系統即刻啟動「選擇鎖定 (User Choice Lock)」，後續打字將嚴格保留使用者手動設定，杜絕反覆覆蓋干擾。
+_Avoid_: 強迫覆蓋 (forced overwrite)、生硬彈窗 (intrusive popup)、無感靜默 (silent shift)
+
 ### 規劃與預測 (Planning & Forecasting)
 
 **Recurring Item (週期收支)**:

@@ -1,7 +1,7 @@
 import { TransactionsSkeleton } from '../components/Skeleton'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { txApi, accountsApi, exportApi, Transaction, Account } from '../api/client'
-import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS } from '../components/utils'
+import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS, buildHistoryMemo, recommendCategory } from '../components/utils'
 import Modal from '../components/Modal'
 import {
   Plus,
@@ -45,6 +45,10 @@ export default function Transactions() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [isCategoryManuallyChanged, setIsCategoryManuallyChanged] = useState(false)
+  const [recommendationHint, setRecommendationHint] = useState<string | null>(null)
+
+  const historyMemo = useMemo(() => buildHistoryMemo(transactions), [transactions])
 
   // 載入資料
   const loadData = async () => {
@@ -82,12 +86,16 @@ export default function Transactions() {
       date: today(),
       is_shared: 1,
     })
+    setIsCategoryManuallyChanged(false)
+    setRecommendationHint(null)
     setErrorMsg('')
     setShowModal(true)
   }
 
   // 開啟編輯 Modal
   const handleOpenEdit = (tx: Transaction) => {
+    setIsCategoryManuallyChanged(true)
+    setRecommendationHint(null)
     setEditingTx(tx)
     setForm({
       account_id: tx.account_id,
@@ -541,11 +549,22 @@ export default function Transactions() {
 
             {/* 分類 */}
             <div className="input-group">
-              <label className="input-label">分類</label>
+              <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                <label className="input-label" style={{ margin: 0 }}>分類</label>
+                {recommendationHint && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-dark)', background: 'rgba(255, 107, 107, 0.12)', padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>
+                    {recommendationHint}
+                  </span>
+                )}
+              </div>
               <select
                 className="input"
                 value={form.category}
-                onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                onChange={e => {
+                  setIsCategoryManuallyChanged(true);
+                  setRecommendationHint(null);
+                  setForm(p => ({ ...p, category: e.target.value }));
+                }}
               >
                 {CATEGORIES[form.type].map(cat => (
                   <option key={cat} value={cat}>
@@ -590,9 +609,24 @@ export default function Transactions() {
               <input
                 className="input"
                 type="text"
-                placeholder="例如 午餐、捷運儲值"
+                placeholder="例如 午餐、中油加油、Netflix"
                 value={form.note}
-                onChange={e => setForm(p => ({ ...p, note: e.target.value }))}
+                onChange={e => {
+                  const newNote = e.target.value;
+                  setForm(p => {
+                    const next = { ...p, note: newNote };
+                    if (!isCategoryManuallyChanged) {
+                      const rec = recommendCategory(newNote, p.type, historyMemo);
+                      if (rec) {
+                        next.category = rec.category;
+                        setRecommendationHint(rec.source === 'history' ? `✨ 依歷史習慣推薦【${rec.category}】` : `✨ 智慧推薦為【${rec.category}】`);
+                      } else {
+                        setRecommendationHint(null);
+                      }
+                    }
+                    return next;
+                  });
+                }}
               />
             </div>
 

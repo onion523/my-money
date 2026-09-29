@@ -1,9 +1,9 @@
 import { DashboardSkeleton } from '../components/Skeleton'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { accountsApi, txApi, recurringApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
-import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS } from '../components/utils'
+import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS, buildHistoryMemo, recommendCategory } from '../components/utils'
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
 import {
@@ -50,6 +50,10 @@ export default function Dashboard() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [isCategoryManuallyChanged, setIsCategoryManuallyChanged] = useState(false)
+  const [recommendationHint, setRecommendationHint] = useState<string | null>(null)
+
+  const historyMemo = useMemo(() => buildHistoryMemo(transactions), [transactions])
 
   const loadData = async (scope = viewScope) => {
     try {
@@ -532,7 +536,7 @@ export default function Dashboard() {
 
       {/* 快速記帳彈窗 */}
       {showAddModal && (
-        <Modal title="快速記帳" onClose={() => setShowAddModal(false)}>
+        <Modal title="快速記帳" onClose={() => { setShowAddModal(false); setIsCategoryManuallyChanged(false); setRecommendationHint(null); }}>
           {submitError && (
             <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, color: 'var(--color-danger)', fontSize: '0.85rem' }}>
               {submitError}
@@ -602,12 +606,23 @@ export default function Dashboard() {
 
             {/* 分類 */}
             <div className="input-group">
-              <label className="input-label">分類</label>
+              <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                <label className="input-label" style={{ margin: 0 }}>分類</label>
+                {recommendationHint && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-dark)', background: 'rgba(255, 107, 107, 0.12)', padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>
+                    {recommendationHint}
+                  </span>
+                )}
+              </div>
               <select
                 id="quick-category"
                 className="input"
                 value={form.category}
-                onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                onChange={e => {
+                  setIsCategoryManuallyChanged(true);
+                  setRecommendationHint(null);
+                  setForm(p => ({ ...p, category: e.target.value }));
+                }}
               >
                 {CATEGORIES[form.type].map(cat => (
                   <option key={cat} value={cat}>
@@ -655,9 +670,24 @@ export default function Dashboard() {
                 id="quick-note"
                 className="input"
                 type="text"
-                placeholder="例如 午餐便當、買生活用品"
+                placeholder="例如 午餐便當、中油加油、Netflix"
                 value={form.note}
-                onChange={e => setForm(p => ({ ...p, note: e.target.value }))}
+                onChange={e => {
+                  const newNote = e.target.value;
+                  setForm(p => {
+                    const next = { ...p, note: newNote };
+                    if (!isCategoryManuallyChanged) {
+                      const rec = recommendCategory(newNote, p.type, historyMemo);
+                      if (rec) {
+                        next.category = rec.category;
+                        setRecommendationHint(rec.source === 'history' ? `✨ 依歷史習慣推薦【${rec.category}】` : `✨ 智慧推薦為【${rec.category}】`);
+                      } else {
+                        setRecommendationHint(null);
+                      }
+                    }
+                    return next;
+                  });
+                }}
               />
             </div>
 
