@@ -162,6 +162,6 @@ _Avoid_: 全頁轉圈 (page loading)、冷啟動 (cold start)
 頁面已完成初次載入後，使用者在同頁面進行篩選條件（如公私帳切換、月份切換）變更時，保留當前視圖並以輕量局部過渡（或半透明微光）更新資料的狀態，避免全頁閃爍。
 _Avoid_: 二次骨架 (secondary skeleton)、重新載入 (reload)
 
-**Shimmer Effect (微光動效)**:
-骨架屏表面以 45 度線形漸變高光自左至右循環流動的 CSS 動態效果，適配淺色與深色主題。
-_Avoid_: 呼吸燈 (pulse)、跑馬燈 (marquee)
+**Shimmer Effect (微光動效 / 溫暖水彩果凍玻璃)**:
+骨架屏融合 135 度櫻粉微暖雙漸層底色、毛玻璃通透感 (blur 5px) 與雙峰果凍高光波紋自左至右循環流動的 CSS 動態效果，容器本體維持絕對座標固定，適配淺色與深色主題。
+_Avoid_: 容器位移 (element translation)、生硬刷光 (hard sweep)、呼吸燈 (pulse)、跑馬燈 (marquee)、冷硬死灰 (cold dead grey)

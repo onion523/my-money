@@ -425,17 +425,7 @@ a { text-decoration: none; color: inherit; }
 .empty-state .emoji { font-size: 3rem; margin-bottom: var(--space-md); }
 .empty-state h3 { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: var(--space-xs); }
 
-/* ---- 載入骨架 ---- */
-.skeleton {
-  background: linear-gradient(90deg, var(--border-color) 25%, var(--border-color-2) 50%, var(--border-color) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: var(--radius-sm);
-}
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
+/* ---- 載入骨架 (統一收斂至底端微光動效區塊) ---- */
 
 /* ---- 響應式佈局輔助類 ---- */
 .grid-dashboard-main {
@@ -739,43 +729,42 @@ a { text-decoration: none; color: inherit; }
 }
 
 
-/* ---- 骨架屏與微光動效 (Skeleton Screens & Shimmer Animation) ---- */
+/* ---- 骨架屏與微光動效 (Skeleton Screens & Warm Frosted Liquid Wave - ADR 0007) ---- */
 :root {
-  --skeleton-bg: rgba(0, 0, 0, 0.06);
-  --skeleton-shimmer: rgba(255, 255, 255, 0.6);
+  --sk-base-gradient: linear-gradient(135deg, rgba(255, 138, 138, 0.10) 0%, rgba(255, 212, 160, 0.08) 50%, rgba(0, 0, 0, 0.04) 100%);
+  --sk-shimmer-wave: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.35) 30%, rgba(255, 255, 255, 0.85) 50%, rgba(255, 255, 255, 0.35) 70%, transparent 100%);
+  --sk-border: rgba(255, 138, 138, 0.12);
 }
 
 [data-theme="dark"] {
-  --skeleton-bg: rgba(255, 255, 255, 0.08);
-  --skeleton-shimmer: rgba(255, 255, 255, 0.16);
+  --sk-base-gradient: linear-gradient(135deg, rgba(255, 158, 158, 0.12) 0%, rgba(255, 212, 160, 0.06) 50%, rgba(255, 255, 255, 0.05) 100%);
+  --sk-shimmer-wave: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.06) 30%, rgba(255, 255, 255, 0.28) 50%, rgba(255, 255, 255, 0.06) 70%, transparent 100%);
+  --sk-border: rgba(255, 158, 158, 0.15);
 }
 
 .skeleton {
   position: relative;
   overflow: hidden;
-  background-color: var(--skeleton-bg);
-  border-radius: var(--radius-sm);
   display: block;
+  background: var(--sk-base-gradient);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  border: 1px solid var(--sk-border);
+  border-radius: var(--radius-sm);
+  animation: none;
+  transform: none;
 }
 
 .skeleton::after {
   content: '';
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--skeleton-shimmer) 50%,
-    transparent 100%
-  );
-  animation: shimmer 1.6s infinite ease-in-out;
+  background: var(--sk-shimmer-wave);
+  animation: skeleton-liquid-wave 1.6s ease-in-out infinite;
 }
 
-@keyframes shimmer {
+@keyframes skeleton-liquid-wave {
   100% {
     transform: translateX(100%);
   }
