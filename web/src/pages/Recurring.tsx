@@ -46,6 +46,19 @@ export default function Recurring() {
   const [errorMsg, setErrorMsg] = useState('')
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // 二段式防誤觸刪除狀態
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
+  const [confirmingModalDelete, setConfirmingModalDelete] = useState(false)
+  const [deleteTimer, setDeleteTimer] = useState<any>(null)
+  const [modalDeleteTimer, setModalDeleteTimer] = useState<any>(null)
+
+  useEffect(() => {
+    return () => {
+      if (deleteTimer) clearTimeout(deleteTimer)
+      if (modalDeleteTimer) clearTimeout(modalDeleteTimer)
+    }
+  }, [deleteTimer, modalDeleteTimer])
+
   const loadData = async () => {
     try {
       setLoading(true)
@@ -81,6 +94,7 @@ export default function Recurring() {
       account_id: accounts[0]?.id || '',
     })
     setErrorMsg('')
+    setConfirmingModalDelete(false)
     setShowModal(true)
   }
 
@@ -95,6 +109,7 @@ export default function Recurring() {
       account_id: item.account_id || '',
     })
     setErrorMsg('')
+    setConfirmingModalDelete(false)
     setShowModal(true)
   }
 
@@ -142,13 +157,55 @@ export default function Recurring() {
     }
   }
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`確定要刪除週期收支「${name}」嗎？`)) return
+  // 卡片獨立按鈕二段式防呆刪除（徹底廢除原生 window.confirm）
+  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    if (confirmingDeleteId === id) {
+      if (deleteTimer) clearTimeout(deleteTimer)
+      setConfirmingDeleteId(null)
+      executeDelete(id)
+    } else {
+      setConfirmingDeleteId(id)
+      if (deleteTimer) clearTimeout(deleteTimer)
+      const timer = setTimeout(() => {
+        setConfirmingDeleteId(null)
+      }, 3000)
+      setDeleteTimer(timer)
+    }
+  }
+
+  const executeDelete = async (id: string) => {
     try {
       await recurringApi.remove(id)
       loadData()
     } catch (err: any) {
       alert(err.message || '刪除失敗')
+    }
+  }
+
+  // Modal 內部二段式防呆刪除
+  const handleModalDelete = async (id: string) => {
+    if (!confirmingModalDelete) {
+      setConfirmingModalDelete(true)
+      if (modalDeleteTimer) clearTimeout(modalDeleteTimer)
+      const timer = setTimeout(() => {
+        setConfirmingModalDelete(false)
+      }, 3000)
+      setModalDeleteTimer(timer)
+      return
+    }
+
+    if (modalDeleteTimer) clearTimeout(modalDeleteTimer)
+    setConfirmingModalDelete(false)
+    try {
+      setSubmitting(true)
+      await recurringApi.remove(id)
+      setShowModal(false)
+      loadData()
+    } catch (err: any) {
+      setErrorMsg(err.message || '刪除失敗')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -177,19 +234,19 @@ export default function Recurring() {
         </div>
       )}
       {/* 標題與操作按鈕 */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+      <div className="page-header-row">
         <div>
           <h1 className="page-title">週期收支 🔄</h1>
           <p className="page-subtitle">管理每月定期租金、水電、訂閱與薪資，自動計算平均月度分攤平滑</p>
         </div>
-        <div className="flex gap-2">
+        <div className="header-actions">
           <button id="btn-export-recurring" className="btn btn-secondary" onClick={() => exportApi.recurringCsv()}>
             <Download size={18} />
             <span>匯出 CSV</span>
           </button>
           <button id="btn-add-recurring" className="btn btn-primary" onClick={handleOpenAdd}>
             <Plus size={18} />
-            <span>新增固定項目</span>
+            <span>新增週期項目</span>
           </button>
         </div>
       </div>
@@ -205,7 +262,7 @@ export default function Recurring() {
         </div>
 
         <div className="stat-card">
-          <span className="stat-label">固定收入每月預估</span>
+          <span className="stat-label">週期收入每月預估</span>
           <div className="stat-value" style={{ color: 'var(--color-success)' }}>
             {formatCurrency(amortize?.monthly_income ?? 0)}
           </div>
@@ -213,11 +270,11 @@ export default function Recurring() {
         </div>
 
         <div className="stat-card" style={{ background: 'var(--bg-surface-2)' }}>
-          <span className="stat-label">每月固定淨額</span>
+          <span className="stat-label">每月週期淨額</span>
           <div className="stat-value" style={{ color: (amortize?.monthly_income ?? 0) - (amortize?.monthly_expense ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
             {formatCurrency((amortize?.monthly_income ?? 0) - (amortize?.monthly_expense ?? 0))}
           </div>
-          <div className="stat-sub">收入減去固定必要支出</div>
+          <div className="stat-sub">週期收入減去必要支出</div>
         </div>
       </div>
 
@@ -238,22 +295,18 @@ export default function Recurring() {
         ) : (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {expenseItems.map((item, idx) => {
+              {expenseItems.map((item) => {
                 const monthlyShare = item.amount / (CYCLE_DIVISORS[item.cycle] || 1)
+                const isConfirming = confirmingDeleteId === item.id
                 return (
                   <div
                     key={item.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '16px 20px',
-                      borderBottom: idx !== expenseItems.length - 1 ? '1px solid var(--border-color)' : 'none',
-                    }}
+                    className="recurring-card"
+                    onClick={() => handleOpenEdit(item)}
                   >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontWeight: 600, fontSize: '1rem' }}>{item.name}</span>
+                    <div className="recurring-card-main">
+                      <div className="recurring-card-header">
+                        <span className="recurring-card-title">{item.name}</span>
                         <span className="badge badge-expense">
                           {CYCLE_LABELS[item.cycle] || item.cycle}
                         </span>
@@ -261,28 +314,44 @@ export default function Recurring() {
                           每月 {item.day_of_cycle} 號扣款
                         </span>
                       </div>
-                      <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+                      <div className="recurring-card-meta">
                         {item.account_name ? `關聯扣款帳戶：${item.account_name}` : '未指定關聯帳戶'}
                         {item.cycle !== 'monthly' && ` · 換算月分攤平滑：${formatCurrency(monthlyShare)} / 月`}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-md">
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--color-danger)', fontFamily: 'var(--font-display)' }}>
+                    <div className="recurring-card-side">
+                      <div className="recurring-card-amount-block">
+                        <div className="recurring-card-amount" style={{ color: 'var(--color-danger)' }}>
                           {formatCurrency(item.amount)}
                         </div>
-                        <div className="text-xs text-muted">
+                        <div className="recurring-card-cycle">
                           {CYCLE_LABELS[item.cycle]}繳
                         </div>
                       </div>
 
-                      <div className="flex gap-xs">
-                        <button className="btn btn-ghost btn-sm" style={{ padding: 6 }} onClick={() => handleOpenEdit(item)}>
+                      <div className="recurring-card-actions">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleOpenEdit(item)
+                          }}
+                          title="編輯"
+                        >
                           <Edit2 size={15} />
+                          <span>編輯</span>
                         </button>
-                        <button className="btn btn-ghost btn-sm" style={{ padding: 6, color: 'var(--color-danger)' }} onClick={() => handleDelete(item.id, item.name)}>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${isConfirming ? 'btn-danger' : 'btn-ghost'}`}
+                          style={isConfirming ? {} : { color: 'var(--color-danger)' }}
+                          onClick={(e) => handleDeleteClick(e, item.id)}
+                          title="刪除"
+                        >
                           <Trash2 size={15} />
+                          <span>{isConfirming ? '確定刪除？' : '刪除'}</span>
                         </button>
                       </div>
                     </div>
@@ -294,61 +363,75 @@ export default function Recurring() {
         )}
       </div>
 
-      {/* 固定收入清單 */}
+      {/* 週期收入清單 */}
       <div>
         <h2 className="text-xl flex items-center gap-xs" style={{ marginBottom: 14 }}>
           <TrendingUp size={20} color="var(--color-success)" />
-          固定收入項目 ({incomeItems.length})
+          週期收入項目 ({incomeItems.length})
         </h2>
 
         {incomeItems.length === 0 ? (
           <div className="card empty-state" style={{ padding: 24 }}>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>尚未設定固定收入（如每月薪資、租金收益）</p>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>尚未設定週期收入（如每月薪資、租金收益）</p>
           </div>
         ) : (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {incomeItems.map((item, idx) => (
-                <div
-                  key={item.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '16px 20px',
-                    borderBottom: idx !== incomeItems.length - 1 ? '1px solid var(--border-color)' : 'none',
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 600, fontSize: '1rem' }}>{item.name}</span>
-                      <span className="badge badge-income">{CYCLE_LABELS[item.cycle] || item.cycle}</span>
-                      <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>每月 {item.day_of_cycle} 號入帳</span>
-                    </div>
-                    <div className="text-xs text-muted" style={{ marginTop: 4 }}>
-                      {item.account_name ? `入帳帳戶：${item.account_name}` : '未指定關聯帳戶'}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-md">
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--color-success)', fontFamily: 'var(--font-display)' }}>
-                        +{formatCurrency(item.amount)}
+              {incomeItems.map((item) => {
+                const isConfirming = confirmingDeleteId === item.id
+                return (
+                  <div
+                    key={item.id}
+                    className="recurring-card"
+                    onClick={() => handleOpenEdit(item)}
+                  >
+                    <div className="recurring-card-main">
+                      <div className="recurring-card-header">
+                        <span className="recurring-card-title">{item.name}</span>
+                        <span className="badge badge-income">{CYCLE_LABELS[item.cycle] || item.cycle}</span>
+                        <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>每月 {item.day_of_cycle} 號入帳</span>
                       </div>
-                      <div className="text-xs text-muted">{CYCLE_LABELS[item.cycle]}收</div>
+                      <div className="recurring-card-meta">
+                        {item.account_name ? `入帳帳戶：${item.account_name}` : '未指定關聯帳戶'}
+                      </div>
                     </div>
 
-                    <div className="flex gap-xs">
-                      <button className="btn btn-ghost btn-sm" style={{ padding: 6 }} onClick={() => handleOpenEdit(item)}>
-                        <Edit2 size={15} />
-                      </button>
-                      <button className="btn btn-ghost btn-sm" style={{ padding: 6, color: 'var(--color-danger)' }} onClick={() => handleDelete(item.id, item.name)}>
-                        <Trash2 size={15} />
-                      </button>
+                    <div className="recurring-card-side">
+                      <div className="recurring-card-amount-block">
+                        <div className="recurring-card-amount" style={{ color: 'var(--color-success)' }}>
+                          +{formatCurrency(item.amount)}
+                        </div>
+                        <div className="recurring-card-cycle">{CYCLE_LABELS[item.cycle]}收</div>
+                      </div>
+
+                      <div className="recurring-card-actions">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleOpenEdit(item)
+                          }}
+                          title="編輯"
+                        >
+                          <Edit2 size={15} />
+                          <span>編輯</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${isConfirming ? 'btn-danger' : 'btn-ghost'}`}
+                          style={isConfirming ? {} : { color: 'var(--color-danger)' }}
+                          onClick={(e) => handleDeleteClick(e, item.id)}
+                          title="刪除"
+                        >
+                          <Trash2 size={15} />
+                          <span>{isConfirming ? '確定刪除？' : '刪除'}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
@@ -358,7 +441,10 @@ export default function Recurring() {
       {showModal && (
         <Modal
           title={editingItem ? '編輯週期收支' : '新增週期收支'}
-          onClose={() => setShowModal(false)}
+          onClose={() => {
+            setShowModal(false)
+            setConfirmingModalDelete(false)
+          }}
         >
           {errorMsg && (
             <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, color: 'var(--color-danger)', fontSize: '0.85rem' }}>
@@ -382,7 +468,7 @@ export default function Recurring() {
                 style={form.type === 'income' ? { background: 'var(--color-success)' } : {}}
                 onClick={() => setForm(p => ({ ...p, type: 'income' }))}
               >
-                固定收入
+                週期收入
               </button>
             </div>
 
@@ -468,15 +554,30 @@ export default function Recurring() {
               </select>
             </div>
 
-            <button
-              id="rec-submit"
-              type="submit"
-              className="btn btn-primary btn-full btn-lg"
-              disabled={submitting}
-              style={{ marginTop: 8 }}
-            >
-              {submitting ? '儲存中…' : (editingItem ? '儲存變更' : '建立固定項目')}
-            </button>
+            {/* 操作按鈕列：編輯時左側提供刪除按鈕，右側為儲存按鈕 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: editingItem ? 'space-between' : 'flex-end', gap: 10, marginTop: 12 }}>
+              {editingItem && (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  style={{ minHeight: 40, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => handleModalDelete(editingItem.id)}
+                  disabled={submitting}
+                >
+                  <Trash2 size={16} />
+                  <span>{confirmingModalDelete ? '⚠️ 確定刪除？再次點擊' : '刪除此項目'}</span>
+                </button>
+              )}
+              <button
+                id="rec-submit"
+                type="submit"
+                className="btn btn-primary"
+                style={{ flex: editingItem ? 1 : 'none', width: editingItem ? 'auto' : '100%', minHeight: 40 }}
+                disabled={submitting}
+              >
+                {submitting ? '儲存中…' : (editingItem ? '儲存變更' : '建立週期收支')}
+              </button>
+            </div>
           </form>
         </Modal>
       )}

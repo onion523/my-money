@@ -35,7 +35,7 @@ _Avoid_: 負債帳戶 (debt account)、卡片 (card)
 _Avoid_: 淨值 (net worth)、可用額度 (credit limit)、總餘額 (total balance)
 
 **Disposable Cash (真實可支配現金)**:
-淨可用餘額進一步扣除當期固定收支平攤預留與進行中儲蓄目標款項後的安全自由花費餘額。
+淨可用餘額進一步扣除當期週期收支分攤平滑預留與進行中儲蓄目標款項後的安全自由花費餘額。
 _Avoid_: 零用錢 (pocket money)、空閒餘額 (free cash)、閒置資金 (idle cash)
 
 ---

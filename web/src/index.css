@@ -477,6 +477,75 @@ a { text-decoration: none; color: inherit; }
   font-size: 0.85rem;
 }
 
+/* ---- 週期收支自適應卡片 (Recurring Items) ---- */
+.recurring-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color var(--transition-fast);
+  cursor: pointer;
+}
+.recurring-card:hover {
+  background: var(--bg-surface-2);
+}
+.recurring-card:last-child {
+  border-bottom: none;
+}
+.recurring-card-main {
+  flex: 1;
+  min-width: 0;
+}
+.recurring-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.recurring-card-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+.recurring-card-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.recurring-card-side {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-shrink: 0;
+}
+.recurring-card-amount-block {
+  text-align: right;
+}
+.recurring-card-amount {
+  font-weight: 700;
+  font-size: 1.15rem;
+  font-family: var(--font-display);
+}
+.recurring-card-cycle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.recurring-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.recurring-card-actions .btn {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* 行動端專用元件（桌面端隱藏） */
 .mobile-header {
   display: none;
@@ -697,6 +766,36 @@ a { text-decoration: none; color: inherit; }
   .scope-tab-bar {
     width: 100%;
     margin-bottom: 14px;
+  }
+
+  /* 週期收支卡片在小螢幕垂直四層階層折疊 */
+  .recurring-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px 16px;
+    gap: 10px;
+  }
+  .recurring-card-main {
+    width: 100%;
+  }
+  .recurring-card-side {
+    justify-content: space-between;
+    width: 100%;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border-color-2);
+  }
+  .recurring-card-amount-block {
+    text-align: left;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .recurring-card-actions {
+    margin-left: auto;
+  }
+  .recurring-card-actions .btn {
+    min-height: 36px;
+    padding: 6px 12px;
   }
 }
 
