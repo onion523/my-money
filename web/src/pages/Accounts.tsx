@@ -207,7 +207,6 @@ export default function Accounts() {
 
   const handleOpenPay = (card: Account, payType: 'shared' | 'personal' | 'full' = 'full') => {
     setPayCardModal(card)
-    const defaultBank = bankAccounts.find(b => b.balance > 0) || bankAccounts[0]
     
     let defaultAmount = (card.balance || 0) + (card.unbilled || 0)
     let isSharedTarget = 1
@@ -220,7 +219,7 @@ export default function Accounts() {
     }
 
     setPayForm({
-      bank_account_id: defaultBank ? defaultBank.id : '',
+      bank_account_id: '',
       amount: defaultAmount > 0 ? defaultAmount.toString() : '',
       date: today(),
       note: `扣繳【${card.name}】卡費 (${payType === 'shared' ? '家庭公帳代墊' : payType === 'personal' ? '個人私帳' : '全額'})`,
@@ -278,11 +277,11 @@ export default function Accounts() {
 
   // 啟動 ATM 提款 / 轉帳 Modal
   const handleOpenTransfer = (defaultFromId?: string, defaultToId?: string) => {
-    const fromId = defaultFromId || (bankAccounts[0]?.id || accounts[0]?.id || '')
-    const toId = defaultToId || (cashAccounts[0]?.id || accounts[1]?.id || '')
+    const fromId = defaultFromId || ''
+    const toId = defaultToId || ''
     setTransferForm({
       from_account_id: fromId,
-      to_account_id: toId === fromId ? (accounts.find(a => a.id !== fromId)?.id || '') : toId,
+      to_account_id: toId === fromId && fromId !== '' ? '' : toId,
       amount: '',
       date: today(),
       note: '',
@@ -1017,7 +1016,7 @@ export default function Accounts() {
                   onChange={e => setTransferForm(p => ({ ...p, from_account_id: e.target.value }))}
                   required
                 >
-                  <option value="">-- 請選擇轉出帳戶 --</option>
+                  <option value="" disabled>-- 請選擇轉出帳戶 --</option>
                   {accounts.filter(a => a.type !== 'credit_card').map(a => (
                     <option key={a.id} value={a.id}>
                       {a.type === 'cash' ? '💵 現金' : '🏦 銀行'} - {a.name} (餘額: {formatCurrency(a.balance)})
@@ -1034,7 +1033,7 @@ export default function Accounts() {
                   onChange={e => setTransferForm(p => ({ ...p, to_account_id: e.target.value }))}
                   required
                 >
-                  <option value="">-- 請選擇轉入帳戶 --</option>
+                  <option value="" disabled>-- 請選擇轉入帳戶 --</option>
                   {accounts.filter(a => a.type !== 'credit_card' && a.id !== transferForm.from_account_id).map(a => (
                     <option key={a.id} value={a.id}>
                       {a.type === 'cash' ? '💵 現金' : '🏦 銀行'} - {a.name} (餘額: {formatCurrency(a.balance)})
@@ -1111,7 +1110,7 @@ export default function Accounts() {
                 onChange={e => setPayForm(p => ({ ...p, bank_account_id: e.target.value }))}
                 required
               >
-                <option value="">-- 請選擇扣款銀行 --</option>
+                <option value="" disabled>-- 請選擇扣款銀行 --</option>
                 {bankAccounts.map(b => (
                   <option key={b.id} value={b.id}>
                     {b.name} (目前存款餘額: {formatCurrency(b.balance)})

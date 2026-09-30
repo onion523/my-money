@@ -60,9 +60,6 @@ export default function Transactions() {
       ])
       setTransactions(txs)
       setAccounts(accs)
-      if (accs.length > 0 && !form.account_id) {
-        setForm(p => ({ ...p, account_id: accs[0].id }))
-      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -78,7 +75,7 @@ export default function Transactions() {
   const handleOpenAdd = () => {
     setEditingTx(null)
     setForm({
-      account_id: accounts[0]?.id || '',
+      account_id: '',
       type: 'expense',
       category: '餐飲',
       amount: '',
@@ -115,7 +112,7 @@ export default function Transactions() {
     e.preventDefault()
     setErrorMsg('')
     if (!form.account_id) {
-      setErrorMsg('請先建立並選擇帳戶')
+      setErrorMsg(accounts.length === 0 ? '請先至「帳戶管理」建立至少一個帳戶' : '請選擇扣款或存入帳戶')
       return
     }
     const amt = parseFloat(form.amount)
@@ -583,6 +580,7 @@ export default function Transactions() {
                 onChange={e => setForm(p => ({ ...p, account_id: e.target.value }))}
                 required
               >
+                <option value="" disabled>-- 請選擇扣款 / 存入帳戶 --</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
                     {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? (acc.type === 'credit_card' ? '🏠 家庭信用卡' : '🏠 家庭共同基金') : '👤 個人私帳'})

@@ -91,7 +91,7 @@ export default function Recurring() {
       amount: '',
       cycle: 'monthly',
       day_of_cycle: '1',
-      account_id: accounts[0]?.id || '',
+      account_id: '',
     })
     setErrorMsg('')
     setConfirmingModalDelete(false)

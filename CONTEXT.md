@@ -38,6 +38,10 @@ _Avoid_: 淨值 (net worth)、可用額度 (credit limit)、總餘額 (total bal
 淨可用餘額進一步扣除當期週期收支分攤平滑預留與進行中儲蓄目標款項後的安全自由花費餘額。
 _Avoid_: 零用錢 (pocket money)、空閒餘額 (free cash)、閒置資金 (idle cash)
 
+**Explicit Account Selection (顯式帳戶選取原則)**:
+在新增交易記帳、帳戶互轉、信用卡還款與公帳報銷等表單中，系統嚴格禁止擅自預選任何帳戶或信用卡（無自動預設值），強制使用者主動檢視並選取會計主體；未選取時表單透過原生 required 與介面警示進行防呆攔截。必填欄位之佔位項目設為 disabled 禁止反選回空；非必填之週期收支則提供「無特定帳戶」並允許選取與切換。
+_Avoid_: 隱性預選 (implicit default)、首項默認 (first item auto-select)、自動代入 (auto-fill assumption)
+
 ---
 
 ### 信用卡帳務與結算 (Credit Card Debt & Settlement)

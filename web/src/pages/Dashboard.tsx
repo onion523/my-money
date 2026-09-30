@@ -77,10 +77,6 @@ export default function Dashboard() {
       setRecurringList(rec)
       setGoalsList(g)
       setMonthlyStats(monthlyStats)
-
-      if (accs.length > 0 && !form.account_id) {
-        setForm(p => ({ ...p, account_id: accs[0].id }))
-      }
     } catch (e: any) {
       console.error('Failed to load dashboard data:', e)
       setLoadError(e.message || '資料載入失敗，請檢查網路連線或伺服器狀態')
@@ -97,7 +93,7 @@ export default function Dashboard() {
     e.preventDefault()
     setSubmitError('')
     if (!form.account_id) {
-      setSubmitError('請先至「帳戶管理」建立至少一個帳戶')
+      setSubmitError(accounts.length === 0 ? '請先至「帳戶管理」建立至少一個帳戶' : '請選擇扣款或存入帳戶')
       return
     }
     const amt = parseFloat(form.amount)
@@ -642,6 +638,7 @@ export default function Dashboard() {
                 onChange={e => setForm(p => ({ ...p, account_id: e.target.value }))}
                 required
               >
+                <option value="" disabled>-- 請選擇扣款 / 存入帳戶 --</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
                     {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 銀行存款帳戶' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 公帳' : '👤 個人私帳'})

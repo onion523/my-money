@@ -113,13 +113,10 @@ export default function Family() {
   
   const handleOpenReimburse = (adv: any) => {
     setReimburseModalTarget(adv)
-    const defaultJoint = jointAccounts.find(a => a.balance >= adv.pending_reimburse) || jointAccounts[0]
-    const memberPersonalAccounts = adv.receiving_accounts || []
-    const defaultTo = memberPersonalAccounts[0]
 
     setReimburseForm({
-      from_account_id: defaultJoint ? defaultJoint.id : '',
-      to_account_id: defaultTo ? defaultTo.id : '',
+      from_account_id: '',
+      to_account_id: '',
       amount: adv.pending_reimburse.toString(),
       date: today(),
       note: `家庭共同基金撥款報銷 ${adv.user_name} 代墊公帳`,
@@ -740,7 +737,7 @@ export default function Family() {
                 onChange={e => setReimburseForm(p => ({ ...p, from_account_id: e.target.value }))}
                 required
               >
-                <option value="">-- 請選擇家庭共同基金帳戶 --</option>
+                <option value="" disabled>-- 請選擇家庭共同基金帳戶 --</option>
                 {jointAccounts.map(j => (
                   <option key={j.id} value={j.id}>
                     {j.name} (目前家庭共同基金餘額: {formatCurrency(j.balance)})
@@ -757,7 +754,7 @@ export default function Family() {
                 onChange={e => setReimburseForm(p => ({ ...p, to_account_id: e.target.value }))}
                 required
               >
-                <option value="">-- 請選擇收款個人帳戶 --</option>
+                <option value="" disabled>-- 請選擇收款個人帳戶 --</option>
                 {(reimburseModalTarget.receiving_accounts || []).map((a: any) => (
                   <option key={a.id} value={a.id}>
                     {a.type === 'cash' ? '💵 現金' : '🏦 銀行'} - {a.name}
