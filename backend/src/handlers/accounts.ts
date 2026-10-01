@@ -120,7 +120,7 @@ accounts.post('/', async (c) => {
 // PUT /accounts/:id
 accounts.put('/:id', async (c) => {
   const userId = c.get('userId');
-  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
 
   const { id } = c.req.param();
@@ -129,6 +129,15 @@ accounts.put('/:id', async (c) => {
   await ensureAccountsSchema(c.env.DB);
   const existing = await c.env.DB.prepare(`SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders})`).bind(id, ...memberUserIds).first<any>();
   if (!existing) return c.json({ success: false, error: '帳戶不存在' }, 404);
+
+  // 權限檢查：個人私帳嚴禁他人修改；共同帳戶僅建立者或管理員可修改
+  if (existing.is_joint === 0 && existing.user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：個人私帳僅限帳戶擁有者本人修改' }, 403);
+  }
+  if (existing.is_joint === 1 && existing.user_id !== userId && myRole !== 'admin') {
+    return c.json({ success: false, error: '權限不足：家庭共同帳戶僅限建立者或家庭管理員修改' }, 403);
+  }
+
   await c.env.DB.prepare(
     'UPDATE accounts SET name = ?, balance = ?, credit_limit = ?, statement_day = ?, payment_due_day = ?, unbilled = ?, color = ?, is_joint = ? WHERE id = ?'
   ).bind(
@@ -149,12 +158,21 @@ accounts.put('/:id', async (c) => {
 // DELETE /accounts/:id
 accounts.delete('/:id', async (c) => {
   const userId = c.get('userId');
-  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
 
   const { id } = c.req.param();
-  const existing = await c.env.DB.prepare(`SELECT id FROM accounts WHERE id = ? AND user_id IN (${placeholders})`).bind(id, ...memberUserIds).first();
+  const existing = await c.env.DB.prepare(`SELECT id, user_id, is_joint FROM accounts WHERE id = ? AND user_id IN (${placeholders})`).bind(id, ...memberUserIds).first<any>();
   if (!existing) return c.json({ success: false, error: '帳戶不存在' }, 404);
+
+  // 權限檢查：個人私帳嚴禁他人刪除；共同帳戶僅建立者或管理員可刪除
+  if (existing.is_joint === 0 && existing.user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：個人私帳僅限帳戶擁有者本人刪除' }, 403);
+  }
+  if (existing.is_joint === 1 && existing.user_id !== userId && myRole !== 'admin') {
+    return c.json({ success: false, error: '權限不足：家庭共同帳戶僅限建立者或家庭管理員刪除' }, 403);
+  }
+
   await c.env.DB.prepare('DELETE FROM accounts WHERE id = ?').bind(id).run();
   return c.json({ success: true, data: null });
 });
@@ -184,9 +202,14 @@ accounts.post('/pay-credit-card', async (c) => {
   // 檢查信用卡帳戶
   const card = await c.env.DB.prepare(
     `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
-  ).bind(credit_card_id, ...memberUserIds).first<{ id: string; name: string; type: string; balance: number; unbilled: number }>();
+  ).bind(credit_card_id, ...memberUserIds).first<{ id: string; name: string; type: string; balance: number; unbilled: number; is_joint: number; user_id: string }>();
 
   if (!card) return c.json({ success: false, error: '信用卡不存在' }, 404);
+
+  // 權限檢查：個人信用卡還款沖銷僅限持卡人本人操作
+  if ((card.is_joint === 0 || card.is_joint === null) && card.user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：個人信用卡還款沖銷僅限持卡人本人操作' }, 403);
+  }
 
   // Q6: 嚴格防呆上限檢查（不得超過已出帳+未出帳總額）
   const maxPayable = (card.balance || 0) + (card.unbilled || 0);
@@ -261,9 +284,14 @@ accounts.post('/:id/rollover-statement', async (c) => {
 
   const card = await c.env.DB.prepare(
     `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
-  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number }>();
+  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; is_joint: number; user_id: string }>();
 
   if (!card) return c.json({ success: false, error: '信用卡不存在' }, 404);
+
+  // 權限檢查：個人信用卡出帳作業僅限持卡人本人操作
+  if ((card.is_joint === 0 || card.is_joint === null) && card.user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：個人信用卡出帳作業僅限持卡人本人操作' }, 403);
+  }
   if ((card.unbilled || 0) <= 0) return c.json({ success: false, error: '目前無未出帳金額需出帳' }, 400);
 
   const newBalance = (card.balance || 0) + card.unbilled;
@@ -290,9 +318,14 @@ accounts.post('/:id/reconcile', async (c) => {
 
   const card = await c.env.DB.prepare(
     `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
-  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null }>();
+  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; is_joint: number; user_id: string }>();
 
   if (!card) return c.json({ success: false, error: '信用卡不存在或無權限' }, 404);
+
+  // 權限檢查：個人信用卡校準僅限持卡人本人操作
+  if ((card.is_joint === 0 || card.is_joint === null) && card.user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：個人信用卡校準僅限持卡人本人操作' }, 403);
+  }
 
   // 計算當期結帳週期起點 (優先依據最後出帳作業時間點)
   let timeCondition = '';

@@ -7,13 +7,13 @@ type Vars = { userId: string; userEmail: string; userName: string };
 const households = new Hono<{ Bindings: Env; Variables: Vars }>();
 households.use('*', authMiddleware);
 
-export async function getUserHousehold(db: D1Database, userId: string): Promise<{ household: Household | null; memberUserIds: string[] }> {
+export async function getUserHousehold(db: D1Database, userId: string): Promise<{ household: Household | null; memberUserIds: string[]; myRole: 'admin' | 'member' | null }> {
   const member = await db.prepare(
-    'SELECT household_id FROM household_members WHERE user_id = ?'
-  ).bind(userId).first<{ household_id: string }>();
+    'SELECT household_id, role FROM household_members WHERE user_id = ?'
+  ).bind(userId).first<{ household_id: string; role: 'admin' | 'member' }>();
 
   if (!member) {
-    return { household: null, memberUserIds: [userId] };
+    return { household: null, memberUserIds: [userId], myRole: null };
   }
 
   const household = await db.prepare(
@@ -27,13 +27,13 @@ export async function getUserHousehold(db: D1Database, userId: string): Promise<
   const memberUserIds = members.results.map(m => m.user_id);
   if (!memberUserIds.includes(userId)) memberUserIds.push(userId);
 
-  return { household: household || null, memberUserIds };
+  return { household: household || null, memberUserIds, myRole: member.role || 'member' };
 }
 
 // GET /households/current
 households.get('/current', async (c) => {
   const userId = c.get('userId');
-  const { household } = await getUserHousehold(c.env.DB, userId);
+  const { household, myRole } = await getUserHousehold(c.env.DB, userId);
   if (!household) {
     return c.json({ success: true, data: { household: null, members: [], myRole: null } });
   }
@@ -45,8 +45,6 @@ households.get('/current', async (c) => {
     WHERE hm.household_id = ?
     ORDER BY hm.role DESC, hm.joined_at ASC
   `).bind(household.id).all();
-
-  const myMember = membersResult.results.find((m: any) => m.user_id === userId) as any;
 
   // Active invitation if any
   const inv = await c.env.DB.prepare(`
@@ -60,7 +58,7 @@ households.get('/current', async (c) => {
     data: {
       household,
       members: membersResult.results,
-      myRole: myMember?.role || 'member',
+      myRole: myRole || 'member',
       activeInvitation: inv || null,
     }
   });
@@ -95,8 +93,11 @@ households.post('/', async (c) => {
 // POST /households/invite (Generate invite code)
 households.post('/invite', async (c) => {
   const userId = c.get('userId');
-  const { household } = await getUserHousehold(c.env.DB, userId);
+  const { household, myRole } = await getUserHousehold(c.env.DB, userId);
   if (!household) return c.json({ success: false, error: '尚未建立或加入家庭群組' }, 400);
+  if (myRole !== 'admin') {
+    return c.json({ success: false, error: '權限不足：只有家庭管理員可以生成邀請碼' }, 403);
+  }
 
   // Generate 6-char random alphanumeric code
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -185,7 +186,7 @@ households.delete('/members/:targetUserId', async (c) => {
 
   const myMember = await c.env.DB.prepare('SELECT * FROM household_members WHERE user_id = ?').bind(userId).first<{ household_id: string; role: string }>();
   if (!myMember || myMember.role !== 'admin') {
-    return c.json({ success: false, error: '只有家庭管理員可以移除成員' }, 403);
+    return c.json({ success: false, error: '權限不足：只有家庭管理員可以移除成員' }, 403);
   }
 
   if (targetUserId === userId) {
@@ -285,7 +286,7 @@ households.get('/advances', async (c) => {
 // POST /households/reimburse (從共同基金一鍵撥款報銷代墊款)
 households.post('/reimburse', async (c) => {
   const userId = c.get('userId');
-  const { household, memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  const { household, memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
   if (!household) return c.json({ success: false, error: '尚未建立或加入家庭群組' }, 400);
 
   const body = await c.req.json();
@@ -294,6 +295,11 @@ households.post('/reimburse', async (c) => {
 
   if (!target_user_id || !from_account_id || !to_account_id || isNaN(amt) || amt <= 0) {
     return c.json({ success: false, error: '請填寫正確報銷資訊與金額' }, 400);
+  }
+
+  // 受限自律報銷防線：一般成員僅能為本人代墊款執行撥款報銷
+  if (myRole !== 'admin' && target_user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：一般成員僅能為本人代墊款執行撥款報銷，無法動支撥款給其他成員' }, 403);
   }
 
   const placeholders = memberUserIds.map(() => '?').join(',');

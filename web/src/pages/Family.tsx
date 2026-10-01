@@ -1,5 +1,6 @@
 import { FamilySkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
+import { useStore } from '../store/useStore'
 import { householdApi, HouseholdData, HouseholdMember, HouseholdAdvance, accountsApi, Account } from '../api/client'
 import { formatCurrency, today, formatLocalDate } from '../components/utils'
 import Modal from '../components/Modal'
@@ -28,6 +29,7 @@ import {
 } from 'lucide-react'
 
 export default function Family() {
+  const { user } = useStore()
   const [data, setData] = useState<HouseholdData | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState('')
@@ -345,10 +347,12 @@ export default function Family() {
               </div>
 
               <div className="flex gap-2">
-                <button className="btn btn-secondary" onClick={handleGenerateInvite}>
-                  <UserPlus size={16} />
-                  <span>邀請碼</span>
-                </button>
+                {data.myRole === 'admin' && (
+                  <button className="btn btn-secondary" onClick={handleGenerateInvite}>
+                    <UserPlus size={16} />
+                    <span>邀請碼</span>
+                  </button>
+                )}
                 <button className="btn btn-ghost" style={{ color: 'var(--color-danger)' }} onClick={handleLeave}>
                   <LogOut size={16} />
                   <span>離開家庭群組</span>
@@ -440,7 +444,7 @@ export default function Family() {
                             </div>
                           </div>
 
-                          {adv.pending_reimburse > 0 && (
+                          {adv.pending_reimburse > 0 && (data.myRole === 'admin' || user?.id === adv.user_id) && (
                             <button
                               className="btn btn-primary"
                               onClick={() => handleOpenReimburse(adv)}

@@ -1,6 +1,7 @@
 import { AccountsSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
-import { accountsApi, Account, BalanceSummary } from '../api/client'
+import { accountsApi, Account, BalanceSummary, householdApi } from '../api/client'
+import { useStore } from '../store/useStore'
 import { formatCurrency, ACCOUNT_COLORS, today } from '../components/utils'
 import Modal from '../components/Modal'
 import {
@@ -24,8 +25,10 @@ import {
 } from 'lucide-react'
 
 export default function Accounts() {
+  const { user } = useStore()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [balance, setBalance] = useState<BalanceSummary | null>(null)
+  const [myRole, setMyRole] = useState<'admin' | 'member' | null>(null)
   const [loading, setLoading] = useState(true)
   const [scope, setScope] = useState<'all' | 'household' | 'personal'>('all')
 
@@ -73,17 +76,35 @@ export default function Accounts() {
   const loadData = async (currentScope: 'all' | 'household' | 'personal' = scope) => {
     try {
       setLoading(true)
-      const [accs, bal] = await Promise.all([
+      const [accs, bal, householdData] = await Promise.all([
         accountsApi.list(currentScope),
         accountsApi.balance(currentScope).catch(() => null),
+        householdApi.current().catch(() => null),
       ])
       setAccounts(accs)
       if (bal) setBalance(bal)
+      if (householdData?.myRole) setMyRole(householdData.myRole)
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
+  }
+
+  // 權限檢查輔助函數 (ADR 0013)
+  const canModifyAccount = (acc: Account) => {
+    if (acc.is_joint === 0) {
+      return !user || acc.user_id === user.id
+    }
+    // 家庭共同帳戶：建立者本人或家庭管理員共治
+    return (!user || acc.user_id === user.id) || myRole === 'admin'
+  }
+
+  const canOperateCard = (card: Account) => {
+    if (card.is_joint === 0) {
+      return !user || card.user_id === user.id
+    }
+    return true
   }
 
   useEffect(() => {
@@ -481,14 +502,16 @@ export default function Accounts() {
                     <span className="account-color-dot" style={{ backgroundColor: cash.color || '#10B981' }} />
                     <h3 className="account-name">{cash.name}</h3>
                   </div>
-                  <div className="flex gap-xs">
-                    <button className="btn-icon" title="編輯" onClick={() => handleOpenEdit(cash)}>
-                      <Edit2 size={16} />
-                    </button>
-                    <button className="btn-icon danger" title="刪除" onClick={() => handleDelete(cash.id, cash.name)}>
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                  {canModifyAccount(cash) && (
+                    <div className="flex gap-xs">
+                      <button className="btn-icon" title="編輯" onClick={() => handleOpenEdit(cash)}>
+                        <Edit2 size={16} />
+                      </button>
+                      <button className="btn-icon danger" title="刪除" onClick={() => handleDelete(cash.id, cash.name)}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="account-balance-group" style={{ margin: '14px 0' }}>
@@ -556,14 +579,16 @@ export default function Accounts() {
                     <span className="account-color-dot" style={{ backgroundColor: acc.color }} />
                     <h3 className="account-name">{acc.name}</h3>
                   </div>
-                  <div className="flex gap-xs">
-                    <button className="btn-icon" title="編輯" onClick={() => handleOpenEdit(acc)}>
-                      <Edit2 size={16} />
-                    </button>
-                    <button className="btn-icon danger" title="刪除" onClick={() => handleDelete(acc.id, acc.name)}>
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                  {canModifyAccount(acc) && (
+                    <div className="flex gap-xs">
+                      <button className="btn-icon" title="編輯" onClick={() => handleOpenEdit(acc)}>
+                        <Edit2 size={16} />
+                      </button>
+                      <button className="btn-icon danger" title="刪除" onClick={() => handleDelete(acc.id, acc.name)}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="account-balance-group" style={{ margin: '14px 0' }}>
@@ -650,14 +675,16 @@ export default function Accounts() {
                         </span>
                       )}
                     </div>
-                    <div className="flex gap-xs">
-                      <button className="btn-icon" title="編輯" onClick={() => handleOpenEdit(card)}>
-                        <Edit2 size={16} />
-                      </button>
-                      <button className="btn-icon danger" title="刪除" onClick={() => handleDelete(card.id, card.name)}>
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                    {canModifyAccount(card) && (
+                      <div className="flex gap-xs">
+                        <button className="btn-icon" title="編輯" onClick={() => handleOpenEdit(card)}>
+                          <Edit2 size={16} />
+                        </button>
+                        <button className="btn-icon danger" title="刪除" onClick={() => handleDelete(card.id, card.name)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* 待繳總額 */}
@@ -679,28 +706,30 @@ export default function Accounts() {
                       <div>
                         <div className="flex items-center justify-between">
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>未出帳（累計消費）</span>
-                          <div className="flex gap-xs">
-                            <button
-                              id={`btn-reconcile-${card.id}`}
-                              className="btn btn-xs btn-secondary"
-                              style={{ padding: '1px 6px', fontSize: '0.7rem' }}
-                              title="依當前消費紀錄自動校準未出帳金額"
-                              onClick={() => handleReconcile(card)}
-                              disabled={reconcilingCardId === card.id}
-                            >
-                              {reconcilingCardId === card.id ? '校準中...' : '🔄 校準'}
-                            </button>
-                            {unbilled > 0 && (
+                          {canOperateCard(card) && (
+                            <div className="flex gap-xs">
                               <button
+                                id={`btn-reconcile-${card.id}`}
                                 className="btn btn-xs btn-secondary"
                                 style={{ padding: '1px 6px', fontSize: '0.7rem' }}
-                                title="結帳日出帳作業"
-                                onClick={() => handleRollover(card)}
+                                title="依當前消費紀錄自動校準未出帳金額"
+                                onClick={() => handleReconcile(card)}
+                                disabled={reconcilingCardId === card.id}
                               >
-                                出帳作業
+                                {reconcilingCardId === card.id ? '校準中...' : '🔄 校準'}
                               </button>
-                            )}
-                          </div>
+                              {unbilled > 0 && (
+                                <button
+                                  className="btn btn-xs btn-secondary"
+                                  style={{ padding: '1px 6px', fontSize: '0.7rem' }}
+                                  title="結帳日出帳作業"
+                                  onClick={() => handleRollover(card)}
+                                >
+                                  出帳作業
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div style={{ fontWeight: 600 }}>{formatCurrency(unbilled)}</div>
                       </div>
@@ -741,7 +770,7 @@ export default function Accounts() {
                   </div>
 
                   {/* 還款操作按鈕組 */}
-                  {totalDue > 0 ? (
+                  {totalDue > 0 && canOperateCard(card) ? (
                     <div className="grid grid-3 gap-xs">
                       <button
                         className="btn btn-sm btn-secondary"
@@ -764,6 +793,10 @@ export default function Accounts() {
                       >
                         全額結清
                       </button>
+                    </div>
+                  ) : totalDue > 0 ? (
+                    <div className="text-center" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', padding: '6px 0' }}>
+                      🔒 個人私卡僅持卡人本人可執行繳款沖銷作業
                     </div>
                   ) : (
                     <div className="text-center" style={{ fontSize: '0.85rem', color: 'var(--color-success)', padding: '6px 0', fontWeight: 600 }}>

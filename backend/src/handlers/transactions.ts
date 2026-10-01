@@ -1,4 +1,4 @@
-﻿import { Hono } from 'hono';
+import { Hono } from 'hono';
 import { Env } from '../types';
 import { authMiddleware, generateId } from '../middleware/jwt';
 import { getUserHousehold } from './households';
@@ -130,7 +130,7 @@ transactions.post('/', async (c) => {
 // PUT /transactions/:id
 transactions.put('/:id', async (c) => {
   const userId = c.get('userId');
-  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
 
   const id = c.req.param('id');
@@ -144,9 +144,19 @@ transactions.put('/:id', async (c) => {
 
   const existing = await c.env.DB.prepare(
     `SELECT * FROM transactions WHERE id = ? AND user_id IN (${placeholders})`
-  ).bind(id, ...memberUserIds).first();
+  ).bind(id, ...memberUserIds).first<any>();
 
   if (!existing) return c.json({ success: false, error: '交易記錄不存在' }, 404);
+
+  // 權限檢查：
+  // 1. 個人私帳交易 (is_shared = 0)：嚴格僅限記錄者本人修改
+  if (existing.is_shared === 0 && existing.user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：個人私帳交易僅限記錄者本人修改' }, 403);
+  }
+  // 2. 家庭公帳交易 (is_shared = 1)：採「記錄者本人」或「家庭管理員」共治
+  if (existing.is_shared === 1 && existing.user_id !== userId && myRole !== 'admin') {
+    return c.json({ success: false, error: '權限不足：他人記錄之家庭公帳交易僅限該記錄者或家庭管理員修改' }, 403);
+  }
 
   // Q5: 信用卡還款紀錄受保護
   const protectedCategories = ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'];
@@ -229,13 +239,13 @@ transactions.put('/:id', async (c) => {
 // DELETE /transactions/:id
 transactions.delete('/:id', async (c) => {
   const userId = c.get('userId');
-  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
 
   const id = c.req.param('id');
   const existing = await c.env.DB.prepare(
     `SELECT * FROM transactions WHERE id = ? AND user_id IN (${placeholders})`
-  ).bind(id, ...memberUserIds).first();
+  ).bind(id, ...memberUserIds).first<any>();
 
   if (!existing) return c.json({ success: false, error: '交易記錄不存在' }, 404);
 
@@ -246,6 +256,16 @@ transactions.delete('/:id', async (c) => {
       success: false,
       error: `「${existing.category}」為系統內部平帳/轉帳紀錄，受系統保護禁止直接刪除。若金額有誤，請至「帳戶管理」進行資金校正。`,
     }, 400);
+  }
+
+  // 權限檢查：
+  // 1. 個人私帳交易 (is_shared = 0)：嚴格僅限記錄者本人刪除
+  if (existing.is_shared === 0 && existing.user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：個人私帳交易僅限記錄者本人刪除' }, 403);
+  }
+  // 2. 家庭公帳交易 (is_shared = 1)：採「記錄者本人」或「家庭管理員」共治
+  if (existing.is_shared === 1 && existing.user_id !== userId && myRole !== 'admin') {
+    return c.json({ success: false, error: '權限不足：他人記錄之家庭公帳交易僅限該記錄者或家庭管理員刪除' }, 403);
   }
 
   // 全額回滾帳戶餘額或未出帳負債 (透過 D1 batch 原子事務執行)

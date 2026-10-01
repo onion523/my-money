@@ -1,6 +1,7 @@
 import { TransactionsSkeleton } from '../components/Skeleton'
 import { useState, useEffect, useMemo } from 'react'
-import { txApi, accountsApi, exportApi, Transaction, Account } from '../api/client'
+import { txApi, accountsApi, exportApi, householdApi, Transaction, Account } from '../api/client'
+import { useStore } from '../store/useStore'
 import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS, buildHistoryMemo, recommendCategory } from '../components/utils'
 import Modal from '../components/Modal'
 import {
@@ -19,8 +20,10 @@ import {
 } from 'lucide-react'
 
 export default function Transactions() {
+  const { user } = useStore()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [myRole, setMyRole] = useState<'admin' | 'member' | null>(null)
   const [loading, setLoading] = useState(true)
 
   // 篩選狀態
@@ -54,17 +57,32 @@ export default function Transactions() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [txs, accs] = await Promise.all([
+      const [txs, accs, householdData] = await Promise.all([
         txApi.list({ from: startDate, to: endDate, scope: scopeFilter, limit: '200' }),
         accountsApi.list(),
+        householdApi.current().catch(() => null),
       ])
       setTransactions(txs)
       setAccounts(accs)
+      if (householdData?.myRole) {
+        setMyRole(householdData.myRole)
+      } else {
+        setMyRole(null)
+      }
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
+  }
+
+  // 權限檢查輔助函數 (ADR 0013)
+  const canModifyTx = (tx: Transaction) => {
+    if (tx.is_shared === 0) {
+      return !user || tx.user_id === user.id
+    }
+    // 家庭公開/公帳交易：建立者本人或家庭管理員共治
+    return (!user || tx.user_id === user.id) || myRole === 'admin'
   }
 
   useEffect(() => {
@@ -442,24 +460,26 @@ export default function Transactions() {
                               <span>系統保護</span>
                             </span>
                           ) : (
-                            <>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                style={{ padding: 4 }}
-                                onClick={() => handleOpenEdit(tx)}
-                                title="編輯"
-                              >
-                                <Edit2 size={16} />
-                              </button>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                style={{ padding: 4, color: 'var(--color-danger)' }}
-                                onClick={() => handleDelete(tx.id)}
-                                title="刪除"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </>
+                            canModifyTx(tx) && (
+                              <>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ padding: 4 }}
+                                  onClick={() => handleOpenEdit(tx)}
+                                  title="編輯"
+                                >
+                                  <Edit2 size={16} />
+                                </button>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ padding: 4, color: 'var(--color-danger)' }}
+                                  onClick={() => handleDelete(tx.id)}
+                                  title="刪除"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </>
+                            )
                           )}
                         </div>
                       </div>
