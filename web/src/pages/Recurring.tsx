@@ -25,6 +25,27 @@ const CYCLE_DIVISORS: Record<string, number> = {
   annual: 12,
 }
 
+function formatScheduleLabel(item: RecurringItem, actionText: '扣款' | '入帳'): string {
+  const day = item.day_of_cycle;
+  const month = item.month_of_cycle || 1;
+  if (item.cycle === 'monthly') return `每月 ${day} 號${actionText}`;
+  if (item.cycle === 'bimonthly') {
+    return `${month === 1 ? '單數月' : '雙數月'} ${day} 號${actionText}`;
+  }
+  if (item.cycle === 'quarterly') {
+    const qMap: Record<number, string> = { 1: '1/4/7/10月', 2: '2/5/8/11月', 3: '3/6/9/12月' };
+    return `每季 (${qMap[month] || '1/4/7/10月'}) ${day} 號${actionText}`;
+  }
+  if (item.cycle === 'semiannual') {
+    const sMap: Record<number, string> = { 1: '1/7月', 2: '2/8月', 3: '3/9月', 4: '4/10月', 5: '5/11月', 6: '6/12月' };
+    return `每半年 (${sMap[month] || '1/7月'}) ${day} 號${actionText}`;
+  }
+  if (item.cycle === 'annual') {
+    return `每年 ${month} 月 ${day} 號${actionText}`;
+  }
+  return `每月 ${day} 號${actionText}`;
+}
+
 export default function Recurring() {
   const [items, setItems] = useState<RecurringItem[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -40,6 +61,7 @@ export default function Recurring() {
     amount: '',
     cycle: 'monthly' as 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual',
     day_of_cycle: '1',
+    month_of_cycle: '1',
     account_id: '',
   })
   const [submitting, setSubmitting] = useState(false)
@@ -83,6 +105,25 @@ export default function Recurring() {
     loadData()
   }, [])
 
+  const handleCycleChange = (newCycle: typeof form.cycle) => {
+    setForm(prev => {
+      let newMonth = prev.month_of_cycle
+      const mNum = parseInt(newMonth) || 1
+      if (newCycle === 'monthly') {
+        newMonth = '1'
+      } else if (newCycle === 'bimonthly' && mNum > 2) {
+        newMonth = '1'
+      } else if (newCycle === 'quarterly' && mNum > 3) {
+        newMonth = '1'
+      } else if (newCycle === 'semiannual' && mNum > 6) {
+        newMonth = '1'
+      } else if (newCycle === 'annual' && (mNum < 1 || mNum > 12)) {
+        newMonth = '1'
+      }
+      return { ...prev, cycle: newCycle, month_of_cycle: newMonth }
+    })
+  }
+
   const handleOpenAdd = () => {
     setEditingItem(null)
     setForm({
@@ -91,6 +132,7 @@ export default function Recurring() {
       amount: '',
       cycle: 'monthly',
       day_of_cycle: '1',
+      month_of_cycle: '1',
       account_id: '',
     })
     setErrorMsg('')
@@ -106,6 +148,7 @@ export default function Recurring() {
       amount: item.amount.toString(),
       cycle: item.cycle,
       day_of_cycle: item.day_of_cycle.toString(),
+      month_of_cycle: (item.month_of_cycle || 1).toString(),
       account_id: item.account_id || '',
     })
     setErrorMsg('')
@@ -126,6 +169,7 @@ export default function Recurring() {
       return
     }
     const day = parseInt(form.day_of_cycle) || 1
+    const month = form.cycle === 'monthly' ? 1 : (parseInt(form.month_of_cycle) || 1)
 
     try {
       setSubmitting(true)
@@ -136,6 +180,7 @@ export default function Recurring() {
           amount: amt,
           cycle: form.cycle,
           day_of_cycle: day,
+          month_of_cycle: month,
           account_id: form.account_id || undefined,
         })
       } else {
@@ -145,6 +190,7 @@ export default function Recurring() {
           amount: amt,
           cycle: form.cycle,
           day_of_cycle: day,
+          month_of_cycle: month,
           account_id: form.account_id || undefined,
         })
       }
@@ -311,7 +357,7 @@ export default function Recurring() {
                           {CYCLE_LABELS[item.cycle] || item.cycle}
                         </span>
                         <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
-                          每月 {item.day_of_cycle} 號扣款
+                          {formatScheduleLabel(item, '扣款')}
                         </span>
                       </div>
                       <div className="recurring-card-meta">
@@ -389,7 +435,7 @@ export default function Recurring() {
                       <div className="recurring-card-header">
                         <span className="recurring-card-title">{item.name}</span>
                         <span className="badge badge-income">{CYCLE_LABELS[item.cycle] || item.cycle}</span>
-                        <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>每月 {item.day_of_cycle} 號入帳</span>
+                        <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>{formatScheduleLabel(item, '入帳')}</span>
                       </div>
                       <div className="recurring-card-meta">
                         {item.account_name ? `入帳帳戶：${item.account_name}` : '未指定關聯帳戶'}
@@ -503,38 +549,117 @@ export default function Recurring() {
               />
             </div>
 
-            {/* 週期 */}
-            <div className="grid grid-2" style={{ gap: 10 }}>
-              <div className="input-group">
-                <label className="input-label">付款 / 入帳週期</label>
-                <select
-                  id="rec-cycle"
-                  className="input"
-                  value={form.cycle}
-                  onChange={e => setForm(p => ({ ...p, cycle: e.target.value as any }))}
-                >
-                  <option value="monthly">每月</option>
-                  <option value="bimonthly">每雙月 (2個月)</option>
-                  <option value="quarterly">每季 (3個月)</option>
-                  <option value="semiannual">每半年 (6個月)</option>
-                  <option value="annual">每年 (12個月)</option>
-                </select>
-              </div>
+            {/* 週期與月份選擇 */}
+            {form.cycle === 'monthly' ? (
+              <div className="grid grid-2" style={{ gap: 10 }}>
+                <div className="input-group">
+                  <label className="input-label">付款 / 入帳週期</label>
+                  <select
+                    id="rec-cycle"
+                    className="input"
+                    value={form.cycle}
+                    onChange={e => handleCycleChange(e.target.value as any)}
+                  >
+                    <option value="monthly">每月</option>
+                    <option value="bimonthly">每雙月 (2個月)</option>
+                    <option value="quarterly">每季 (3個月)</option>
+                    <option value="semiannual">每半年 (6個月)</option>
+                    <option value="annual">每年 (12個月)</option>
+                  </select>
+                </div>
 
-              <div className="input-group">
-                <label className="input-label">每期第幾天 (1~31)</label>
-                <input
-                  id="rec-day"
-                  className="input"
-                  type="number"
-                  min="1"
-                  max="31"
-                  required
-                  value={form.day_of_cycle}
-                  onChange={e => setForm(p => ({ ...p, day_of_cycle: e.target.value }))}
-                />
+                <div className="input-group">
+                  <label className="input-label">{form.type === 'income' ? '入帳日' : '扣款日'} (每月 1~31 號)</label>
+                  <input
+                    id="rec-day"
+                    className="input"
+                    type="number"
+                    min="1"
+                    max="31"
+                    required
+                    value={form.day_of_cycle}
+                    onChange={e => setForm(p => ({ ...p, day_of_cycle: e.target.value }))}
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="input-group">
+                  <label className="input-label">付款 / 入帳週期</label>
+                  <select
+                    id="rec-cycle"
+                    className="input"
+                    value={form.cycle}
+                    onChange={e => handleCycleChange(e.target.value as any)}
+                  >
+                    <option value="monthly">每月</option>
+                    <option value="bimonthly">每雙月 (2個月)</option>
+                    <option value="quarterly">每季 (3個月)</option>
+                    <option value="semiannual">每半年 (6個月)</option>
+                    <option value="annual">每年 (12個月)</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-2" style={{ gap: 10 }}>
+                  <div className="input-group">
+                    <label className="input-label">
+                      {form.cycle === 'annual'
+                        ? (form.type === 'income' ? '入帳月份' : '扣款月份')
+                        : form.cycle === 'bimonthly'
+                        ? '單數或雙數月'
+                        : '起算月份'}
+                    </label>
+                    <select
+                      id="rec-month"
+                      className="input"
+                      value={form.month_of_cycle}
+                      onChange={e => setForm(p => ({ ...p, month_of_cycle: e.target.value }))}
+                    >
+                      {form.cycle === 'bimonthly' && (
+                        <>
+                          <option value="1">單數月（1、3、5、7、9、11月）</option>
+                          <option value="2">雙數月（2、4、6、8、10、12月）</option>
+                        </>
+                      )}
+                      {form.cycle === 'quarterly' && (
+                        <>
+                          <option value="1">1、4、7、10 月</option>
+                          <option value="2">2、5、8、11 月</option>
+                          <option value="3">3、6、9、12 月</option>
+                        </>
+                      )}
+                      {form.cycle === 'semiannual' && (
+                        <>
+                          <option value="1">1、7 月</option>
+                          <option value="2">2、8 月</option>
+                          <option value="3">3、9 月</option>
+                          <option value="4">4、10 月</option>
+                          <option value="5">5、11 月</option>
+                          <option value="6">6、12 月</option>
+                        </>
+                      )}
+                      {form.cycle === 'annual' && Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                        <option key={m} value={m.toString()}>每年 {m} 月</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="input-group">
+                    <label className="input-label">{form.type === 'income' ? '入帳日' : '扣款日'} (1~31 號)</label>
+                    <input
+                      id="rec-day"
+                      className="input"
+                      type="number"
+                      min="1"
+                      max="31"
+                      required
+                      value={form.day_of_cycle}
+                      onChange={e => setForm(p => ({ ...p, day_of_cycle: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* 關聯帳戶 */}
             <div className="input-group">

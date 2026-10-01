@@ -1,4 +1,4 @@
-﻿-- =====================
+-- =====================
 -- my-money D1 Schema
 -- =====================
 
@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS recurring_items (
   amount REAL NOT NULL,
   cycle TEXT NOT NULL CHECK(cycle IN ('monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual')),
   day_of_cycle INTEGER NOT NULL DEFAULT 1,
+  month_of_cycle INTEGER NOT NULL DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

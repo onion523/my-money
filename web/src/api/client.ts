@@ -267,6 +267,7 @@ export interface RecurringItem {
   amount: number;
   cycle: 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual';
   day_of_cycle: number;
+  month_of_cycle?: number;
   created_at: string;
 }
 

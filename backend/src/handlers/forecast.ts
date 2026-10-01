@@ -1,4 +1,4 @@
-﻿import { Hono } from 'hono';
+import { Hono } from 'hono';
 import { Env, RecurringItem } from '../types';
 import { authMiddleware } from '../middleware/jwt';
 import { getTaipeiDateString, getTaipeiForecastDays } from '../utils/date';
@@ -16,10 +16,21 @@ function getDaysInForecast(items: RecurringItem[], days = 30): Array<{ date: str
   for (const dayObj of forecastDays) {
     const dom = dayObj.day;
     const month = dayObj.month;
+    const year = dayObj.year;
+
+    // 計算該年該月實際最大天數（支援平年 28、閏年 29、大小月 30/31 天）
+    const maxDaysInMonth = new Date(year, month, 0).getDate();
+
     for (const item of items) {
       const cycleM = CYCLE_MONTHS[item.cycle] || 1;
-      const trigger = item.day_of_cycle;
-      if (dom === trigger && month % cycleM === 0) {
+      const anchorM = item.month_of_cycle || 1;
+      const monthDiff = month - anchorM;
+      const isCycleMonth = ((monthDiff % cycleM) + cycleM) % cycleM === 0;
+
+      // 月底天數平貼：若扣款日大於該月最大天數，自動平貼至該月最後一日
+      const targetDay = Math.min(item.day_of_cycle, maxDaysInMonth);
+
+      if (isCycleMonth && dom === targetDay) {
         events.push({ date: dayObj.dateStr, name: item.name, type: item.type, amount: item.amount });
       }
     }

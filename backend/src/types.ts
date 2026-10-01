@@ -1,4 +1,4 @@
-﻿// 共用型別定義
+// 共用型別定義
 export interface Env {
   DB: D1Database;
   JWT_SECRET: string;
@@ -57,6 +57,7 @@ export interface RecurringItem {
   amount: number;
   cycle: 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual';
   day_of_cycle: number;
+  month_of_cycle?: number;
   created_at: string;
 }
 

@@ -148,6 +148,10 @@ _Avoid_: 強迫覆蓋 (forced overwrite)、生硬彈窗 (intrusive popup)、無�
 按規律頻率（月、雙月、季、半年、年）固定重複發生的週期性收入或支出。
 _Avoid_: 訂閱 (subscription)、固定支出 (fixed expense)、週期契約 (contract)
 
+**Exact Recurring Schedule (確切週期繳費排程)**:
+週期收支必須精確綁定執行月份與日期，包含月繳（每月天）、雙月繳（單數月/雙數月）、季繳（起算月 1/2/3 每季循環）、半年繳（起算月 1~6 每半年循環）與年繳（指定 1~12 月份）。在現金流預測中，遇大小月或二月天數不足時，一律自動平貼（clamp）至該月份最後一日完成扣款與模擬，嚴禁粗暴以月份倍數模除或跨月推遲。
+_Avoid_: 模除猜測 (modulo guessing)、固定雙數月 (hardcoded even months)、跨月遞延 (month overflow drift)
+
 **Amortization (分攤平滑)**:
 將年繳、季繳等長週期大額支出平攤轉化為每月或每日的額度資金負擔之試算過程。
 _Avoid_: 分期 (installment)、平滑化 (smoothing)、攤提 (proration)

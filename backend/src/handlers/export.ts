@@ -1,4 +1,4 @@
-﻿import { Hono } from 'hono';
+import { Hono } from 'hono';
 import { Env } from '../types';
 import { authMiddleware } from '../middleware/jwt';
 
@@ -33,12 +33,27 @@ exportRouter.get('/csv', async (c) => {
   });
 });
 
+function formatSchedule(cycle: string, day: number, month = 1): string {
+  if (cycle === 'monthly') return `每月 ${day} 號`;
+  if (cycle === 'bimonthly') return `${month === 1 ? '單數月' : '雙數月'} ${day} 號`;
+  if (cycle === 'quarterly') {
+    const qMap: Record<number, string> = { 1: '1/4/7/10月', 2: '2/5/8/11月', 3: '3/6/9/12月' };
+    return `每季 (${qMap[month] || '1/4/7/10月'}) ${day} 號`;
+  }
+  if (cycle === 'semiannual') {
+    const sMap: Record<number, string> = { 1: '1/7月', 2: '2/8月', 3: '3/9月', 4: '4/10月', 5: '5/11月', 6: '6/12月' };
+    return `每半年 (${sMap[month] || '1/7月'}) ${day} 號`;
+  }
+  if (cycle === 'annual') return `每年 ${month} 月 ${day} 號`;
+  return `每月 ${day} 號`;
+}
+
 // GET /export/recurring
 exportRouter.get('/recurring', async (c) => {
   const userId = c.get('userId');
-  const sql = 'SELECT r.name, r.type, r.amount, r.cycle, r.day_of_cycle, a.name as account FROM recurring_items r LEFT JOIN accounts a ON r.account_id = a.id WHERE r.user_id = ? ORDER BY r.day_of_cycle ASC';
+  const sql = 'SELECT r.name, r.type, r.amount, r.cycle, r.day_of_cycle, r.month_of_cycle, a.name as account FROM recurring_items r LEFT JOIN accounts a ON r.account_id = a.id WHERE r.user_id = ? ORDER BY r.day_of_cycle ASC';
   const rows = await c.env.DB.prepare(sql).bind(userId).all();
-  const items = rows.results as Array<{ name: string; type: string; amount: number; cycle: string; day_of_cycle: number; account: string }>;
+  const items = rows.results as Array<{ name: string; type: string; amount: number; cycle: string; day_of_cycle: number; month_of_cycle?: number; account: string }>;
   
   const cycleMap: Record<string, string> = {
     monthly: '每月', bimonthly: '每雙月', quarterly: '每季', semiannual: '每半年', annual: '每年'
@@ -47,7 +62,7 @@ exportRouter.get('/recurring', async (c) => {
   const BOM = '\uFEFF';
   const header = '名稱,類型,金額,週期,扣款/入帳日,帳戶\n';
   const body = items.map(r =>
-    `"${r.name.replace(/"/g, '""')}",${r.type === 'income' ? '收入' : '支出'},${r.amount},${cycleMap[r.cycle] || r.cycle},每月第 ${r.day_of_cycle} 天,${r.account || ''}`
+    `"${r.name.replace(/"/g, '""')}",${r.type === 'income' ? '收入' : '支出'},${r.amount},${cycleMap[r.cycle] || r.cycle},${formatSchedule(r.cycle, r.day_of_cycle, r.month_of_cycle || 1)},${r.account || ''}`
   ).join('\n');
   const csv = BOM + header + body;
   

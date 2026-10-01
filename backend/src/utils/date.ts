@@ -27,8 +27,8 @@ export function getTaipeiDate(date: Date = new Date()): { year: number; month: n
 /**
  * 取得從台北今天開始往後推 N 天之台北時區日期物件清單
  */
-export function getTaipeiForecastDays(days = 30): Array<{ dateStr: string; month: number; day: number }> {
-  const result: Array<{ dateStr: string; month: number; day: number }> = [];
+export function getTaipeiForecastDays(days = 30): Array<{ dateStr: string; year: number; month: number; day: number }> {
+  const result: Array<{ dateStr: string; year: number; month: number; day: number }> = [];
   const now = new Date();
   const taipeiDateStr = getTaipeiDateString(now);
   const [y, m, d] = taipeiDateStr.split('-').map(Number);
@@ -42,6 +42,7 @@ export function getTaipeiForecastDays(days = 30): Array<{ dateStr: string; month
     const parts = dateStr.split('-').map(Number);
     result.push({
       dateStr,
+      year: parts[0],
       month: parts[1],
       day: parts[2]
     });
