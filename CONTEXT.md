@@ -122,6 +122,30 @@ _Avoid_: 結算 (settlement)、退款 (refund)、還錢 (payback)
 家庭頁面中各成員的透明流水帳明細，包含「個人墊付公帳消費清單（日期、類別、備註、扣款個人帳戶、金額）」以及「共同基金撥款報銷沖帳紀錄」，便於雙方隨時核帳與檢驗結清狀態。
 _Avoid_: 報銷單 (expense report)、請款單 (invoice)、明細表 (detail sheet)
 
+**Household Admin (家庭管理員)**:
+家庭群組之發起建立者或承接法定管理身分之核心成員，專屬享有發行邀請碼、移除家庭成員、解散家庭，以及自共同基金向任意成員撥款報銷代墊款之管理權力。
+_Avoid_: 房長 (room owner)、主帳號 (master user)、超級管理員 (super admin)
+
+**Household Member (家庭成員)**:
+透過邀請碼加入家庭之協同記帳成員，享有家庭公帳檢視、共同基金選用記帳與公帳明細查詢權，並具備向本人帳戶申請自律報銷之權限，但不具備邀請新成員或移除他人之組織權力。
+_Avoid_: 一般使用者 (regular user)、受邀者 (guest)、副帳號 (sub-account)
+
+**Dual-Layer Access Control (雙層權限防禦機制)**:
+為確保個人私帳絕對隱私與家庭公帳資金安全所建構之「前端介面防呆自適應隱藏」結合「後端 API 強制校驗攔截（HTTP 403 Forbidden）」之雙重防護架構。
+_Avoid_: 前端阻擋 (frontend-only check)、無感報錯 (silent failure)、暴力放行 (lax bypass)
+
+**Account Mutation Boundary (帳戶異動權限邊界)**:
+個人私帳（is_joint = 0）具備不可侵犯之絕對主權，僅帳戶擁有者本人可查詢、修改或刪除，任何其他家庭成員（包含家庭管理員）皆嚴禁竄改；家庭共同帳戶（is_joint = 1）則由帳戶建立者與家庭管理員共治，非建立者之一般成員無權編輯或刪除。
+_Avoid_: 帳戶共有 (open account ownership)、隨意覆蓋 (unrestricted account edit)
+
+**Transaction Mutation Boundary (交易異動權限邊界)**:
+個人私帳交易（is_shared = 0）嚴格僅限記錄者本人改刪；家庭公帳交易（is_shared = 1）採行「建立者與管理員共治原則」，僅該筆公帳記錄者本人與家庭管理員擁有編輯與刪除權，一般成員不可竄改其他成員所登載之公帳流水。
+_Avoid_: 自由互改 (arbitrary peer edits)、單一擁有權死鎖 (creator-only lock)
+
+**Self-Discipline Reimbursement (受限自律撥款報銷)**:
+一般家庭成員僅能從家庭共同基金為「本人累積之公帳代墊款」執行撥款報銷至個人正資產私帳，嚴禁越權動支基金撥款予其他成員；家庭管理員則具備全額審批與為任一成員撥款之管理權限。
+_Avoid_: 自由提款 (unrestricted withdrawal)、代領 (proxy reimbursement)
+
 ---
 
 ### 交易分類體系 (Category Taxonomy)
