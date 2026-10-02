@@ -216,7 +216,7 @@ export default function Analytics() {
           onClick={() => setScope('all')}
         >
           <Globe size={15} />
-          <span>全貌合併</span>
+          <span>全部</span>
         </button>
         <button
           type="button"
@@ -225,7 +225,7 @@ export default function Analytics() {
           onClick={() => setScope('household')}
         >
           <Users size={15} />
-          <span>🏠 家庭公帳</span>
+          <span>🏠 公帳</span>
         </button>
         <button
           type="button"
@@ -234,7 +234,7 @@ export default function Analytics() {
           onClick={() => setScope('personal')}
         >
           <Lock size={15} />
-          <span>🔒 個人私帳</span>
+          <span>🔒 私帳</span>
         </button>
       </div>
 
@@ -303,7 +303,7 @@ export default function Analytics() {
         <div className="card">
           <h2 className="text-xl flex items-center gap-xs" style={{ marginBottom: 16 }}>
             <PieIcon size={20} color="var(--color-primary)" />
-            {currentMonth} 支出分類佔比 ({scope === 'household' ? '公帳' : scope === 'personal' ? '個人私帳' : '合併'})
+            {currentMonth} 支出分類佔比 ({scope === 'household' ? '公帳' : scope === 'personal' ? '私帳' : '全部'})
           </h2>
 
           {pieData.length === 0 ? (

@@ -21,7 +21,10 @@ import {
   User,
   Home,
   CheckCircle2,
-  ArrowDownRight
+  ArrowDownRight,
+  Globe,
+  Users,
+  Lock
 } from 'lucide-react'
 
 export default function Accounts() {
@@ -400,21 +403,22 @@ export default function Accounts() {
               className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setScope('all')}
             >
-              全部 (本人 + 家庭公用)
+              <Globe size={14} style={{ marginRight: 4 }} />
+              全部
             </button>
             <button
               className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setScope('household')}
             >
-              <Home size={14} style={{ marginRight: 4 }} />
-              🏠 家庭公用 (共同基金/家庭卡)
+              <Users size={14} style={{ marginRight: 4 }} />
+              🏠 公帳
             </button>
             <button
               className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setScope('personal')}
             >
-              <User size={14} style={{ marginRight: 4 }} />
-              👤 個人私帳
+              <Lock size={14} style={{ marginRight: 4 }} />
+              🔒 私帳
             </button>
           </div>
         </div>
@@ -524,9 +528,9 @@ export default function Accounts() {
                 <div className="flex items-center justify-between pt-sm border-t" style={{ marginTop: 12 }}>
                   <div className="flex gap-xs">
                     {cash.is_joint === 1 ? (
-                      <span className="badge badge-primary">🏠 家庭共同基金</span>
+                      <span className="badge badge-primary">🏠 公帳</span>
                     ) : (
-                      <span className="badge badge-secondary">👤 個人私帳</span>
+                      <span className="badge badge-secondary">🔒 私帳</span>
                     )}
                     {cash.owner_name && (
                       <span className="badge" style={{ background: 'rgba(0,0,0,0.06)' }}>
@@ -601,9 +605,9 @@ export default function Accounts() {
                 <div className="flex items-center justify-between pt-sm border-t" style={{ marginTop: 12 }}>
                   <div className="flex gap-xs">
                     {acc.is_joint === 1 ? (
-                      <span className="badge badge-primary">🏠 家庭共同基金</span>
+                      <span className="badge badge-primary">🏠 公帳</span>
                     ) : (
-                      <span className="badge badge-secondary">👤 個人帳戶</span>
+                      <span className="badge badge-secondary">🔒 私帳</span>
                     )}
                     {acc.owner_name && (
                       <span className="badge" style={{ background: 'rgba(0,0,0,0.06)' }}>
@@ -665,9 +669,9 @@ export default function Accounts() {
                       <span className="account-color-dot" style={{ backgroundColor: card.color }} />
                       <h3 className="account-name">{card.name}</h3>
                       {card.is_joint === 1 ? (
-                        <span className="badge badge-primary">🏠 家庭信用卡</span>
+                        <span className="badge badge-primary">🏠 公帳</span>
                       ) : (
-                        <span className="badge badge-secondary">👤 個人卡</span>
+                        <span className="badge badge-secondary">🔒 私帳</span>
                       )}
                       {card.owner_name && (
                         <span className="badge" style={{ background: 'rgba(0,0,0,0.06)' }}>
@@ -937,16 +941,16 @@ export default function Accounts() {
                   className={`btn ${form.is_joint === 0 ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setForm(p => ({ ...p, is_joint: 0 }))}
                 >
-                  <User size={14} style={{ marginRight: 4 }} />
-                  👤 個人私帳 (隱私保護)
+                  <Lock size={14} style={{ marginRight: 4 }} />
+                  🔒 私帳
                 </button>
                 <button
                   type="button"
                   className={`btn ${form.is_joint === 1 ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setForm(p => ({ ...p, is_joint: 1 }))}
                 >
-                  <Home size={14} style={{ marginRight: 4 }} />
-                  {form.type === 'credit_card' ? '🏠 家庭信用卡 (家庭公用)' : '🏠 家庭共同基金 (家庭公用)'}
+                  <Users size={14} style={{ marginRight: 4 }} />
+                  🏠 公帳
                 </button>
               </div>
               <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 4 }}>
@@ -1185,14 +1189,16 @@ export default function Accounts() {
                   className={`btn ${payForm.is_shared === 1 ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setPayForm(p => ({ ...p, is_shared: 1 }))}
                 >
-                  🏠 家庭公帳 (家庭代墊沖帳)
+                  <Users size={14} style={{ marginRight: 4 }} />
+                  🏠 公帳
                 </button>
                 <button
                   type="button"
                   className={`btn ${payForm.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setPayForm(p => ({ ...p, is_shared: 0 }))}
                 >
-                  👤 個人私帳 (個人消費結清)
+                  <Lock size={14} style={{ marginRight: 4 }} />
+                  🔒 私帳
                 </button>
               </div>
             </div>

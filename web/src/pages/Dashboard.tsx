@@ -204,7 +204,7 @@ export default function Dashboard() {
           onClick={() => setViewScope('all')}
         >
           <Globe size={15} />
-          <span>全貌合併</span>
+          <span>全部</span>
         </button>
         <button
           type="button"
@@ -213,7 +213,7 @@ export default function Dashboard() {
           onClick={() => setViewScope('household')}
         >
           <Users size={15} />
-          <span>🏠 家庭公帳</span>
+          <span>🏠 公帳</span>
         </button>
         <button
           type="button"
@@ -222,7 +222,7 @@ export default function Dashboard() {
           onClick={() => setViewScope('personal')}
         >
           <Lock size={15} />
-          <span>🔒 個人私帳</span>
+          <span>🔒 私帳</span>
         </button>
       </div>
 
@@ -363,7 +363,7 @@ export default function Dashboard() {
                             </span>
                           ) : (
                             <span className="badge badge-secondary" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
-                              👤 個人私帳
+                              🔒 私帳
                             </span>
                           )}
                           <span className="badge" style={{ fontSize: '0.68rem', padding: '1px 5px', background: 'rgba(0,0,0,0.05)' }}>
@@ -445,7 +445,7 @@ export default function Dashboard() {
                         <span>{tx.category} {tx.note ? `· ${tx.note}` : ''}</span>
                         {tx.is_shared === 0 ? (
                           <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.7rem', padding: '1px 6px' }}>
-                            🔒 個人私帳
+                            🔒 私帳
                           </span>
                         ) : (
                           <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px' }}>
@@ -550,7 +550,7 @@ export default function Dashboard() {
                   onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
                 >
                   <Users size={16} />
-                  <span>🏠 家庭公帳 (公開)</span>
+                  <span>🏠 公帳</span>
                 </button>
                 <button
                   type="button"
@@ -559,7 +559,7 @@ export default function Dashboard() {
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
                   <Lock size={16} />
-                  <span>🔒 個人私帳 (隱私)</span>
+                  <span>🔒 私帳</span>
                 </button>
               </div>
             </div>
@@ -641,7 +641,7 @@ export default function Dashboard() {
                 <option value="" disabled>-- 請選擇扣款 / 存入帳戶 --</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 銀行存款帳戶' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 公帳' : '👤 個人私帳'})
+                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 銀行存款帳戶' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 公帳' : '🔒 私帳'})
                   </option>
                 ))}
               </select>

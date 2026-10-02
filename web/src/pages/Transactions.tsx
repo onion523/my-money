@@ -266,7 +266,7 @@ export default function Transactions() {
             style={{ borderRadius: 8, padding: '4px 12px' }}
             onClick={() => setScopeFilter('household')}
           >
-            <Users size={14} /> 🏠 家庭公帳
+            <Users size={14} /> 🏠 公帳
           </button>
           <button
             type="button"
@@ -274,7 +274,7 @@ export default function Transactions() {
             style={{ borderRadius: 8, padding: '4px 12px' }}
             onClick={() => setScopeFilter('personal')}
           >
-            <Lock size={14} /> 🔒 個人私帳
+            <Lock size={14} /> 🔒 私帳
           </button>
         </div>
 
@@ -419,7 +419,7 @@ export default function Transactions() {
                           {tx.note && <span className="text-muted" style={{ fontWeight: 400 }}>· {tx.note}</span>}
                           {tx.is_shared === 0 ? (
                             <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.7rem', padding: '1px 6px' }}>
-                              🔒 個人私帳
+                              🔒 私帳
                             </span>
                           ) : (
                             <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px' }}>
@@ -515,7 +515,7 @@ export default function Transactions() {
                   onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
                 >
                   <Users size={16} />
-                  <span>🏠 家庭公帳 (公開)</span>
+                  <span>🏠 公帳</span>
                 </button>
                 <button
                   type="button"
@@ -524,7 +524,7 @@ export default function Transactions() {
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
                   <Lock size={16} />
-                  <span>🔒 個人私帳 (隱私)</span>
+                  <span>🔒 私帳</span>
                 </button>
               </div>
             </div>
@@ -603,7 +603,7 @@ export default function Transactions() {
                 <option value="" disabled>-- 請選擇扣款 / 存入帳戶 --</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? (acc.type === 'credit_card' ? '🏠 家庭信用卡' : '🏠 家庭共同基金') : '👤 個人私帳'})
+                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 公帳' : '🔒 私帳'})
                   </option>
                 ))}
               </select>
