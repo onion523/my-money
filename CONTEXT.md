@@ -148,6 +148,30 @@ _Avoid_: 自由提款 (unrestricted withdrawal)、代領 (proxy reimbursement)
 
 ---
 
+### 帳本視角與範疇 (Ledger Scope & Filter Terminology)
+
+**Unified Ledger Scope (統一帳本範疇體系)**:
+全站各頁面（Dashboard 總覽、Transactions 交易明細、Accounts 帳戶資產、Analytics 財務分析）在提供資料範圍過濾或切換檢視時，一律採用「全部 (all)」、「公帳 (household)」、「私帳 (personal)」三態結構，並固定搭配語意圖示：🌐 全部、🏠 公帳、🔒 私帳。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語。
+_Avoid_: 全貌合併 (full merge)、檢視合併 (combined view)、家庭公用 (household common)
+
+**All Scope (全部)**:
+全站三態切換的首個選項（value: `all`，顯示「🌐 全部」），聚合呈現目前登入者之「個人私帳」以及家庭全體成員共用之「家庭公帳／共同基金」，提供全方位家庭財務與資產流水概覽。
+_Avoid_: 全部 (本人 + 家庭公用) (all with verbose suffix)、全貌合併 (complete merge)、總體 (total)
+
+**Shared Scope (公帳)**:
+全站三態切換的第二個選項（value: `household`，顯示「🏠 公帳」），專注呈現標記為家庭公用之收支流水（`is_shared = 1`）、家庭共同基金帳戶（`is_joint = 1`）與共同信用卡，完全聚焦於家庭公共生活財務。
+_Avoid_: 🏠 家庭公帳 (household shared)、🏠 家庭公用 (共同基金/家庭卡) (verbose household tag)
+
+**Personal Scope (私帳)**:
+全站三態切換的第三個選項（value: `personal`，顯示「🔒 私帳」），嚴格僅呈現登入者本人名下之個人私密收支（`is_shared = 0`）、個人現金皮夾、活存銀行存款與個人信用卡（`is_joint = 0`），徹底隔離家庭公帳與他人帳務。
+_Avoid_: 👤 個人私帳 (personal account verbose)、🔒 個人私帳 (personal private)、私帳 (plain text without canonical icon)
+
+**Modal Scope Toggle (記帳歸屬二態切換)**:
+在快速記帳、新增交易、信用卡還款等表單彈窗（Modal）中，收支歸屬固定簡化正名為「🏠 公帳」與「🔒 私帳」二元切換按鈕，移除多餘之「(公開)」、「(隱私)」等括號贅詞。
+_Avoid_: 🏠 家庭公帳 (公開) (verbose public)、🔒 個人私帳 (隱私) (verbose private)
+
+---
+
 ### 交易分類體系 (Category Taxonomy)
 
 **Curated Category Taxonomy (標準擴充分類庫)**:
