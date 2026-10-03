@@ -23,9 +23,6 @@ import {
   Home,
   CheckCircle2,
   ArrowDownRight,
-  Globe,
-  Users,
-  Lock,
   Receipt,
   ArrowRight
 } from 'lucide-react'
@@ -408,37 +405,41 @@ export default function Accounts() {
         </div>
       </div>
 
-      {/* 視角切換器 (Scope Filter) */}
-      <div className="card" style={{ marginBottom: 20, padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        <div className="flex items-center gap-xs">
-          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600 }}>檢視範圍：</span>
-          <div className="flex gap-xs">
-            <button
-              className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setScope('all')}
-            >
-              <Globe size={14} style={{ marginRight: 4 }} />
-              全部
-            </button>
-            <button
-              className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setScope('household')}
-            >
-              <Users size={14} style={{ marginRight: 4 }} />
-              🏠 公帳
-            </button>
-            <button
-              className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setScope('personal')}
-            >
-              <Lock size={14} style={{ marginRight: 4 }} />
-              🔒 私帳
-            </button>
-          </div>
-        </div>
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-          🔒 嚴格隱私保護：其他成員之個人私帳與私卡自動隱藏
-        </div>
+      {/* 帳本視角切換器 */}
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: 4,
+        background: 'var(--bg-surface-2)',
+        borderRadius: 12,
+        border: '1px solid var(--border-color)',
+        marginBottom: 20
+      }}>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('all')}
+        >
+          <span>🌐 全部</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('household')}
+        >
+          <span>🏠 公帳</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('personal')}
+        >
+          <span>🔒 私帳</span>
+        </button>
       </div>
 
       {/* 家庭代墊待報銷款總覽橫幅 (ADR 0015) */}
@@ -1052,7 +1053,6 @@ export default function Accounts() {
                   className={`btn ${form.is_joint === 0 ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setForm(p => ({ ...p, is_joint: 0 }))}
                 >
-                  <Lock size={14} style={{ marginRight: 4 }} />
                   🔒 私帳
                 </button>
                 <button
@@ -1060,7 +1060,6 @@ export default function Accounts() {
                   className={`btn ${form.is_joint === 1 ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setForm(p => ({ ...p, is_joint: 1 }))}
                 >
-                  <Users size={14} style={{ marginRight: 4 }} />
                   🏠 公帳
                 </button>
               </div>
@@ -1305,7 +1304,6 @@ export default function Accounts() {
                   className={`btn ${payForm.is_shared === 1 ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setPayForm(p => ({ ...p, is_shared: 1 }))}
                 >
-                  <Users size={14} style={{ marginRight: 4 }} />
                   🏠 公帳
                 </button>
                 <button
@@ -1313,7 +1311,6 @@ export default function Accounts() {
                   className={`btn ${payForm.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setPayForm(p => ({ ...p, is_shared: 0 }))}
                 >
-                  <Lock size={14} style={{ marginRight: 4 }} />
                   🔒 私帳
                 </button>
               </div>

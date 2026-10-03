@@ -22,9 +22,6 @@ import {
   ArrowRight,
   ShieldCheck,
   AlertCircle,
-  Globe,
-  Users,
-  Lock
 } from 'lucide-react'
 
 export default function Forecast() {
@@ -117,8 +114,7 @@ export default function Forecast() {
           style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
           onClick={() => setScope('all')}
         >
-          <Globe size={15} />
-          <span>全部</span>
+          <span>🌐 全部</span>
         </button>
         <button
           type="button"
@@ -126,7 +122,6 @@ export default function Forecast() {
           style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
           onClick={() => setScope('household')}
         >
-          <Users size={15} />
           <span>🏠 公帳</span>
         </button>
         <button
@@ -135,7 +130,6 @@ export default function Forecast() {
           style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
           onClick={() => setScope('personal')}
         >
-          <Lock size={15} />
           <span>🔒 私帳</span>
         </button>
       </div>

@@ -14,9 +14,7 @@ import {
   Search,
   ArrowUpDown,
   Tag,
-  Users,
   Lock,
-  Globe
 } from 'lucide-react'
 
 export default function Transactions() {
@@ -258,7 +256,7 @@ export default function Transactions() {
             style={{ borderRadius: 8, padding: '4px 12px' }}
             onClick={() => setScopeFilter('all')}
           >
-            <Globe size={14} /> 全部
+            🌐 全部
           </button>
           <button
             type="button"
@@ -266,7 +264,7 @@ export default function Transactions() {
             style={{ borderRadius: 8, padding: '4px 12px' }}
             onClick={() => setScopeFilter('household')}
           >
-            <Users size={14} /> 🏠 公帳
+            🏠 公帳
           </button>
           <button
             type="button"
@@ -274,7 +272,7 @@ export default function Transactions() {
             style={{ borderRadius: 8, padding: '4px 12px' }}
             onClick={() => setScopeFilter('personal')}
           >
-            <Lock size={14} /> 🔒 私帳
+            🔒 私帳
           </button>
         </div>
 
@@ -514,7 +512,6 @@ export default function Transactions() {
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px' }}
                   onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
                 >
-                  <Users size={16} />
                   <span>🏠 公帳</span>
                 </button>
                 <button
@@ -523,7 +520,6 @@ export default function Transactions() {
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px' }}
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
-                  <Lock size={16} />
                   <span>🔒 私帳</span>
                 </button>
               </div>

@@ -21,9 +21,6 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Calendar,
-  Users,
-  Lock,
-  Globe
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -203,8 +200,7 @@ export default function Dashboard() {
           style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
           onClick={() => setViewScope('all')}
         >
-          <Globe size={15} />
-          <span>全部</span>
+          <span>🌐 全部</span>
         </button>
         <button
           type="button"
@@ -212,7 +208,6 @@ export default function Dashboard() {
           style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
           onClick={() => setViewScope('household')}
         >
-          <Users size={15} />
           <span>🏠 公帳</span>
         </button>
         <button
@@ -221,7 +216,6 @@ export default function Dashboard() {
           style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
           onClick={() => setViewScope('personal')}
         >
-          <Lock size={15} />
           <span>🔒 私帳</span>
         </button>
       </div>
@@ -549,7 +543,6 @@ export default function Dashboard() {
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 12px' }}
                   onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
                 >
-                  <Users size={16} />
                   <span>🏠 公帳</span>
                 </button>
                 <button
@@ -558,7 +551,6 @@ export default function Dashboard() {
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 12px' }}
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
-                  <Lock size={16} />
                   <span>🔒 私帳</span>
                 </button>
               </div>

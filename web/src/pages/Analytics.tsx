@@ -40,9 +40,6 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle2,
-  Users,
-  Lock,
-  Globe,
   Coins
 } from 'lucide-react'
 
@@ -215,8 +212,7 @@ export default function Analytics() {
           style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
           onClick={() => setScope('all')}
         >
-          <Globe size={15} />
-          <span>全部</span>
+          <span>🌐 全部</span>
         </button>
         <button
           type="button"
@@ -224,7 +220,6 @@ export default function Analytics() {
           style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
           onClick={() => setScope('household')}
         >
-          <Users size={15} />
           <span>🏠 公帳</span>
         </button>
         <button
@@ -233,7 +228,6 @@ export default function Analytics() {
           style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
           onClick={() => setScope('personal')}
         >
-          <Lock size={15} />
           <span>🔒 私帳</span>
         </button>
       </div>

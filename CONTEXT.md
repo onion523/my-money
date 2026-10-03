@@ -151,7 +151,7 @@ _Avoid_: 自由提款 (unrestricted withdrawal)、代領 (proxy reimbursement)
 ### 帳本視角與範疇 (Ledger Scope & Filter Terminology)
 
 **Unified Ledger Scope (統一帳本範疇體系)**:
-全站各頁面（Dashboard 總覽、Transactions 交易明細、Accounts 帳戶資產、Recurring 週期收支、Analytics 財務分析、Forecast 現金流預測）在提供資料範圍過濾或切換檢視時，一律採用「全部 (all)」、「公帳 (household)」、「私帳 (personal)」三態結構，並固定搭配語意圖示：🌐 全部、🏠 公帳、🔒 私帳。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語。
+全站各頁面（Dashboard 總覽、Transactions 交易明細、Accounts 帳戶資產、Recurring 週期收支、Analytics 財務分析、Forecast 現金流預測）在提供資料範圍過濾或切換檢視時，一律採用「全部 (all)」、「公帳 (household)」、「私帳 (personal)」三態結構，並固定搭配單一語意 emoji（每個選項僅一個符號，不並列線條圖示）：🌐 全部、🏠 公帳、🔒 私帳。切換器為純選項群組，不附「檢視範圍」等標題文字；彈窗內之公帳／私帳歸屬二態按鈕沿用同一符號與用語。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語。
 _Avoid_: 全貌合併 (full merge)、檢視合併 (combined view)、家庭公用 (household common)
 
 **All Scope (全部)**:
