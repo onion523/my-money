@@ -411,8 +411,15 @@ accounts.post('/:id/rollover-statement', async (c) => {
   `;
   const refParams: (string | number)[] = [id];
   if (statementDate) {
-    refQuery += ` AND date <= ?`;
-    refParams.push(statementDate);
+    refQuery += `
+      AND (
+        (date <= ? AND defer_to_next_statement = 0)
+        OR (date <= ? AND defer_to_next_statement = 1)
+      )
+    `;
+    refParams.push(statementDate, prevStatementDate);
+  } else {
+    refQuery += ` AND defer_to_next_statement = 0`;
   }
 
   const refundTxs = await c.env.DB.prepare(refQuery).bind(...refParams).all();
@@ -487,28 +494,72 @@ accounts.post('/:id/reconcile', async (c) => {
     return c.json({ success: false, error: '權限不足：個人信用卡校準僅限持卡人本人操作' }, 403);
   }
 
-  // 1. 所有尚未出帳之消費支出總額 (is_billed = 0)
+  // 計算上期結帳日 (作為未出帳歷史區間下限)
+  let prevStatementDate = '';
+  if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
+    const taipeiDateStr = getTaipeiDateString();
+    const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
+    let statementYear = currYear;
+    let statementMonth = currMonth;
+
+    if (currDay <= card.statement_day) {
+      statementMonth -= 1;
+      if (statementMonth === 0) {
+        statementMonth = 12;
+        statementYear -= 1;
+      }
+    }
+    // 推算上一個結帳日
+    let prevYear = statementYear;
+    let prevMonth = statementMonth - 1;
+    if (prevMonth === 0) {
+      prevMonth = 12;
+      prevYear -= 1;
+    }
+    const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
+    const pDay = Math.min(card.statement_day, prevLastDay);
+    prevStatementDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`;
+  }
+
+  let timeFilter = '';
+  let queryParams: (string | number)[] = [id];
+  if (prevStatementDate) {
+    timeFilter = ' AND ((date > ?) OR (date <= ? AND defer_to_next_statement = 1))';
+    queryParams.push(prevStatementDate, prevStatementDate);
+  }
+
+  // 1. 所有未出帳之消費支出總額 (is_billed = 0，範圍在上期結帳日後或過去延期)
   const expenseRow = await c.env.DB.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM transactions
     WHERE account_id = ? AND type = 'expense' AND is_billed = 0
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-  `).bind(id).first<{ total: number }>();
+      ${timeFilter}
+  `).bind(...queryParams).first<{ total: number }>();
 
-  // 2. 所有尚未出帳之刷退收入總額 (is_billed = 0)
+  // 2. 所有未出帳之刷退收入總額 (is_billed = 0，範圍在上期結帳日後或過去延期)
   const refundRow = await c.env.DB.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM transactions
     WHERE account_id = ? AND type = 'income' AND is_billed = 0
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-  `).bind(id).first<{ total: number }>();
+      ${timeFilter}
+  `).bind(...queryParams).first<{ total: number }>();
 
   // 3. 當期還款沖抵未出帳總額 (未結算之 unbilled_offset)
+  let offsetFilter = '';
+  let offsetParams: (string | number)[] = [id];
+  if (prevStatementDate) {
+    offsetFilter = ' AND date > ?';
+    offsetParams.push(prevStatementDate);
+  }
+
   const repaymentRow = await c.env.DB.prepare(`
     SELECT COALESCE(SUM(unbilled_offset), 0) as total
     FROM transactions
     WHERE account_id = ? AND category = '信用卡還款' AND is_billed = 0
-  `).bind(id).first<{ total: number }>();
+      ${offsetFilter}
+  `).bind(...offsetParams).first<{ total: number }>();
 
   const totalExp = expenseRow ? Number(expenseRow.total) : 0;
   const totalRef = refundRow ? Number(refundRow.total) : 0;

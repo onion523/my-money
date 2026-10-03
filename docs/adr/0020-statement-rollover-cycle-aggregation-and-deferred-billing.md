@@ -11,23 +11,26 @@
    - `transactions` 表新增欄位：
      - `is_billed INTEGER DEFAULT 0`：0 為未出帳，1 為已出帳。
      - `defer_to_next_statement INTEGER DEFAULT 0`：0 為正常本期出帳，1 為延至下期帳單。
-2. **收支明細表單支援延至下期帳單**：
-   - 僅在 `type === 'expense'` 且扣款帳戶為信用卡時顯示勾選框：`🗓️ 列入下期帳單（商家延遲請款／跨期入帳）`。
+2. **收支明細表單支援延至下期帳單（收支雙向）**：
+   - 當帳戶為信用卡時，無論為「消費支出」或「刷退／退款收入」，皆顯示勾選框：`🗓️ 列入下期帳單（商家延遲請款／跨期入帳／跨期折抵）`。
    - 預設值為不勾選（0）。
 3. **結帳日出帳作業依結帳區間淨額結算**：
    - 保留手動「出帳作業」按鈕，但行為改為精密區間加總。
    - 結帳區間定義為：`(上期結帳日) < 交易日期 <= (本期結帳日)`。
    - 納入出帳之交易集合：
-     - 區間內且未延期之消費（`date 在區間內 AND defer_to_next_statement = 0 AND is_billed = 0`）。
-     - 包含上期曾被標記為延期、於本期應一併結算之舊消費（`defer_to_next_statement = 1 AND date <= 本期結帳日 AND is_billed = 0`）。
-   - 採**淨額出帳**：`出帳淨額 = 符合條件之消費支出加總 - 區間內符合條件之刷退退款加總`。
+     - 區間內且未延期之消費與刷退（`date 在區間內 AND defer_to_next_statement = 0 AND is_billed = 0`）。
+     - 包含上期曾被標記為延期、於本期應一併結算之舊消費與舊刷退（`defer_to_next_statement = 1 AND date <= 本期結帳日 AND is_billed = 0`）。
+   - 採**淨額出帳**：`出帳淨額 = 符合條件之消費支出加總 - 符合條件之刷退退款加總`。
    - 結算後，參與出帳之消費與刷退交易同步更新為 `is_billed = 1`。
    - 卡片欠款更新：`balance = balance + 出帳淨額`，`unbilled = MAX(0, unbilled - 出帳淨額)`。
-4. **信用卡未出帳自動校準邏輯重構為狀態對齊**：
+4. **信用卡未出帳自動校準邏輯重構為區間加總與延期整合**：
    - 徹底廢除脆弱的 `created_at > last_rollover_at` 時間戳比對。
-   - 改以絕對狀態為準：
-     $$\text{校準未出帳} = \max\Big(0,\ \sum_{\text{is\_billed}=0}\text{消費} - \sum_{\text{is\_billed}=0}\text{刷退} - \sum\text{unbilled\_offset}\Big)$$
-   - 確保無論何時補記、補登或跨期修改，校準金額永遠 100% 吻合畫面上所有尚未出帳的明細。
+   - 同時避免將歷史已久遠的未出帳舊帳無差別灌入當前未出帳，校準計算區間定義為：
+     - `上期結帳日之後至今（date > prevStatementDate）之所有未出帳（is_billed = 0）`
+     - 加上 `更早之前勾選延至下期（date <= prevStatementDate AND defer_to_next_statement = 1）之未出帳`
+   - 公式：
+     $$\text{校準未出帳} = \max\Big(0,\ \sum_{\text{符合區間}}\text{未出帳消費} - \sum_{\text{符合區間}}\text{未出帳刷退} - \sum_{\text{符合區間}}\text{unbilled\_offset}\Big)$$
+   - 確保校準金額既不漏掉任何延期收支，亦不會受到過往未出帳舊紀錄污染。
 5. **收支明細列表視覺標籤強化**：
    - 針對信用卡交易，在明細清單中明確標示狀態徽章：
      - `is_billed === 1` 顯示 `📑 已出帳`

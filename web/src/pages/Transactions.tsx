@@ -652,7 +652,7 @@ export default function Transactions() {
             {(() => {
               const selectedAcc = accounts.find(a => a.id === form.account_id)
               const isCreditCard = selectedAcc?.type === 'credit_card'
-              if (!isCreditCard || form.type !== 'expense') return null
+              if (!isCreditCard || (form.type !== 'expense' && form.type !== 'income')) return null
 
               return (
                 <div
@@ -679,7 +679,9 @@ export default function Transactions() {
                       )}
                     </div>
                     <div className="text-xs text-muted" style={{ marginTop: 2 }}>
-                      適用於商家延遲請款或跨結帳日刷卡，本期出帳作業時自動保留於未出帳
+                      {form.type === 'expense'
+                        ? '適用於商家延遲請款或跨結帳日刷卡，本期出帳作業時自動保留於未出帳'
+                        : '適用於店家延遲刷退或跨期退款折抵，本期出帳作業時自動保留於未出帳'}
                     </div>
                   </div>
                   <input
