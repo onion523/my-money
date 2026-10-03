@@ -4,6 +4,7 @@ import { txApi, accountsApi, exportApi, householdApi, Transaction, Account } fro
 import { useStore } from '../store/useStore'
 import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS, buildHistoryMemo, recommendCategory } from '../components/utils'
 import Modal from '../components/Modal'
+import ScopeTabBar from '../components/ScopeTabBar'
 import {
   Plus,
   Filter,
@@ -15,6 +16,7 @@ import {
   ArrowUpDown,
   Tag,
   Lock,
+  CreditCard,
 } from 'lucide-react'
 
 export default function Transactions() {
@@ -26,6 +28,7 @@ export default function Transactions() {
 
   // 篩選狀態
   const [categoryFilter, setCategoryFilter] = useState('全部')
+  const [accountFilter, setAccountFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all')
   const [scopeFilter, setScopeFilter] = useState<'all' | 'household' | 'personal'>('all')
   const [startDate, setStartDate] = useState(`${thisMonth()}-01`)
@@ -51,12 +54,40 @@ export default function Transactions() {
 
   const historyMemo = useMemo(() => buildHistoryMemo(transactions), [transactions])
 
+  const scopedAccounts = useMemo(() => {
+    if (scopeFilter === 'household') {
+      return accounts.filter(a => a.is_joint === 1)
+    }
+    if (scopeFilter === 'personal') {
+      return accounts.filter(a => a.is_joint === 0 && (!user || a.user_id === user.id))
+    }
+    return accounts
+  }, [accounts, scopeFilter, user])
+
+  useEffect(() => {
+    if (accountFilter !== 'all') {
+      const stillExists = scopedAccounts.some(a => a.id === accountFilter)
+      if (!stillExists) {
+        setAccountFilter('all')
+      }
+    }
+  }, [scopeFilter, scopedAccounts])
+
   // 載入資料
   const loadData = async () => {
     try {
       setLoading(true)
+      const params: Record<string, string> = {
+        from: startDate,
+        to: endDate,
+        scope: scopeFilter,
+        limit: '200'
+      }
+      if (accountFilter !== 'all') {
+        params.account_id = accountFilter
+      }
       const [txs, accs, householdData] = await Promise.all([
-        txApi.list({ from: startDate, to: endDate, scope: scopeFilter, limit: '200' }),
+        txApi.list(params),
         accountsApi.list(),
         householdApi.current().catch(() => null),
       ])
@@ -85,7 +116,7 @@ export default function Transactions() {
 
   useEffect(() => {
     loadData()
-  }, [startDate, endDate, scopeFilter])
+  }, [startDate, endDate, scopeFilter, accountFilter])
 
   // 開啟新增 Modal
   const handleOpenAdd = () => {
@@ -187,6 +218,7 @@ export default function Transactions() {
 
   // 本地篩選
   const filtered = transactions.filter(t => {
+    if (accountFilter !== 'all' && t.account_id !== accountFilter) return false
     if (typeFilter !== 'all' && t.type !== typeFilter) return false
     if (categoryFilter !== '全部' && t.category !== categoryFilter) return false
     if (keyword) {
@@ -222,8 +254,8 @@ export default function Transactions() {
       {/* 標題與操作按鈕 */}
       <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
         <div>
-          <h1 className="page-title">交易記錄 📜</h1>
-          <p className="page-subtitle">追蹤與管理所有收支明細、快速篩選與匯出明細</p>
+          <h1 className="page-title">收支明細 📜</h1>
+          <p className="page-subtitle">追蹤與管理所有個人與家庭收支明細、快速篩選與匯出</p>
         </div>
         <div className="flex gap-sm">
           <button id="btn-export-csv" className="btn btn-secondary" onClick={handleExportCSV}>
@@ -249,31 +281,7 @@ export default function Transactions() {
           borderBottom: '1px solid var(--border-color)',
           flexWrap: 'wrap'
         }}>
-          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>帳本分類：</span>
-          <button
-            type="button"
-            className={`btn btn-sm ${scopeFilter === 'all' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ borderRadius: 8, padding: '4px 12px' }}
-            onClick={() => setScopeFilter('all')}
-          >
-            🌐 全部
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${scopeFilter === 'household' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ borderRadius: 8, padding: '4px 12px' }}
-            onClick={() => setScopeFilter('household')}
-          >
-            🏠 公帳
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${scopeFilter === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ borderRadius: 8, padding: '4px 12px' }}
-            onClick={() => setScopeFilter('personal')}
-          >
-            🔒 私帳
-          </button>
+          <ScopeTabBar scope={scopeFilter} onChange={setScopeFilter} label="帳本分類：" />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, alignItems: 'center' }}>
@@ -331,6 +339,26 @@ export default function Transactions() {
               <option value="全部">全部分類</option>
               {Array.from(new Set([...CATEGORIES.expense, ...CATEGORIES.income])).map(c => (
                 <option key={c} value={c}>{CATEGORY_ICONS[c] || ''} {c}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 帳戶篩選 */}
+          <div className="input-group">
+            <label className="input-label flex items-center gap-xs">
+              <CreditCard size={14} /> 帳戶
+            </label>
+            <select
+              id="filter-account"
+              className="input"
+              value={accountFilter}
+              onChange={e => setAccountFilter(e.target.value)}
+            >
+              <option value="all">全部帳戶</option>
+              {scopedAccounts.map(acc => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.is_joint === 1 ? '🏠 ' : '🔒 '}{acc.name} ({acc.type === 'cash' ? '現金' : acc.type === 'bank' ? '活存' : '信用卡'})
+                </option>
               ))}
             </select>
           </div>

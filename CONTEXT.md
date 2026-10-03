@@ -6,9 +6,9 @@
 
 ### 核心帳簿與總覽 (Core Ledger & Accounts)
 
-**Transaction (交易記錄)**:
-帳簿中記載特定日期的資金流入、流出或審計轉帳紀錄。
-_Avoid_: 記帳紀錄 (entry)、流水帳 (log)、紀錄 (record)
+**Transaction (收支明細)**:
+帳簿中記載特定日期的資金流入、流出或審計轉帳紀錄。全站原「交易記錄」、「交易明細」全面收斂正名為「收支明細」。
+_Avoid_: 交易記錄 (transaction records)、記帳紀錄 (entry)、流水帳 (log)、紀錄 (record)
 
 **Transaction Balance Synchronization (交易餘額雙向連動)**:
 在建立、編輯 (PUT) 或刪除 (DELETE) 交易時，系統必須嚴格維持交易金額與所屬資產帳戶餘額／信用卡未出帳金額的雙向即時同步。若交易編輯時變更所屬帳戶，舊帳戶必須全額回滾原交易金額，新帳戶則扣抵／認列新交易金額；若僅變更金額，則按差額補退；刪除交易時則全額回滾該帳戶之餘額或未出帳負債。
@@ -35,7 +35,7 @@ _Avoid_: 負債帳戶 (debt account)、卡片 (card)
 _Avoid_: 淨值 (net worth)、可用額度 (credit limit)、總餘額 (total balance)
 
 **Disposable Cash (真實可支配現金)**:
-淨可用餘額進一步扣除當期週期收支分攤平滑預留與進行中儲蓄目標款項後的安全自由花費餘額。
+淨可用餘額進一步扣除當期週期收支每月平均預留與進行中儲蓄目標款項後的安全自由花費餘額。
 _Avoid_: 零用錢 (pocket money)、空閒餘額 (free cash)、閒置資金 (idle cash)
 
 **Explicit Account Selection (顯式帳戶選取原則)**:
@@ -114,9 +114,9 @@ _Avoid_: 墊現鈔 (cash upfront)、自掏腰包 (out-of-pocket)
 個別成員以個人私帳、個人信用卡或個人現金為家庭公帳代付之款項。凡扣款帳戶為個人帳戶（is_joint = 0）之公帳支出即為代墊款；直接由共同基金（is_joint = 1）扣款者為家庭直接開銷，嚴格排除於代墊款之外。
 _Avoid_: 代付 (upfront pay)、個人借款 (loan to family)、代付款 (advance)
 
-**Reimbursement (撥款請款報銷)**:
-從家庭共同基金直接撥款轉帳至個人帳戶，以沖銷成員累積之家庭代墊款的平帳程序。
-_Avoid_: 結算 (settlement)、退款 (refund)、還錢 (payback)
+**Reimbursement (報銷沖帳)**:
+從家庭共同基金直接撥款轉帳至個人帳戶，以沖銷成員累積之家庭公帳待報銷總額的平帳作業。
+_Avoid_: 結算 (settlement)、退款 (refund)、還錢 (payback)、一鍵報銷 (one-click reimburse)
 
 **Advance Items Breakdown (代墊與報銷明細)**:
 家庭頁面中各成員的透明流水帳明細，包含「個人墊付公帳消費清單（日期、類別、備註、扣款個人帳戶、金額）」以及「共同基金撥款報銷沖帳紀錄」，便於雙方隨時核帳與檢驗結清狀態。
@@ -151,11 +151,11 @@ _Avoid_: 自由提款 (unrestricted withdrawal)、代領 (proxy reimbursement)
 ### 帳本視角與範疇 (Ledger Scope & Filter Terminology)
 
 **Unified Ledger Scope (統一帳本範疇體系)**:
-全站各頁面（Dashboard 總覽、Transactions 交易明細、Accounts 帳戶資產、Recurring 週期收支、Analytics 財務分析、Forecast 現金流預測）在提供資料範圍過濾或切換檢視時，一律採用「全部 (all)」、「公帳 (household)」、「私帳 (personal)」三態結構，並固定搭配單一語意 emoji（每個選項僅一個符號，不並列線條圖示）：🌐 全部、🏠 公帳、🔒 私帳。切換器為純選項群組，不附「檢視範圍」等標題文字；彈窗內之公帳／私帳歸屬二態按鈕沿用同一符號與用語。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語。
+全站各頁面（Dashboard 總覽、Transactions 收支明細、Accounts 帳戶資產、Recurring 週期收支、Analytics 財務分析、Forecast 現金流預測）在提供資料範圍過濾或切換檢視時，一律採用「全部 (all)」、「公帳 (household)」、「私帳 (personal)」三態結構，並固定搭配高對比單一語意符號（全部採用高對比向量地球圖示，避免遭粉紅主題色吃色；公私帳採用標準符號）：🌐 全部、🏠 公帳、🔒 私帳。切換器為純選項群組，不附「檢視範圍」等標題文字；彈窗內之公帳／私帳歸屬二態按鈕沿用同一符號與用語。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語。
 _Avoid_: 全貌合併 (full merge)、檢視合併 (combined view)、家庭公用 (household common)
 
 **All Scope (全部)**:
-全站三態切換的首個選項（value: `all`，顯示「🌐 全部」），聚合呈現目前登入者之「個人私帳」以及家庭全體成員共用之「家庭公帳／共同基金」，提供全方位家庭財務與資產流水概覽。
+全站三態切換的首個選項（value: `all`，顯示「🌐 全部」且在啟用時採用純白高對比向量地球圖示），聚合呈現目前登入者之「個人私帳」以及家庭全體成員共用之「家庭公帳／共同基金」，提供全方位家庭財務與資產流水概覽。
 _Avoid_: 全部 (本人 + 家庭公用) (all with verbose suffix)、全貌合併 (complete merge)、總體 (total)
 
 **Shared Scope (公帳)**:
@@ -216,9 +216,9 @@ _Avoid_: 純依賴帳戶歸屬 (account-only inference)、無公私帳區分之�
 週期收支必須精確綁定執行月份與日期，包含月繳（每月天）、雙月繳（單數月/雙數月）、季繳（起算月 1/2/3 每季循環）、半年繳（起算月 1~6 每半年循環）與年繳（指定 1~12 月份）。在現金流預測中，遇大小月或二月天數不足時，一律自動平貼（clamp）至該月份最後一日完成扣款與模擬，嚴禁粗暴以月份倍數模除或跨月推遲。
 _Avoid_: 模除猜測 (modulo guessing)、固定雙數月 (hardcoded even months)、跨月遞延 (month overflow drift)
 
-**Amortization (分攤平滑)**:
-將年繳、季繳等長週期大額支出平攤轉化為每月或每日的額度資金負擔之試算過程，並隨當前選擇的三態視角（全部 / 公帳 / 私帳）動態過濾對應之週期收支項目進行分攤加總。
-_Avoid_: 分期 (installment)、平滑化 (smoothing)、攤提 (proration)
+**Amortization (週期支出每月平均)**:
+將年繳、季繳等長週期大額支出平攤轉化為每月標準額度資金負擔之試算過程，並隨當前選擇的三態視角（全部 / 公帳 / 私帳）動態過濾對應之週期收支項目進行分攤加總。
+_Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑化 (smoothing)、攤提 (proration)
 
 **Scoped Cash Flow Forecast (三態現金流預測)**:
 支援切換「🌐 全部 (`all`)」、「🏠 公帳 (`household`)」、「🔒 私帳 (`personal`)」之未來 30 天逐日資金流模擬引擎。各視角之第 0 天起始基準餘額與帳戶管理頁之「💎 淨可用餘額（含公帳權責代墊扣減）」100% 對齊，並依視角過濾未來 30 天預定發生之週期收支排程事件，於時間軸卡片標示 `🏠 公帳` / `🔒 私帳` 徽章與扣款帳戶。
@@ -227,6 +227,10 @@ _Avoid_: 單一混合預測 (unscoped mixed forecast)、起點與帳戶餘額脫
 **Card Payment Event (繳卡費事件)**:
 現金流預測時間軸上，信用卡於繳款日產生的一筆支出事件，金額為該卡「已出帳餘額」，依視角僅計入對應之公帳代墊或個人部分。
 _Avoid_: 自動繳卡 (auto repayment)
+
+**Credit Card Recurring Cash Flow Shift (信用卡週期收支繳款日平移)**:
+在未來 30 天現金流預測中，凡設定由信用卡扣款之週期收支項目，其真實現金資產流出日不再發生於刷卡記帳日（day_of_cycle），而是依據該信用卡之結帳日與繳款日精準平移至對應之「信用卡繳款日（Payment Due Day）」，時間軸保留週期項目獨立卡片並標記卡片與繳款日扣款，真實反映流動性到期責任並支援「已繳」單筆豁免。
+_Avoid_: 刷卡日直接扣款 (immediate swipe cash deduction)、粗暴合併繳卡費 (opaque card merge)
 
 **Settled Forecast Event (已繳預測事件)**:
 未來 30 天現金流預測排程中，已被使用者勾選標記為「✅ 已繳」之單次排程事件（涵蓋週期支出、週期收入與💳 繳卡費，以 `項目 ID + 預計日期 YYYY-MM-DD` 唯一識別）。當一筆事件已經實際刷卡入帳（進入信用卡未出帳）或已提前消費扣款時，勾選「已繳」即可將該次事件從 30 天現金流折線圖與購買力試算中豁免（不列入計算，防止重複扣款），並在排程清單中保留顯示為半透明刪除線狀態，支援隨時取消勾選恢復計算。

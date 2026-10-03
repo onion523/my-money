@@ -16,6 +16,7 @@ import {
 } from '../components/utils'
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
+import ScopeTabBar from '../components/ScopeTabBar'
 import {
   BarChart,
   Bar,
@@ -71,6 +72,15 @@ export default function Analytics() {
   const [householdShares, setHouseholdShares] = useState<Array<{ user_id: string; user_name: string; total: number }>>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 640 : false)
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 640)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // 預算設定 Modal
   const [showBudgetModal, setShowBudgetModal] = useState(false)
@@ -196,40 +206,8 @@ export default function Analytics() {
       </div>
 
       {/* 帳本視角切換器 */}
-      <div style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: 4,
-        background: 'var(--bg-surface-2)',
-        borderRadius: 12,
-        border: '1px solid var(--border-color)',
-        marginBottom: 20
-      }}>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('all')}
-        >
-          <span>🌐 全部</span>
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('household')}
-        >
-          <span>🏠 公帳</span>
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('personal')}
-        >
-          <span>🔒 私帳</span>
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <ScopeTabBar scope={scope} onChange={setScope} />
       </div>
 
       {/* 家庭公帳成員分攤與墊付統計 (當有家庭成員分攤數據時顯示) */}
@@ -314,12 +292,12 @@ export default function Analytics() {
                     data={pieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={55}
-                    outerRadius={90}
+                    innerRadius={isMobile ? 45 : 55}
+                    outerRadius={isMobile ? 75 : 90}
                     paddingAngle={3}
                     dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}
+                    label={isMobile ? false : ({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={!isMobile}
                   >
                     {pieData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
@@ -332,13 +310,30 @@ export default function Analytics() {
           )}
 
           {pieData.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12, justifyContent: 'center' }}>
-              {catSummary.map((item, idx) => (
-                <div key={item.category} className="flex items-center gap-xs" style={{ fontSize: '0.8rem' }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: PIE_COLORS[idx % PIE_COLORS.length] }} />
-                  <span>{item.category}: {formatCurrency(item.total)}</span>
-                </div>
-              ))}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                gap: '8px 12px',
+                marginTop: 16,
+                padding: '10px 12px',
+                background: 'var(--bg-surface-2, rgba(0,0,0,0.02))',
+                borderRadius: 'var(--radius-md, 8px)'
+              }}
+            >
+              {catSummary.map((item, idx) => {
+                const pct = totalExpense > 0 ? ((item.total / totalExpense) * 100).toFixed(1) : '0'
+                return (
+                  <div key={item.category} className="flex items-center justify-between gap-xs" style={{ fontSize: '0.8rem' }}>
+                    <div className="flex items-center gap-xs" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: PIE_COLORS[idx % PIE_COLORS.length] }} />
+                      <span style={{ fontWeight: 500 }}>{item.category}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{pct}%</span>
+                    </div>
+                    <span style={{ fontWeight: 600, flexShrink: 0 }}>{formatCurrency(item.total)}</span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

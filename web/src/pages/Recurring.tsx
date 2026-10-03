@@ -4,6 +4,7 @@ import { recurringApi, accountsApi, exportApi, householdApi, RecurringItem, Acco
 import { useStore } from '../store/useStore'
 import { formatCurrency, CYCLE_LABELS } from '../components/utils'
 import Modal from '../components/Modal'
+import ScopeTabBar from '../components/ScopeTabBar'
 import {
   AlertCircle,
   Plus,
@@ -304,7 +305,7 @@ export default function Recurring() {
       <div className="page-header-row">
         <div>
           <h1 className="page-title">週期收支 🔄</h1>
-          <p className="page-subtitle">管理每月定期租金、水電、訂閱與薪資，自動計算平均月度分攤平滑</p>
+          <p className="page-subtitle">管理每月定期租金、水電、訂閱與薪資，自動計算平均每月支出</p>
         </div>
         <div className="header-actions">
           <button id="btn-export-recurring" className="btn btn-secondary" onClick={() => exportApi.recurringCsv()}>
@@ -319,46 +320,14 @@ export default function Recurring() {
       </div>
 
       {/* 帳本視角切換器 */}
-      <div style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: 4,
-        background: 'var(--bg-surface-2)',
-        borderRadius: 12,
-        border: '1px solid var(--border-color)',
-        marginBottom: 20
-      }}>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('all')}
-        >
-          <span>🌐 全部</span>
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('household')}
-        >
-          <span>🏠 公帳</span>
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('personal')}
-        >
-          <span>🔒 私帳</span>
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <ScopeTabBar scope={scope} onChange={setScope} />
       </div>
 
-      {/* 月分攤平滑統計卡片 */}
+      {/* 統計卡片 */}
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
         <div className="stat-card">
-          <span className="stat-label">週期支出每月平均分攤平滑</span>
+          <span className="stat-label">週期支出每月平均</span>
           <div className="stat-value" style={{ color: 'var(--color-danger)' }}>
             {formatCurrency(amortize?.monthly_expense ?? 0)}
           </div>
@@ -430,7 +399,7 @@ export default function Recurring() {
                       </div>
                       <div className="recurring-card-meta">
                         {item.account_name ? `關聯扣款帳戶：${item.account_name}` : '未指定關聯帳戶'}
-                        {item.cycle !== 'monthly' && ` · 換算月分攤平滑：${formatCurrency(monthlyShare)} / 月`}
+                        {item.cycle !== 'monthly' && ` · 換算每月平均：${formatCurrency(monthlyShare)} / 月`}
                       </div>
                     </div>
 

@@ -5,6 +5,7 @@ import { accountsApi, Account, BalanceSummary, householdApi } from '../api/clien
 import { useStore } from '../store/useStore'
 import { formatCurrency, ACCOUNT_COLORS, today } from '../components/utils'
 import Modal from '../components/Modal'
+import ScopeTabBar from '../components/ScopeTabBar'
 import {
   Plus,
   Edit2,
@@ -406,40 +407,8 @@ export default function Accounts() {
       </div>
 
       {/* 帳本視角切換器 */}
-      <div style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: 4,
-        background: 'var(--bg-surface-2)',
-        borderRadius: 12,
-        border: '1px solid var(--border-color)',
-        marginBottom: 20
-      }}>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('all')}
-        >
-          <span>🌐 全部</span>
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('household')}
-        >
-          <span>🏠 公帳</span>
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('personal')}
-        >
-          <span>🔒 私帳</span>
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <ScopeTabBar scope={scope} onChange={setScope} />
       </div>
 
       {/* 家庭代墊待報銷款總覽橫幅 (ADR 0015) */}
@@ -867,7 +836,7 @@ export default function Accounts() {
 
                   {/* 還款操作按鈕組 */}
                   {totalDue > 0 && canOperateCard(card) ? (
-                    <div className="grid grid-3 gap-xs">
+                    <div className="cc-action-btns">
                       <button
                         className="btn btn-sm btn-secondary"
                         style={{ border: '1px solid var(--color-primary)', color: 'var(--color-primary)' }}

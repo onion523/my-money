@@ -2,6 +2,7 @@ import { ForecastSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { forecastApi, ForecastResult, PurchaseCheckResult, DayEvent } from '../api/client'
 import { formatCurrency, formatDate } from '../components/utils'
+import ScopeTabBar from '../components/ScopeTabBar'
 import {
   AreaChart,
   Area,
@@ -120,40 +121,8 @@ export default function Forecast() {
       </div>
 
       {/* 帳本視角切換器 */}
-      <div style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: 4,
-        background: 'var(--bg-surface-2)',
-        borderRadius: 12,
-        border: '1px solid var(--border-color)',
-        marginBottom: 20
-      }}>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('all')}
-        >
-          <span>🌐 全部</span>
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('household')}
-        >
-          <span>🏠 公帳</span>
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setScope('personal')}
-        >
-          <span>🔒 私帳</span>
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <ScopeTabBar scope={scope} onChange={setScope} />
       </div>
 
       {/* 30 天安全指標卡片 */}

@@ -432,9 +432,9 @@ export default function Family() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3">
-                          <div style={{ textAlign: 'right', marginRight: 4 }}>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>待報銷代墊總額</div>
+                        <div className="family-adv-actions">
+                          <div className="family-adv-amount-box" style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>待報銷總額</div>
                             <div style={{
                               fontSize: '1.35rem',
                               fontWeight: 800,
@@ -444,35 +444,37 @@ export default function Family() {
                             </div>
                           </div>
 
-                          {adv.pending_reimburse > 0 && (data.myRole === 'admin' || user?.id === adv.user_id) && (
-                            <button
-                              className="btn btn-primary"
-                              onClick={() => handleOpenReimburse(adv)}
-                              style={{ padding: '7px 14px', fontSize: '0.9rem' }}
-                            >
-                              <ArrowRightLeft size={15} style={{ marginRight: 4 }} />
-                              從共同基金一鍵報銷
-                            </button>
-                          )}
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+                            {adv.pending_reimburse > 0 && (data.myRole === 'admin' || user?.id === adv.user_id) && (
+                              <button
+                                className="btn btn-primary"
+                                onClick={() => handleOpenReimburse(adv)}
+                                style={{ padding: '7px 14px', fontSize: '0.9rem', flex: '1 1 auto', minWidth: '120px' }}
+                              >
+                                <ArrowRightLeft size={15} style={{ marginRight: 4 }} />
+                                報銷沖帳
+                              </button>
+                            )}
 
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={() => toggleExpand(adv.user_id)}
-                            style={{ padding: '7px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 4 }}
-                          >
-                            {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                            {isExpanded ? '收起明細' : '查看代墊明細'}
-                            <span style={{
-                              background: 'rgba(0,0,0,0.1)',
-                              borderRadius: 10,
-                              padding: '1px 6px',
-                              fontSize: '0.75rem',
-                              marginLeft: 2
-                            }}>
-                              {advanceItems.length}
-                            </span>
-                          </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => toggleExpand(adv.user_id)}
+                              style={{ padding: '7px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, flex: '1 1 auto', minWidth: '120px' }}
+                            >
+                              {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                              {isExpanded ? '收起明細' : '查看代墊明細'}
+                              <span style={{
+                                background: 'rgba(0,0,0,0.1)',
+                                borderRadius: 10,
+                                padding: '1px 6px',
+                                fontSize: '0.75rem',
+                                marginLeft: 2
+                              }}>
+                                {advanceItems.length}
+                              </span>
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -504,11 +506,12 @@ export default function Family() {
                                 background: 'var(--bg-surface)',
                                 borderRadius: 8,
                                 border: '1px solid var(--border-color)',
-                                overflow: 'hidden'
+                                overflowX: 'auto'
                               }}>
                                 <div style={{
                                   display: 'grid',
                                   gridTemplateColumns: '100px 1fr 140px 110px',
+                                  minWidth: 440,
                                   padding: '8px 14px',
                                   background: 'var(--bg-surface-2)',
                                   fontSize: '0.8rem',
@@ -527,6 +530,7 @@ export default function Family() {
                                     style={{
                                       display: 'grid',
                                       gridTemplateColumns: '100px 1fr 140px 110px',
+                                      minWidth: 440,
                                       padding: '10px 14px',
                                       fontSize: '0.85rem',
                                       alignItems: 'center',
@@ -571,11 +575,12 @@ export default function Family() {
                                 background: 'var(--bg-surface)',
                                 borderRadius: 8,
                                 border: '1px solid var(--border-color)',
-                                overflow: 'hidden'
+                                overflowX: 'auto'
                               }}>
                                 <div style={{
                                   display: 'grid',
                                   gridTemplateColumns: '100px 140px 1fr 110px',
+                                  minWidth: 440,
                                   padding: '8px 14px',
                                   background: 'var(--bg-surface-2)',
                                   fontSize: '0.8rem',
@@ -594,6 +599,7 @@ export default function Family() {
                                     style={{
                                       display: 'grid',
                                       gridTemplateColumns: '100px 140px 1fr 110px',
+                                      minWidth: 440,
                                       padding: '10px 14px',
                                       fontSize: '0.85rem',
                                       alignItems: 'center',
@@ -635,19 +641,22 @@ export default function Family() {
                     borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-surface-2)',
                     border: '1px solid var(--border-color)',
+                    flexWrap: 'wrap',
+                    gap: 12
                   }}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3" style={{ minWidth: 0, flex: '1 1 200px' }}>
                     <div style={{
                       width: 40, height: 40, borderRadius: '50%',
                       background: member.role === 'admin' ? '#FFD4A0' : '#A8D8EA',
                       color: '#333', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', fontWeight: 700, fontSize: '1rem'
+                      justifyContent: 'center', fontWeight: 700, fontSize: '1rem',
+                      flexShrink: 0
                     }}>
                       {member.name.slice(0, 1).toUpperCase()}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 600 }}>{member.name}</span>
                         {member.role === 'admin' ? (
                           <span className="badge badge-default" style={{ fontSize: '0.7rem', padding: '2px 6px' }}>
@@ -659,8 +668,8 @@ export default function Family() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)', marginTop: 2 }}>
-                        <span><Mail size={12} style={{ display: 'inline', marginRight: 2 }} />{member.email}</span>
+                      <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)', marginTop: 2, flexWrap: 'wrap', wordBreak: 'break-all' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}><Mail size={12} style={{ flexShrink: 0 }} />{member.email}</span>
                         <span>•</span>
                         <span>加入時間：{formatLocalDate(member.joined_at)}</span>
                       </div>
@@ -670,7 +679,7 @@ export default function Family() {
                   {data.myRole === 'admin' && member.role !== 'admin' && (
                     <button
                       className="btn btn-ghost btn-sm"
-                      style={{ color: 'var(--color-danger)' }}
+                      style={{ color: 'var(--color-danger)', flexShrink: 0 }}
                       onClick={() => handleRemoveMember(member)}
                       title="移出家庭群組"
                     >

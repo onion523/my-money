@@ -23,7 +23,7 @@ function buildScopeCondition(userId: string, memberUserIds: string[], scope?: st
 transactions.get('/', async (c) => {
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
-  const { category, from, to, scope = 'all', limit = '50', offset = '0' } = c.req.query();
+  const { category, from, to, scope = 'all', limit = '50', offset = '0', account_id } = c.req.query();
 
   const { condition, params: scopeParams } = buildScopeCondition(userId, memberUserIds, scope);
 
@@ -31,6 +31,7 @@ transactions.get('/', async (c) => {
   const params: (string | number)[] = [...scopeParams];
 
   if (category) { sql += ' AND t.category = ?'; params.push(category); }
+  if (account_id) { sql += ' AND t.account_id = ?'; params.push(account_id); }
   if (from) { sql += ' AND t.date >= ?'; params.push(from); }
   if (to) { sql += ' AND t.date <= ?'; params.push(to); }
   sql += ' ORDER BY t.date DESC, t.created_at DESC LIMIT ? OFFSET ?';

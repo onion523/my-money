@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { accountsApi, txApi, recurringApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
-import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS, buildHistoryMemo, recommendCategory } from '../components/utils'
+import { formatCurrency, formatDate, today, thisMonth, getGreeting, CATEGORIES, CATEGORY_ICONS, buildHistoryMemo, recommendCategory } from '../components/utils'
+import ScopeTabBar from '../components/ScopeTabBar'
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
 import {
@@ -170,7 +171,7 @@ export default function Dashboard() {
       {/* 頁面標題 */}
       <div className="page-header-row">
         <div>
-          <h1 className="page-title">早安，{user?.name || '朋友'} 👋</h1>
+          <h1 className="page-title">{getGreeting()}，{user?.name || '朋友'} 👋</h1>
           <p className="page-subtitle">這裡是您本月的財務總覽與即時收支數據</p>
         </div>
         <button
@@ -184,40 +185,8 @@ export default function Dashboard() {
       </div>
 
       {/* 帳本視角切換器 */}
-      <div style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: 4,
-        background: 'var(--bg-surface-2)',
-        borderRadius: 12,
-        border: '1px solid var(--border-color)',
-        marginBottom: 20
-      }}>
-        <button
-          type="button"
-          className={`btn btn-sm ${viewScope === 'all' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setViewScope('all')}
-        >
-          <span>🌐 全部</span>
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${viewScope === 'household' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setViewScope('household')}
-        >
-          <span>🏠 公帳</span>
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${viewScope === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
-          onClick={() => setViewScope('personal')}
-        >
-          <span>🔒 私帳</span>
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <ScopeTabBar scope={viewScope} onChange={setViewScope} />
       </div>
 
       {/* 核心資產/可動用資訊欄位 */}

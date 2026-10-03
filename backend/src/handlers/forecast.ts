@@ -38,8 +38,52 @@ export interface ForecastEvent {
   can_settle?: boolean;
 }
 
+export interface ForecastRecurringItem extends RecurringItem {
+  account_name?: string;
+  account_type?: string;
+  statement_day?: number | null;
+  payment_due_day?: number | null;
+  is_shared?: number;
+}
+
+export function calculateCreditCardDueDate(
+  chargeYear: number,
+  chargeMonth: number,
+  chargeDay: number,
+  statementDay: number | null,
+  paymentDueDay: number
+): { year: number; month: number; day: number; dateStr: string } {
+  const stmtDay = statementDay || 20;
+  let dueYear = chargeYear;
+  let dueMonth = chargeMonth;
+
+  if (stmtDay < paymentDueDay) {
+    if (chargeDay <= stmtDay) {
+      dueMonth = chargeMonth;
+    } else {
+      dueMonth = chargeMonth + 1;
+    }
+  } else {
+    if (chargeDay <= stmtDay) {
+      dueMonth = chargeMonth + 1;
+    } else {
+      dueMonth = chargeMonth + 2;
+    }
+  }
+
+  if (dueMonth > 12) {
+    dueYear += Math.floor((dueMonth - 1) / 12);
+    dueMonth = ((dueMonth - 1) % 12) + 1;
+  }
+
+  const maxDaysInDueMonth = new Date(dueYear, dueMonth, 0).getDate();
+  const actualDueDay = Math.min(paymentDueDay, maxDaysInDueMonth);
+  const dateStr = `${dueYear}-${String(dueMonth).padStart(2, '0')}-${String(actualDueDay).padStart(2, '0')}`;
+  return { year: dueYear, month: dueMonth, day: actualDueDay, dateStr };
+}
+
 function getDaysInForecast(
-  items: (RecurringItem & { account_name?: string; is_shared?: number })[],
+  items: ForecastRecurringItem[],
   days = 30,
   settledKeys: Set<string> = new Set(),
   userId = '',
@@ -47,6 +91,8 @@ function getDaysInForecast(
 ): ForecastEvent[] {
   const events: ForecastEvent[] = [];
   const forecastDays = getTaipeiForecastDays(days);
+  const minDateStr = forecastDays[0].dateStr;
+  const maxDateStr = forecastDays[forecastDays.length - 1].dateStr;
 
   for (const dayObj of forecastDays) {
     const dom = dayObj.day;
@@ -66,20 +112,41 @@ function getDaysInForecast(
       const targetDay = Math.min(item.day_of_cycle, maxDaysInMonth);
 
       if (isCycleMonth && dom === targetDay) {
-        const eventKey = `recurring:${item.id}:${dayObj.dateStr}`;
         const isShared = item.is_shared ?? 0;
         const canSettle = isShared === 0 ? item.user_id === userId : (item.user_id === userId || myRole === 'admin');
-        events.push({
-          event_key: eventKey,
-          date: dayObj.dateStr,
-          name: item.name,
-          type: item.type,
-          amount: item.amount,
-          is_shared: isShared,
-          account_name: item.account_name || undefined,
-          is_settled: settledKeys.has(eventKey),
-          can_settle: canSettle,
-        });
+
+        if (item.account_type === 'credit_card' && item.payment_due_day) {
+          // 信用卡扣款週期收支：平移至該卡所屬之信用卡繳款日 (Payment Due Day)
+          const due = calculateCreditCardDueDate(year, month, targetDay, item.statement_day ?? null, item.payment_due_day);
+          if (due.dateStr >= minDateStr && due.dateStr <= maxDateStr) {
+            const eventKey = `recurring:${item.id}:${due.dateStr}`;
+            events.push({
+              event_key: eventKey,
+              date: due.dateStr,
+              name: `${item.name} (${item.account_name || '信用卡'} · 信用卡繳款日扣款)`,
+              type: item.type,
+              amount: item.amount,
+              is_shared: isShared,
+              account_name: item.account_name || undefined,
+              is_settled: settledKeys.has(eventKey),
+              can_settle: canSettle,
+            });
+          }
+        } else {
+          // 現金或銀行活存扣款：維持於排程扣款日
+          const eventKey = `recurring:${item.id}:${dayObj.dateStr}`;
+          events.push({
+            event_key: eventKey,
+            date: dayObj.dateStr,
+            name: item.name,
+            type: item.type,
+            amount: item.amount,
+            is_shared: isShared,
+            account_name: item.account_name || undefined,
+            is_settled: settledKeys.has(eventKey),
+            can_settle: canSettle,
+          });
+        }
       }
     }
   }
@@ -227,14 +294,14 @@ forecast.get('/', async (c) => {
   }
 
   const recRows = await c.env.DB.prepare(`
-    SELECT r.*, a.name as account_name
+    SELECT r.*, a.name as account_name, a.type as account_type, a.statement_day, a.payment_due_day
     FROM recurring_items r
     LEFT JOIN accounts a ON r.account_id = a.id
     WHERE ${recCondition}
     ORDER BY r.created_at ASC
   `).bind(...recParams).all();
 
-  const items = recRows.results as unknown as (RecurringItem & { account_name?: string })[];
+  const items = recRows.results as unknown as ForecastRecurringItem[];
   const events = [...getDaysInForecast(items, 30, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
 
   // 逐日模擬（ADR 0018：已勾選 is_settled 之事件不列入餘額加減）
@@ -307,14 +374,14 @@ forecast.post('/purchase-check', async (c) => {
   }
 
   const recRows = await c.env.DB.prepare(`
-    SELECT r.*, a.name as account_name
+    SELECT r.*, a.name as account_name, a.type as account_type, a.statement_day, a.payment_due_day
     FROM recurring_items r
     LEFT JOIN accounts a ON r.account_id = a.id
     WHERE ${recCondition}
     ORDER BY r.created_at ASC
   `).bind(...recParams).all();
 
-  const items = recRows.results as unknown as (RecurringItem & { account_name?: string })[];
+  const items = recRows.results as unknown as ForecastRecurringItem[];
   const events = [...getDaysInForecast(items, 30, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
   let minBalance = balance;
   events.forEach(e => {

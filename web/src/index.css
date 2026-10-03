@@ -569,8 +569,8 @@ a { text-decoration: none; color: inherit; }
   }
 }
 
-/* ---- 手機與平板直向斷點 (<= 768px) ---- */
-@media (max-width: 768px) {
+/* ---- 手機（含橫向模式）與小型螢幕斷點 (<= 960px 或高度 <= 500px) ---- */
+@media (max-width: 960px), (max-height: 500px) {
   /* 頂部列 */
   .mobile-header {
     display: flex;
@@ -825,6 +825,73 @@ a { text-decoration: none; color: inherit; }
   background: rgba(255, 107, 107, 0.12);
   border: 1px solid rgba(255, 107, 107, 0.3);
   color: var(--color-danger);
+}
+
+/* ---- 信用卡卡片操作按鈕自適應堆疊 ---- */
+.cc-action-btns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-xs);
+}
+@media (max-width: 600px) {
+  .cc-action-btns {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .cc-action-btns .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ---- 家庭協同代墊卡片自適應操作 ---- */
+.family-adv-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.family-adv-amount-box {
+  text-align: right;
+  margin-right: 4px;
+}
+.family-adv-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .family-adv-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border-color);
+  }
+  .family-adv-amount-box {
+    text-align: left;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    width: 100%;
+    margin-right: 0;
+  }
+  .family-adv-btn-group {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+  }
+  .family-adv-btn-group .btn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 0.82rem;
+  }
 }
 
 
