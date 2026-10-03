@@ -151,7 +151,7 @@ _Avoid_: 自由提款 (unrestricted withdrawal)、代領 (proxy reimbursement)
 ### 帳本視角與範疇 (Ledger Scope & Filter Terminology)
 
 **Unified Ledger Scope (統一帳本範疇體系)**:
-全站各頁面（Dashboard 總覽、Transactions 交易明細、Accounts 帳戶資產、Analytics 財務分析）在提供資料範圍過濾或切換檢視時，一律採用「全部 (all)」、「公帳 (household)」、「私帳 (personal)」三態結構，並固定搭配語意圖示：🌐 全部、🏠 公帳、🔒 私帳。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語。
+全站各頁面（Dashboard 總覽、Transactions 交易明細、Accounts 帳戶資產、Recurring 週期收支、Analytics 財務分析、Forecast 現金流預測）在提供資料範圍過濾或切換檢視時，一律採用「全部 (all)」、「公帳 (household)」、「私帳 (personal)」三態結構，並固定搭配語意圖示：🌐 全部、🏠 公帳、🔒 私帳。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語。
 _Avoid_: 全貌合併 (full merge)、檢視合併 (combined view)、家庭公用 (household common)
 
 **All Scope (全部)**:
@@ -167,7 +167,7 @@ _Avoid_: 🏠 家庭公帳 (household shared)、🏠 家庭公用 (共同基金/
 _Avoid_: 👤 個人私帳 (personal account verbose)、🔒 個人私帳 (personal private)、私帳 (plain text without canonical icon)
 
 **Modal Scope Toggle (記帳歸屬二態切換)**:
-在快速記帳、新增交易、信用卡還款等表單彈窗（Modal）中，收支歸屬固定簡化正名為「🏠 公帳」與「🔒 私帳」二元切換按鈕，移除多餘之「(公開)」、「(隱私)」等括號贅詞。
+在快速記帳、新增交易、信用卡還款、週期收支設定等表單彈窗（Modal）中，收支歸屬固定簡化正名為「🏠 公帳」與「🔒 私帳」二元切換按鈕，移除多餘之「(公開)」、「(隱私)」等括號贅詞。
 _Avoid_: 🏠 家庭公帳 (公開) (verbose public)、🔒 個人私帳 (隱私) (verbose private)
 
 **Household Scope Advance Visibility (公帳視角代墊透視)**:
@@ -208,13 +208,21 @@ _Avoid_: 強迫覆蓋 (forced overwrite)、生硬彈窗 (intrusive popup)、無�
 按規律頻率（月、雙月、季、半年、年）固定重複發生的週期性收入或支出。
 _Avoid_: 訂閱 (subscription)、固定支出 (fixed expense)、週期契約 (contract)
 
+**Recurring Ledger Attribution (週期收支公私帳歸屬)**:
+每筆週期收支具備顯式之公私帳歸屬標記（`is_shared`：🏠 公帳 / 🔒 私帳）。於表單選取扣款帳戶時自動預帶該帳戶之公私屬性，並允許手動切換以支援「以個人私卡固定代扣家庭公帳（如水電、網路費）」之代墊情境。私帳週期項目僅建立者本人可見與改刪；公帳週期項目對全體家庭成員透明共享，並由建立者與家庭管理員共治管理。
+_Avoid_: 純依賴帳戶歸屬 (account-only inference)、無公私帳區分之固定收支 (unscoped recurring item)
+
 **Exact Recurring Schedule (確切週期繳費排程)**:
 週期收支必須精確綁定執行月份與日期，包含月繳（每月天）、雙月繳（單數月/雙數月）、季繳（起算月 1/2/3 每季循環）、半年繳（起算月 1~6 每半年循環）與年繳（指定 1~12 月份）。在現金流預測中，遇大小月或二月天數不足時，一律自動平貼（clamp）至該月份最後一日完成扣款與模擬，嚴禁粗暴以月份倍數模除或跨月推遲。
 _Avoid_: 模除猜測 (modulo guessing)、固定雙數月 (hardcoded even months)、跨月遞延 (month overflow drift)
 
 **Amortization (分攤平滑)**:
-將年繳、季繳等長週期大額支出平攤轉化為每月或每日的額度資金負擔之試算過程。
+將年繳、季繳等長週期大額支出平攤轉化為每月或每日的額度資金負擔之試算過程，並隨當前選擇的三態視角（全部 / 公帳 / 私帳）動態過濾對應之週期收支項目進行分攤加總。
 _Avoid_: 分期 (installment)、平滑化 (smoothing)、攤提 (proration)
+
+**Scoped Cash Flow Forecast (三態現金流預測)**:
+支援切換「🌐 全部 (`all`)」、「🏠 公帳 (`household`)」、「🔒 私帳 (`personal`)」之未來 30 天逐日資金流模擬引擎。各視角之第 0 天起始基準餘額與帳戶管理頁之「💎 淨可用餘額（含公帳權責代墊扣減）」100% 對齊，並依視角過濾未來 30 天預定發生之週期收支排程事件，於時間軸卡片標示 `🏠 公帳` / `🔒 私帳` 徽章與扣款帳戶。
+_Avoid_: 單一混合預測 (unscoped mixed forecast)、起點與帳戶餘額脫鉤 (decoupled starting balance)
 
 **Savings Goal (儲蓄目標)**:
 使用者設定具有目標總額與預計達成日的專項資產目標，其每月提撥額實質鎖定可支配現金。
@@ -225,8 +233,9 @@ _Avoid_: 存錢筒 (piggy bank)、夢想基金 (fund target)、願望 (wish)
 _Avoid_: 額度 (spending limit)、花費上限 (cap)、配額 (allowance)
 
 **Affordability Check (購買力試算)**:
-使用者面臨大額消費前，即時試算扣除該筆開銷後可支配現金是否仍大於零的安全檢查。
+使用者面臨大額消費前，隨當前所選視角（全部 / 公帳 / 私帳）即時試算扣除該筆開銷並模擬未來 30 天該視角週期收支後，是否會發生透支或擠壓儲蓄目標預留款的安全檢查。在「🏠 公帳」視角下，專注檢核共同基金是否透支，嚴格隔離成員個人私密儲蓄目標。
 _Avoid_: 購買模擬 (purchase simulation)、預算檢查 (budget check)、試算 (simulation)
+
 
 ---
 
