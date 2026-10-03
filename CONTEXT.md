@@ -170,6 +170,18 @@ _Avoid_: 👤 個人私帳 (personal account verbose)、🔒 個人私帳 (perso
 在快速記帳、新增交易、信用卡還款等表單彈窗（Modal）中，收支歸屬固定簡化正名為「🏠 公帳」與「🔒 私帳」二元切換按鈕，移除多餘之「(公開)」、「(隱私)」等括號贅詞。
 _Avoid_: 🏠 家庭公帳 (公開) (verbose public)、🔒 個人私帳 (隱私) (verbose private)
 
+**Household Scope Advance Visibility (公帳視角代墊透視)**:
+在帳戶管理之「🏠 公帳」視角下，系統除呈現家庭共同基金與共同信用卡（is_joint = 1）外，同時納入「含有家庭代墊公帳欠款（shared_debt > 0）之個人信用卡」以及「家庭公帳代墊待沖款總覽橫幅（Pending Household Advances Banner）」，讓全家成員清楚掌握家庭實質應負擔之所有公帳資產與代墊負債。
+_Avoid_: 私卡完全遮蔽 (full private card block)、漏列公帳代墊 (omitted advances)
+
+**Sanitized Private Card Shared View (私卡公帳脫敏檢視)**:
+當家庭成員在公帳視角檢視非本人之代墊個人信用卡時，系統執行嚴格資訊脫敏（Data Masking），僅揭示卡片名稱、持卡人姓名、家庭代墊公帳待繳額（shared_debt）與結帳/繳款日，徹底遮蔽持卡人之個人信用額度（credit_limit）與個人私帳消費額（personal_debt）。非持卡人僅開放點擊「🏠 繳家庭代墊」協助自共同基金清償公帳欠款，禁止執行校準、出帳作業、修改或刪除。
+_Avoid_: 完整私卡暴露 (unmasked private card)、越權出帳 (unauthorized rollover)
+
+**Accrual Household Balance (公帳權責淨餘額)**:
+公帳視角下的「💳 信用卡總待繳」與「💎 淨可用餘額」採權責會計責任制，將「家庭共同信用卡欠款」與「全體成員個人私卡上之公帳代墊欠款（shared_debt）」合併計入家庭負債，真實反映扣除所有公帳待付責任後的家庭淨可用資金。
+_Avoid_: 虛胖可用餘額 (inflated available balance)、純共同帳戶窄視角 (narrow joint-only balance)
+
 ---
 
 ### 交易分類體系 (Category Taxonomy)
