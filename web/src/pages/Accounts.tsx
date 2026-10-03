@@ -1,5 +1,6 @@
 import { AccountsSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { accountsApi, Account, BalanceSummary, householdApi } from '../api/client'
 import { useStore } from '../store/useStore'
 import { formatCurrency, ACCOUNT_COLORS, today } from '../components/utils'
@@ -24,7 +25,9 @@ import {
   ArrowDownRight,
   Globe,
   Users,
-  Lock
+  Lock,
+  Receipt,
+  ArrowRight
 } from 'lucide-react'
 
 export default function Accounts() {
@@ -32,6 +35,7 @@ export default function Accounts() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [balance, setBalance] = useState<BalanceSummary | null>(null)
   const [myRole, setMyRole] = useState<'admin' | 'member' | null>(null)
+  const [totalPendingAdvances, setTotalPendingAdvances] = useState(0)
   const [loading, setLoading] = useState(true)
   const [scope, setScope] = useState<'all' | 'household' | 'personal'>('all')
 
@@ -79,14 +83,21 @@ export default function Accounts() {
   const loadData = async (currentScope: 'all' | 'household' | 'personal' = scope) => {
     try {
       setLoading(true)
-      const [accs, bal, householdData] = await Promise.all([
+      const [accs, bal, householdData, advancesData] = await Promise.all([
         accountsApi.list(currentScope),
         accountsApi.balance(currentScope).catch(() => null),
         householdApi.current().catch(() => null),
+        currentScope === 'household' ? householdApi.advances().catch(() => []) : Promise.resolve([]),
       ])
       setAccounts(accs)
       if (bal) setBalance(bal)
       if (householdData?.myRole) setMyRole(householdData.myRole)
+      if (currentScope === 'household' && Array.isArray(advancesData)) {
+        const sumPending = advancesData.reduce((sum: number, a) => sum + (Number(a.pending_reimburse) || 0), 0)
+        setTotalPendingAdvances(sumPending)
+      } else {
+        setTotalPendingAdvances(0)
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -262,14 +273,17 @@ export default function Accounts() {
       return
     }
 
-    const maxPayable = (payCardModal.balance || 0) + (payCardModal.unbilled || 0)
+    const isOtherMemberCard = payCardModal.is_joint === 0 && Boolean(user && payCardModal.user_id !== user.id)
+    const maxPayable = isOtherMemberCard
+      ? (payCardModal.shared_debt || 0)
+      : ((payCardModal.balance || 0) + (payCardModal.unbilled || 0))
     const amt = parseFloat(payForm.amount)
     if (isNaN(amt) || amt <= 0) {
       setPayError('請輸入大於 0 的扣款金額')
       return
     }
     if (amt > maxPayable && maxPayable > 0) {
-      setPayError(`還款金額不可超過信用卡待繳總額 NT$ ${maxPayable.toLocaleString()}`)
+      setPayError(`還款金額不可超過${isOtherMemberCard ? '家庭代墊公帳待繳額' : '信用卡待繳總額'} NT$ ${maxPayable.toLocaleString()}`)
       return
     }
 
@@ -288,7 +302,7 @@ export default function Accounts() {
         amount: amt,
         date: payForm.date,
         note: payForm.note,
-        is_shared: payForm.is_shared,
+        is_shared: isOtherMemberCard ? 1 : payForm.is_shared,
       })
       setPayCardModal(null)
       await loadData()
@@ -426,6 +440,59 @@ export default function Accounts() {
           🔒 嚴格隱私保護：其他成員之個人私帳與私卡自動隱藏
         </div>
       </div>
+
+      {/* 家庭代墊待報銷款總覽橫幅 (ADR 0015) */}
+      {scope === 'household' && totalPendingAdvances > 0 && (
+        <div
+          id="household-advances-banner"
+          className="card"
+          style={{
+            marginBottom: 20,
+            padding: '14px 20px',
+            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(245, 158, 11, 0.08) 100%)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+            borderRadius: 12,
+          }}
+        >
+          <div className="flex items-center gap-sm">
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-danger)',
+              }}
+            >
+              <Receipt size={22} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                📑 家庭公帳待報銷代墊款：{formatCurrency(totalPendingAdvances)}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                成員以個人私帳/現金墊付生活開銷，待家庭共同基金撥款報銷沖抵
+              </div>
+            </div>
+          </div>
+          <Link
+            to="/family"
+            className="btn btn-sm btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <span>前往家庭協同報銷</span>
+            <ArrowRight size={14} />
+          </Link>
+        </div>
+      )}
 
       {/* 核心資產統計四宮格 */}
       <div className="grid grid-4" style={{ marginBottom: 24 }}>
@@ -654,13 +721,15 @@ export default function Accounts() {
         ) : (
           <div className="grid grid-2">
             {creditCards.map(card => {
+              const isOtherMemberCard = card.is_joint === 0 && Boolean(user && card.user_id !== user.id)
+              const isMasked = Boolean(card.is_masked || isOtherMemberCard)
               const billed = card.balance || 0
               const unbilled = card.unbilled || 0
               const totalDue = billed + unbilled
               const sharedDebt = card.shared_debt || 0
               const personalDebt = card.personal_debt || 0
               const limit = card.credit_limit || 0
-              const remainingLimit = limit > 0 ? Math.max(0, limit - totalDue) : null
+              const remainingLimit = isMasked ? null : (limit > 0 ? Math.max(0, limit - totalDue) : null)
 
               return (
                 <div key={card.id} className="card cc-card" style={{ borderTop: `4px solid ${card.color}` }}>
@@ -670,6 +739,18 @@ export default function Accounts() {
                       <h3 className="account-name">{card.name}</h3>
                       {card.is_joint === 1 ? (
                         <span className="badge badge-primary">🏠 公帳</span>
+                      ) : scope === 'household' ? (
+                        <span
+                          className="badge badge-secondary"
+                          style={{
+                            background: 'rgba(245, 158, 11, 0.12)',
+                            color: '#B45309',
+                            border: '1px solid rgba(245, 158, 11, 0.25)',
+                            fontWeight: 600,
+                          }}
+                        >
+                          🔒 私卡代墊
+                        </span>
                       ) : (
                         <span className="badge badge-secondary">🔒 私帳</span>
                       )}
@@ -694,22 +775,28 @@ export default function Accounts() {
                   {/* 待繳總額 */}
                   <div className="cc-due-hero" style={{ background: 'rgba(255,138,138,0.08)', borderRadius: 10, padding: '12px 16px', marginBottom: 14 }}>
                     <div className="flex items-center justify-between">
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>待繳款總負債</span>
-                      <span style={{ fontSize: '1.4rem', fontWeight: 800, color: totalDue > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
-                        {formatCurrency(totalDue)}
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        {isMasked ? '家庭公帳代墊待繳總額' : '待繳款總負債'}
+                      </span>
+                      <span style={{ fontSize: '1.4rem', fontWeight: 800, color: (isMasked ? sharedDebt : totalDue) > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                        {formatCurrency(isMasked ? sharedDebt : totalDue)}
                       </span>
                     </div>
 
                     <div className="grid grid-2 gap-sm" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed rgba(0,0,0,0.1)' }}>
                       <div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>已出帳待繳款</div>
-                        <div style={{ fontWeight: 600, color: billed > 0 ? 'var(--color-danger)' : 'var(--text-primary)' }}>
-                          {formatCurrency(billed)}
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          {isMasked ? '個人帳單狀態' : '已出帳待繳款'}
+                        </div>
+                        <div style={{ fontWeight: 600, color: (!isMasked && billed > 0) ? 'var(--color-danger)' : 'var(--text-primary)' }}>
+                          {isMasked ? '🔒 隱私遮蔽' : formatCurrency(billed)}
                         </div>
                       </div>
                       <div>
                         <div className="flex items-center justify-between">
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>未出帳（累計消費）</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            {isMasked ? '公帳代墊待清償' : '未出帳（累計消費）'}
+                          </span>
                           {canOperateCard(card) && (
                             <div className="flex gap-xs">
                               <button
@@ -735,7 +822,9 @@ export default function Accounts() {
                             </div>
                           )}
                         </div>
-                        <div style={{ fontWeight: 600 }}>{formatCurrency(unbilled)}</div>
+                        <div style={{ fontWeight: 600, color: isMasked ? 'var(--color-primary)' : 'inherit' }}>
+                          {isMasked ? formatCurrency(sharedDebt) : formatCurrency(unbilled)}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -760,7 +849,7 @@ export default function Accounts() {
                         👤 個人私帳消費：
                       </span>
                       <span style={{ fontWeight: 700, color: '#4B5563' }}>
-                        {formatCurrency(personalDebt)}
+                        {isMasked ? '🔒 隱私遮蔽' : formatCurrency(personalDebt)}
                       </span>
                     </div>
                   </div>
@@ -768,8 +857,10 @@ export default function Accounts() {
                   {/* 帳單週期資訊 */}
                   <div className="flex items-center justify-between" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
                     <span>每月 {card.statement_day || '--'} 日結帳 · {card.payment_due_day || '--'} 日繳款</span>
-                    {remainingLimit !== null && (
+                    {remainingLimit !== null ? (
                       <span>剩餘額度：{formatCurrency(remainingLimit)}</span>
+                    ) : (
+                      <span>剩餘額度：--</span>
                     )}
                   </div>
 
@@ -798,6 +889,26 @@ export default function Accounts() {
                         全額結清
                       </button>
                     </div>
+                  ) : isMasked ? (
+                    sharedDebt > 0 ? (
+                      <div className="flex flex-col gap-xs">
+                        <button
+                          className="btn btn-sm btn-primary"
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                          onClick={() => handleOpenPay(card, 'shared')}
+                        >
+                          <span>🏠 繳家庭代墊款 ({formatCurrency(sharedDebt)})</span>
+                        </button>
+                        <div className="text-center" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          🔒 他人私卡僅開放自共同帳戶繳納家庭代墊款
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center" style={{ fontSize: '0.85rem', color: 'var(--color-success)', padding: '6px 0', fontWeight: 600 }}>
+                        <CheckCircle2 size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                        家庭公帳代墊款已全數清償
+                      </div>
+                    )
                   ) : totalDue > 0 ? (
                     <div className="text-center" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', padding: '6px 0' }}>
                       🔒 個人私卡僅持卡人本人可執行繳款沖銷作業
@@ -1183,6 +1294,11 @@ export default function Accounts() {
 
             <div className="form-group">
               <label className="form-label">還款性質歸屬</label>
+              {payCardModal.is_joint === 0 && user && payCardModal.user_id !== user.id ? (
+                <div style={{ padding: '8px 12px', background: 'rgba(59, 130, 246, 0.08)', borderRadius: 6, fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 600 }}>
+                  🏠 公帳（僅限自家庭共同帳戶沖抵他人私卡之家庭代墊款）
+                </div>
+              ) : (
               <div className="grid grid-2 gap-xs">
                 <button
                   type="button"
@@ -1201,6 +1317,7 @@ export default function Accounts() {
                   🔒 私帳
                 </button>
               </div>
+              )}
             </div>
 
             <div className="form-group">

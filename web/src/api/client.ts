@@ -215,6 +215,7 @@ export interface Account {
   is_joint?: number;
   shared_debt?: number;
   personal_debt?: number;
+  is_masked?: boolean;
   created_at: string;
   owner_name?: string;
 }

@@ -63,7 +63,8 @@ accounts.get('/', async (c) => {
   let sqlParams: (string | number)[] = [userId, ...memberUserIds];
 
   if (scope === 'household') {
-    sqlCondition = `a.user_id IN (${placeholders}) AND a.is_joint = 1`;
+    // 納入共同帳戶 (is_joint = 1)，以及家庭成員名下有待繳欠款的個人信用卡（後續過濾 shared_debt > 0）
+    sqlCondition = `a.user_id IN (${placeholders}) AND (a.is_joint = 1 OR a.type = 'credit_card')`;
     sqlParams = [...memberUserIds];
   } else if (scope === 'personal') {
     sqlCondition = `a.user_id = ? AND a.is_joint = 0`;
@@ -99,7 +100,32 @@ accounts.get('/', async (c) => {
     if (remaining > 0) personal += remaining;
     return { ...acc, shared_debt: shared, personal_debt: personal };
   }));
-  return c.json({ success: true, data: results });
+
+  // 過濾與脫敏處理 (ADR 0015)：
+  // 在公帳視角下，若為個人私卡 (is_joint = 0)，必須滿足 shared_debt > 0 才納入展示；
+  // 若為他人私卡，執行隱私脫敏（僅揭示公帳待繳額，遮蔽個人額度與個人私密消費）。
+  const finalResults = results
+    .filter(acc => {
+      if (scope === 'household' && acc.is_joint === 0) {
+        return acc.type === 'credit_card' && (acc.shared_debt || 0) > 0;
+      }
+      return true;
+    })
+    .map(acc => {
+      if (acc.is_joint === 0 && acc.user_id !== userId) {
+        return {
+          ...acc,
+          credit_limit: null,
+          balance: 0,
+          unbilled: acc.shared_debt || 0,
+          personal_debt: 0,
+          is_masked: true,
+        };
+      }
+      return acc;
+    });
+
+  return c.json({ success: true, data: finalResults });
 });
 
 // POST /accounts
@@ -206,9 +232,13 @@ accounts.post('/pay-credit-card', async (c) => {
 
   if (!card) return c.json({ success: false, error: '信用卡不存在' }, 404);
 
-  // 權限檢查：個人信用卡還款沖銷僅限持卡人本人操作
+  // 權限檢查 (ADR 0013 & ADR 0015)：
+  // 他人個人私卡僅允許繳納家庭代墊公帳 (is_shared === 1)；若嘗試為他人私卡操作個人私帳還款 (is_shared === 0)，強制攔截
+  const isSharedFlag = is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : 1;
   if ((card.is_joint === 0 || card.is_joint === null) && card.user_id !== userId) {
-    return c.json({ success: false, error: '權限不足：個人信用卡還款沖銷僅限持卡人本人操作' }, 403);
+    if (isSharedFlag !== 1) {
+      return c.json({ success: false, error: '權限不足：個人信用卡還款沖銷僅限持卡人本人操作' }, 403);
+    }
   }
 
   // Q6: 嚴格防呆上限檢查（不得超過已出帳+未出帳總額）
@@ -451,7 +481,32 @@ accounts.get('/balance', async (c) => {
   const cashTotal = accs.filter(a => a.type === 'cash').reduce((s, a) => s + (a.balance || 0), 0);
   const bankTotal = accs.filter(a => a.type === 'bank').reduce((s, a) => s + (a.balance || 0), 0);
   const ccBilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.balance || 0), 0);
-  const ccUnbilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.unbilled || 0), 0);
+  let ccUnbilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.unbilled || 0), 0);
+
+  // ADR 0015 精準會計責任法：在公帳視角下，加總全體成員個人私卡上的家庭代墊公帳欠款 (shared_debt)
+  if (scope === 'household') {
+    const personalCards = await c.env.DB.prepare(
+      `SELECT id, balance, unbilled FROM accounts WHERE user_id IN (${placeholders}) AND is_joint = 0 AND type = 'credit_card'`
+    ).bind(...memberUserIds).all<{ id: string; balance: number; unbilled: number }>();
+
+    for (const card of personalCards.results) {
+      const totalDue = (card.balance || 0) + (card.unbilled || 0);
+      if (totalDue <= 0) continue;
+      const txs = await c.env.DB.prepare(
+        "SELECT amount, is_shared FROM transactions WHERE account_id = ? AND type = 'expense' ORDER BY date DESC, created_at DESC LIMIT 50"
+      ).bind(card.id).all<{ amount: number; is_shared: number }>();
+      let remaining = totalDue;
+      let cardShared = 0;
+      for (const tx of txs.results) {
+        if (remaining <= 0) break;
+        const take = Math.min(remaining, tx.amount);
+        if (tx.is_shared === 1) cardShared += take;
+        remaining -= take;
+      }
+      ccUnbilled += cardShared;
+    }
+  }
+
   const available = cashTotal + bankTotal - ccBilled - ccUnbilled;
 
   const recurring = await c.env.DB.prepare(`SELECT * FROM recurring_items WHERE user_id IN (${placeholders}) AND type = 'expense'`).bind(...memberUserIds).all();
