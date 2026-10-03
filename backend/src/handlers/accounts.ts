@@ -1,7 +1,7 @@
 import { getTaipeiDateString } from '../utils/date';
 
 let accountsMigrated = false;
-async function ensureAccountsSchema(db: any) {
+export async function ensureAccountsSchema(db: any) {
   if (accountsMigrated) return;
   try {
     await db.prepare('ALTER TABLE accounts ADD COLUMN is_joint INTEGER DEFAULT 0').run();
@@ -17,21 +17,6 @@ async function ensureAccountsSchema(db: any) {
   } catch (_) {}
   try {
     await db.prepare('ALTER TABLE transactions ADD COLUMN defer_to_next_statement INTEGER NOT NULL DEFAULT 0').run();
-  } catch (_) {}
-  try {
-    await db.prepare(`
-      UPDATE transactions
-      SET is_billed = 1
-      WHERE id IN (
-        SELECT t.id
-        FROM transactions t
-        JOIN accounts a ON t.account_id = a.id
-        WHERE a.type = 'credit_card'
-          AND a.last_rollover_at IS NOT NULL
-          AND t.created_at <= a.last_rollover_at
-          AND t.is_billed = 0
-      )
-    `).run();
   } catch (_) {}
   try {
     const tableInfo = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'").first();
@@ -476,26 +461,17 @@ accounts.post('/:id/rollover-statement', async (c) => {
   });
 });
 
-// POST /accounts/:id/reconcile — 信用卡未出帳自動校準
-accounts.post('/:id/reconcile', async (c) => {
-  const userId = c.get('userId');
-  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
-  const placeholders = memberUserIds.map(() => '?').join(',');
-  const id = c.req.param('id');
+export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string) {
+  await ensureAccountsSchema(db);
+  const card = await db.prepare(
+    `SELECT id, name, balance, unbilled, statement_day, is_joint, user_id FROM accounts WHERE id = ? AND type = 'credit_card'`
+  ).bind(cardId).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; is_joint: number; user_id: string }>();
 
-  const card = await c.env.DB.prepare(
-    `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
-  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; is_joint: number; user_id: string }>();
+  if (!card) return null;
 
-  if (!card) return c.json({ success: false, error: '信用卡不存在或無權限' }, 404);
-
-  // 權限檢查：個人信用卡校準僅限持卡人本人操作
-  if ((card.is_joint === 0 || card.is_joint === null) && card.user_id !== userId) {
-    return c.json({ success: false, error: '權限不足：個人信用卡校準僅限持卡人本人操作' }, 403);
-  }
-
-  // 計算最近一次已發生之基準結帳日 (Cutoff Statement Date，作為未出帳歷史區間下限)
+  // 計算最近一次已發生之基準結帳日 (cutoffStatementDate, S_cutoff) 與上一個結帳日 (prevCutoffStatementDate, S_prev)
   let cutoffStatementDate = '';
+  let prevCutoffStatementDate = '';
   if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
     const taipeiDateStr = getTaipeiDateString();
     const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
@@ -513,17 +489,64 @@ accounts.post('/:id/reconcile', async (c) => {
     const lastDayOfMonth = new Date(cutoffYear, cutoffMonth, 0).getDate();
     const day = Math.min(card.statement_day, lastDayOfMonth);
     cutoffStatementDate = `${cutoffYear}-${String(cutoffMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    let prevYear = cutoffYear;
+    let prevMonth = cutoffMonth - 1;
+    if (prevMonth === 0) {
+      prevMonth = 12;
+      prevYear -= 1;
+    }
+    const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
+    const prevDay = Math.min(card.statement_day, prevLastDay);
+    prevCutoffStatementDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`;
+  }
+
+  // 1. 出帳狀態自癒修復 (Self-Healing Billed State)
+  if (cutoffStatementDate && prevCutoffStatementDate) {
+    await db.batch([
+      // 凡屬當期未出帳區間之交易 (date > S_cutoff，或 S_prev < date <= S_cutoff 且勾選延至下期) 強制修復為 is_billed = 0
+      db.prepare(`
+        UPDATE transactions
+        SET is_billed = 0
+        WHERE account_id = ?
+          AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+          AND (
+            (date > ?)
+            OR (date > ? AND date <= ? AND defer_to_next_statement = 1)
+          )
+      `).bind(cardId, cutoffStatementDate, prevCutoffStatementDate, cutoffStatementDate),
+      // 早於當期未出帳區間之歷史已結算週期交易對齊為 is_billed = 1
+      db.prepare(`
+        UPDATE transactions
+        SET is_billed = 1
+        WHERE account_id = ?
+          AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+          AND (
+            (date <= ? AND defer_to_next_statement = 0)
+            OR (date <= ?)
+          )
+      `).bind(cardId, cutoffStatementDate, prevCutoffStatementDate),
+    ]);
+  } else {
+    // 若未設定結帳日，確保勾選延至下期之交易重置為未出帳 (is_billed = 0)
+    await db.prepare(`
+      UPDATE transactions
+      SET is_billed = 0
+      WHERE account_id = ?
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+        AND defer_to_next_statement = 1
+    `).bind(cardId).run();
   }
 
   let timeFilter = '';
-  let queryParams: (string | number)[] = [id];
-  if (cutoffStatementDate) {
-    timeFilter = ' AND ((date > ?) OR (date <= ? AND defer_to_next_statement = 1))';
-    queryParams.push(cutoffStatementDate, cutoffStatementDate);
+  let queryParams: (string | number)[] = [cardId];
+  if (cutoffStatementDate && prevCutoffStatementDate) {
+    timeFilter = ' AND ((date > ?) OR (date > ? AND date <= ? AND defer_to_next_statement = 1))';
+    queryParams.push(cutoffStatementDate, prevCutoffStatementDate, cutoffStatementDate);
   }
 
-  // 1. 所有未出帳之消費支出總額 (is_billed = 0，範圍在上期結帳日後或過去延期)
-  const expenseRow = await c.env.DB.prepare(`
+  // 2. 當期未出帳之消費支出總額 (is_billed = 0)
+  const expenseRow = await db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM transactions
     WHERE account_id = ? AND type = 'expense' AND is_billed = 0
@@ -531,8 +554,8 @@ accounts.post('/:id/reconcile', async (c) => {
       ${timeFilter}
   `).bind(...queryParams).first<{ total: number }>();
 
-  // 2. 所有未出帳之刷退收入總額 (is_billed = 0，範圍在上期結帳日後或過去延期)
-  const refundRow = await c.env.DB.prepare(`
+  // 3. 當期未出帳之刷退收入總額 (is_billed = 0)
+  const refundRow = await db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM transactions
     WHERE account_id = ? AND type = 'income' AND is_billed = 0
@@ -540,38 +563,22 @@ accounts.post('/:id/reconcile', async (c) => {
       ${timeFilter}
   `).bind(...queryParams).first<{ total: number }>();
 
-  // 3. 當期還款沖抵未出帳總額 (未結算之 unbilled_offset)
-  let offsetFilter = '';
-  let offsetParams: (string | number)[] = [id];
-  if (cutoffStatementDate) {
-    offsetFilter = ' AND date > ?';
-    offsetParams.push(cutoffStatementDate);
-  }
-
-  const repaymentRow = await c.env.DB.prepare(`
-    SELECT COALESCE(SUM(unbilled_offset), 0) as total
-    FROM transactions
-    WHERE account_id = ? AND category = '信用卡還款' AND is_billed = 0
-      ${offsetFilter}
-  `).bind(...offsetParams).first<{ total: number }>();
-
   const totalExp = expenseRow ? Number(expenseRow.total) : 0;
   const totalRef = refundRow ? Number(refundRow.total) : 0;
-  const totalUnbilledOffset = repaymentRow ? Number(repaymentRow.total) : 0;
 
-  // 未出帳 = MAX(0, 支出 - 刷退 - 當期已沖未出帳還款)
-  const newUnbilled = Math.max(0, totalExp - totalRef - totalUnbilledOffset);
+  // 純粹未出帳淨額 = MAX(0, 當期未出帳消費 - 當期未出帳刷退)，不扣減 unbilled_offset 以免溢扣上期繳卡費
+  const newUnbilled = Math.max(0, totalExp - totalRef);
 
   // 更新 accounts.unbilled
-  await c.env.DB.prepare('UPDATE accounts SET unbilled = ? WHERE id = ?')
-    .bind(newUnbilled, id).run();
+  await db.prepare('UPDATE accounts SET unbilled = ? WHERE id = ?')
+    .bind(newUnbilled, cardId).run();
 
   // 重算 shared_debt 與 personal_debt
   const totalDue = (card.balance || 0) + newUnbilled;
   let shared = 0;
   let personal = 0;
   if (totalDue > 0) {
-    const txs = await c.env.DB.prepare(
+    const txs = await db.prepare(
       "SELECT amount, is_shared FROM transactions WHERE account_id = ? AND type = 'expense' ORDER BY date DESC, created_at DESC LIMIT 50"
     ).bind(card.id).all();
     let remaining = totalDue;
@@ -585,16 +592,52 @@ accounts.post('/:id/reconcile', async (c) => {
     if (remaining > 0) personal += remaining;
   }
 
+  return {
+    id: card.id,
+    name: card.name,
+    balance: card.balance,
+    unbilled: newUnbilled,
+    shared_debt: shared,
+    personal_debt: personal,
+    cutoffStatementDate,
+    prevCutoffStatementDate,
+  };
+}
+
+// POST /accounts/:id/reconcile — 信用卡未出帳自動校準
+accounts.post('/:id/reconcile', async (c) => {
+  await ensureAccountsSchema(c.env.DB);
+  const userId = c.get('userId');
+  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  const placeholders = memberUserIds.map(() => '?').join(',');
+  const id = c.req.param('id');
+
+  const card = await c.env.DB.prepare(
+    `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
+  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; is_joint: number; user_id: string }>();
+
+  if (!card) return c.json({ success: false, error: '信用卡不存在或無權限' }, 404);
+
+  // 權限檢查：個人信用卡校準僅限持卡人本人操作
+  if ((card.is_joint === 0 || card.is_joint === null) && card.user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：個人信用卡校準僅限持卡人本人操作' }, 403);
+  }
+
+  const reconciled = await reconcileCreditCardUnbilled(c.env.DB, id);
+  if (!reconciled) {
+    return c.json({ success: false, error: '信用卡不存在或無權限' }, 404);
+  }
+
   return c.json({
     success: true,
     data: {
-      id,
-      name: card.name,
-      balance: card.balance,
-      unbilled: newUnbilled,
-      shared_debt: shared,
-      personal_debt: personal,
-      message: `已自動校準「${card.name}」未出帳金額為 NT$ ${newUnbilled.toLocaleString()}`,
+      id: reconciled.id,
+      name: reconciled.name,
+      balance: reconciled.balance,
+      unbilled: reconciled.unbilled,
+      shared_debt: reconciled.shared_debt,
+      personal_debt: reconciled.personal_debt,
+      message: `已自動校準「${reconciled.name}」未出帳金額為 NT$ ${reconciled.unbilled.toLocaleString()}`,
     }
   });
 });
