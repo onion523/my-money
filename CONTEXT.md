@@ -224,6 +224,10 @@ _Avoid_: 分期 (installment)、平滑化 (smoothing)、攤提 (proration)
 支援切換「🌐 全部 (`all`)」、「🏠 公帳 (`household`)」、「🔒 私帳 (`personal`)」之未來 30 天逐日資金流模擬引擎。各視角之第 0 天起始基準餘額與帳戶管理頁之「💎 淨可用餘額（含公帳權責代墊扣減）」100% 對齊，並依視角過濾未來 30 天預定發生之週期收支排程事件，於時間軸卡片標示 `🏠 公帳` / `🔒 私帳` 徽章與扣款帳戶。
 _Avoid_: 單一混合預測 (unscoped mixed forecast)、起點與帳戶餘額脫鉤 (decoupled starting balance)
 
+**Card Payment Event (繳卡費事件)**:
+現金流預測時間軸上，信用卡於繳款日產生的一筆支出事件，金額為該卡「已出帳餘額」，依視角僅計入對應之公帳代墊或個人部分。預測僅供參考，不需「標記已入信用卡帳」，亦不自動建立交易。
+_Avoid_: 標記已入帳 (mark as posted)、自動繳卡 (auto repayment)
+
 **Savings Goal (儲蓄目標)**:
 使用者設定具有目標總額與預計達成日的專項資產目標，其每月提撥額實質鎖定可支配現金。
 _Avoid_: 存錢筒 (piggy bank)、夢想基金 (fund target)、願望 (wish)
