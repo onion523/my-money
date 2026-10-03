@@ -57,6 +57,13 @@ CREATE TABLE IF NOT EXISTS recurring_items (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 現金流預測已繳豁免事件 (ADR 0018)
+CREATE TABLE IF NOT EXISTS forecast_settled_events (
+  event_key TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 儲蓄目標
 CREATE TABLE IF NOT EXISTS goals (
   id TEXT PRIMARY KEY,

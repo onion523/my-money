@@ -11,16 +11,40 @@ forecast.use('*', authMiddleware);
 
 const CYCLE_MONTHS: Record<string, number> = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
 
+let forecastSchemaMigrated = false;
+export async function ensureForecastSchema(db: any) {
+  if (forecastSchemaMigrated) return;
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS forecast_settled_events (
+        event_key TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+  } catch (_) {}
+  forecastSchemaMigrated = true;
+}
+
 export interface ForecastEvent {
+  event_key: string;
   date: string;
   name: string;
   type: string;
   amount: number;
   is_shared: number;
   account_name?: string;
+  is_settled?: boolean;
+  can_settle?: boolean;
 }
 
-function getDaysInForecast(items: (RecurringItem & { account_name?: string; is_shared?: number })[], days = 30): ForecastEvent[] {
+function getDaysInForecast(
+  items: (RecurringItem & { account_name?: string; is_shared?: number })[],
+  days = 30,
+  settledKeys: Set<string> = new Set(),
+  userId = '',
+  myRole: string | null = 'member'
+): ForecastEvent[] {
   const events: ForecastEvent[] = [];
   const forecastDays = getTaipeiForecastDays(days);
 
@@ -42,13 +66,19 @@ function getDaysInForecast(items: (RecurringItem & { account_name?: string; is_s
       const targetDay = Math.min(item.day_of_cycle, maxDaysInMonth);
 
       if (isCycleMonth && dom === targetDay) {
+        const eventKey = `recurring:${item.id}:${dayObj.dateStr}`;
+        const isShared = item.is_shared ?? 0;
+        const canSettle = isShared === 0 ? item.user_id === userId : (item.user_id === userId || myRole === 'admin');
         events.push({
+          event_key: eventKey,
           date: dayObj.dateStr,
           name: item.name,
           type: item.type,
           amount: item.amount,
-          is_shared: item.is_shared ?? 0,
-          account_name: item.account_name || undefined
+          is_shared: isShared,
+          account_name: item.account_name || undefined,
+          is_settled: settledKeys.has(eventKey),
+          can_settle: canSettle,
         });
       }
     }
@@ -56,8 +86,16 @@ function getDaysInForecast(items: (RecurringItem & { account_name?: string; is_s
   return events;
 }
 
-// 試算第 0 天起始基準可用餘額與信用卡繳卡費事件 (ADR 0015 權責會計 + ADR 0017 繳卡費事件)
-async function getForecastStartingBalance(db: any, userId: string, scope: string, memberUserIds: string[], days = 30) {
+// 試算第 0 天起始基準可用餘額與信用卡繳卡費事件 (ADR 0015 權責會計 + ADR 0017 繳卡費事件 + ADR 0018 單筆已繳豁免)
+async function getForecastStartingBalance(
+  db: any,
+  userId: string,
+  scope: string,
+  memberUserIds: string[],
+  days = 30,
+  settledKeys: Set<string> = new Set(),
+  myRole: string | null = 'member'
+) {
   const placeholders = memberUserIds.map(() => '?').join(',');
   let sqlCondition = `(user_id = ? OR (user_id IN (${placeholders}) AND is_joint = 1))`;
   let sqlParams: any[] = [userId, ...memberUserIds];
@@ -134,13 +172,19 @@ async function getForecastStartingBalance(db: any, userId: string, scope: string
 
     const dueDate = card.payment_due_day ? findDueDate(card.payment_due_day) : null;
     if (dueDate) {
+      const eventKey = `card_due:${card.id}:${dueDate}`;
+      const isShared = isJoint || !isOwn || scope === 'household' ? 1 : 0;
+      const canSettle = isShared === 0 ? isOwn : (isOwn || myRole === 'admin');
       cardEvents.push({
+        event_key: eventKey,
         date: dueDate,
         name: `💳 繳卡費 · ${card.name}`,
         type: 'expense',
         amount: Math.round(billed * 100) / 100,
-        is_shared: isJoint || !isOwn || scope === 'household' ? 1 : 0,
+        is_shared: isShared,
         account_name: card.name,
+        is_settled: settledKeys.has(eventKey),
+        can_settle: canSettle,
       });
     } else {
       billedImmediate += billed;
@@ -151,15 +195,25 @@ async function getForecastStartingBalance(db: any, userId: string, scope: string
   return { available, cashTotal, bankTotal, cardEvents };
 }
 
+async function getSettledKeysSet(db: any): Promise<Set<string>> {
+  await ensureForecastSchema(db);
+  const rows = await db.prepare('SELECT event_key FROM forecast_settled_events').all();
+  const list = (rows.results || []) as Array<{ event_key: string }>;
+  return new Set(list.map(r => r.event_key));
+}
+
 // GET /forecast (支援 scope = all | household | personal)
 forecast.get('/', async (c) => {
   const userId = c.get('userId');
   await ensureRecurringSchema(c.env.DB);
+  const settledKeys = await getSettledKeysSet(c.env.DB);
   const scope = c.req.query('scope') || 'all';
-  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
 
-  const { available, cardEvents } = await getForecastStartingBalance(c.env.DB, userId, scope, memberUserIds);
+  const { available, cardEvents } = await getForecastStartingBalance(
+    c.env.DB, userId, scope, memberUserIds, 30, settledKeys, myRole
+  );
   let balance = available;
 
   let recCondition = `((r.user_id = ? AND r.is_shared = 0) OR (r.user_id IN (${placeholders}) AND r.is_shared = 1))`;
@@ -181,9 +235,9 @@ forecast.get('/', async (c) => {
   `).bind(...recParams).all();
 
   const items = recRows.results as unknown as (RecurringItem & { account_name?: string })[];
-  const events = [...getDaysInForecast(items, 30), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
+  const events = [...getDaysInForecast(items, 30, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
 
-  // 逐日模擬
+  // 逐日模擬（ADR 0018：已勾選 is_settled 之事件不列入餘額加減）
   const forecastDays = getTaipeiForecastDays(30);
   const dailyBalances: Array<{ date: string; balance: number; events: ForecastEvent[] }> = [];
   let minBalance = balance;
@@ -192,7 +246,11 @@ forecast.get('/', async (c) => {
   for (let d = 0; d < 30; d++) {
     const dateStr = forecastDays[d].dateStr;
     const dayEvents = events.filter(e => e.date === dateStr);
-    dayEvents.forEach(e => { balance += e.type === 'income' ? e.amount : -e.amount; });
+    dayEvents.forEach(e => {
+      if (!e.is_settled) {
+        balance += e.type === 'income' ? e.amount : -e.amount;
+      }
+    });
     if (balance < minBalance) { minBalance = balance; minDate = dateStr; }
     dailyBalances.push({ date: dateStr, balance: Math.round(balance * 100) / 100, events: dayEvents });
   }
@@ -213,13 +271,16 @@ forecast.get('/', async (c) => {
 forecast.post('/purchase-check', async (c) => {
   const userId = c.get('userId');
   await ensureRecurringSchema(c.env.DB);
+  const settledKeys = await getSettledKeysSet(c.env.DB);
   const { amount, scope = 'all' } = await c.req.json();
   if (!amount || amount <= 0) return c.json({ success: false, error: '請輸入有效金額' }, 400);
 
-  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
 
-  const { available, cardEvents } = await getForecastStartingBalance(c.env.DB, userId, scope, memberUserIds);
+  const { available, cardEvents } = await getForecastStartingBalance(
+    c.env.DB, userId, scope, memberUserIds, 30, settledKeys, myRole
+  );
   let balance = available - amount;
 
   // 儲蓄目標影響 (ADR 0016: 公帳視角不檢核成員個人私密儲蓄目標)
@@ -234,7 +295,7 @@ forecast.post('/purchase-check', async (c) => {
     affectsSavings = affectedGoals.length > 0 && balance < totalReserve;
   }
 
-  // 30天現金流
+  // 30天現金流（ADR 0018：跳過已勾選 is_settled 之事件）
   let recCondition = `((r.user_id = ? AND r.is_shared = 0) OR (r.user_id IN (${placeholders}) AND r.is_shared = 1))`;
   let recParams: any[] = [userId, ...memberUserIds];
   if (scope === 'household') {
@@ -254,11 +315,13 @@ forecast.post('/purchase-check', async (c) => {
   `).bind(...recParams).all();
 
   const items = recRows.results as unknown as (RecurringItem & { account_name?: string })[];
-  const events = [...getDaysInForecast(items, 30), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
+  const events = [...getDaysInForecast(items, 30, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
   let minBalance = balance;
   events.forEach(e => {
-    balance += e.type === 'income' ? e.amount : -e.amount;
-    if (balance < minBalance) minBalance = balance;
+    if (!e.is_settled) {
+      balance += e.type === 'income' ? e.amount : -e.amount;
+      if (balance < minBalance) minBalance = balance;
+    }
   });
 
   const willOverdraft = minBalance < 0;
@@ -268,6 +331,60 @@ forecast.post('/purchase-check', async (c) => {
   else verdict = 'safe';
 
   return c.json({ success: true, data: { amount, verdict, willOverdraft, affectsSavings, affectedGoals, minBalance } });
+});
+
+// POST /forecast/settle — 單筆預測事件勾選／取消已繳 (ADR 0018 + ADR 0013 權限防線)
+forecast.post('/settle', async (c) => {
+  const userId = c.get('userId');
+  await ensureRecurringSchema(c.env.DB);
+  await ensureForecastSchema(c.env.DB);
+  const { event_key, settled } = await c.req.json();
+  if (!event_key || typeof event_key !== 'string') {
+    return c.json({ success: false, error: '缺少 event_key' }, 400);
+  }
+
+  const parts = event_key.split(':');
+  const kind = parts[0];
+  const targetId = parts[1];
+  if ((kind !== 'recurring' && kind !== 'card_due') || !targetId) {
+    return c.json({ success: false, error: '無效的 event_key 格式' }, 400);
+  }
+
+  const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
+  const placeholders = memberUserIds.map(() => '?').join(',');
+
+  if (kind === 'recurring') {
+    const rec = await c.env.DB.prepare(
+      `SELECT user_id, is_shared FROM recurring_items WHERE id = ? AND user_id IN (${placeholders})`
+    ).bind(targetId, ...memberUserIds).first<any>();
+    if (!rec) return c.json({ success: false, error: '找不到對應的週期收支項目' }, 404);
+    if ((rec.is_shared === 0 || !rec.is_shared) && rec.user_id !== userId) {
+      return c.json({ success: false, error: '權限不足：個人私帳預測事件僅限本人勾選已繳' }, 403);
+    }
+    if (rec.is_shared === 1 && rec.user_id !== userId && myRole !== 'admin') {
+      return c.json({ success: false, error: '權限不足：家庭公帳預測事件僅限建立者本人或家庭管理員勾選已繳' }, 403);
+    }
+  } else if (kind === 'card_due') {
+    const card = await c.env.DB.prepare(
+      `SELECT user_id, is_joint FROM accounts WHERE id = ? AND type = 'credit_card' AND user_id IN (${placeholders})`
+    ).bind(targetId, ...memberUserIds).first<any>();
+    if (!card) return c.json({ success: false, error: '找不到對應的信用卡帳戶' }, 404);
+    if (card.user_id !== userId && myRole !== 'admin') {
+      return c.json({ success: false, error: '權限不足：他人信用卡繳款事件僅限持卡人本人或家庭管理員勾選已繳' }, 403);
+    }
+  }
+
+  if (settled) {
+    await c.env.DB.prepare(
+      'INSERT OR REPLACE INTO forecast_settled_events (event_key, user_id) VALUES (?, ?)'
+    ).bind(event_key, userId).run();
+  } else {
+    await c.env.DB.prepare(
+      'DELETE FROM forecast_settled_events WHERE event_key = ?'
+    ).bind(event_key).run();
+  }
+
+  return c.json({ success: true, data: { event_key, is_settled: Boolean(settled) } });
 });
 
 export default forecast;

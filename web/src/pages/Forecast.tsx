@@ -1,6 +1,6 @@
 import { ForecastSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
-import { forecastApi, ForecastResult, PurchaseCheckResult } from '../api/client'
+import { forecastApi, ForecastResult, PurchaseCheckResult, DayEvent } from '../api/client'
 import { formatCurrency, formatDate } from '../components/utils'
 import {
   AreaChart,
@@ -28,6 +28,7 @@ export default function Forecast() {
   const [scope, setScope] = useState<'all' | 'household' | 'personal'>('all')
   const [forecast, setForecast] = useState<ForecastResult | null>(null)
   const [loading, setLoading] = useState(true)
+  const [settlingKey, setSettlingKey] = useState<string | null>(null)
 
   // 購買力檢查狀態
   const [checkAmount, setCheckAmount] = useState('')
@@ -58,6 +59,27 @@ export default function Forecast() {
       }
     }
   }, [scope])
+
+  const handleToggleSettle = async (ev: DayEvent) => {
+    if (!ev.event_key || ev.can_settle === false || settlingKey) return
+    try {
+      setSettlingKey(ev.event_key)
+      await forecastApi.toggleSettle(ev.event_key, !ev.is_settled)
+      await loadForecast(scope)
+      if (checkAmount) {
+        const amt = parseFloat(checkAmount)
+        if (!isNaN(amt) && amt > 0) {
+          forecastApi.purchaseCheck(amt, scope)
+            .then(res => setCheckResult(res))
+            .catch(() => {})
+        }
+      }
+    } catch (err: any) {
+      alert(err.message || '更新已繳狀態失敗')
+    } finally {
+      setSettlingKey(null)
+    }
+  }
 
   const handlePurchaseCheck = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -343,9 +365,12 @@ export default function Forecast() {
 
         {/* 右側：未來 30 天排定事件 */}
         <div className="card">
-          <div className="flex items-center gap-xs" style={{ marginBottom: 16 }}>
-            <Calendar size={20} color="var(--color-primary)" />
-            <h2 className="text-xl">未來 30 天收支排程</h2>
+          <div className="flex items-center justify-between" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+            <div className="flex items-center gap-xs">
+              <Calendar size={20} color="var(--color-primary)" />
+              <h2 className="text-xl">未來 30 天收支排程</h2>
+            </div>
+            <span className="text-xs text-muted">勾選「已繳」可排除已入卡帳／已消費項目，避免重複計算</span>
           </div>
 
           {!forecast?.events || forecast.events.length === 0 ? (
@@ -356,24 +381,32 @@ export default function Forecast() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflowY: 'auto' }}>
               {forecast.events.map((ev, idx) => (
                 <div
-                  key={`${ev.date}-${ev.name}-${idx}`}
+                  key={ev.event_key || `${ev.date}-${ev.name}-${idx}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    gap: 10,
                     padding: '10px 14px',
                     borderRadius: 'var(--radius-sm)',
                     background: 'var(--bg-surface-2)',
-                    borderLeft: `4px solid ${ev.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)'}`,
+                    borderLeft: `4px solid ${ev.is_settled ? 'var(--border-color)' : ev.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)'}`,
+                    opacity: ev.is_settled ? 0.58 : 1,
+                    transition: 'opacity 0.2s ease',
                   }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>{ev.name}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ textDecoration: ev.is_settled ? 'line-through' : 'none' }}>{ev.name}</span>
                       {ev.is_shared === 1 ? (
                         <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>🏠 公帳</span>
                       ) : (
                         <span className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>🔒 私帳</span>
+                      )}
+                      {ev.is_settled && (
+                        <span className="badge badge-income" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
+                          ✅ 已繳（不計入預測）
+                        </span>
                       )}
                     </div>
                     <div className="text-xs text-muted" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
@@ -382,14 +415,37 @@ export default function Forecast() {
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      fontFamily: 'var(--font-display)',
-                      color: ev.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)',
-                    }}
-                  >
-                    {ev.type === 'income' ? '+' : '-'}{formatCurrency(ev.amount)}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        fontFamily: 'var(--font-display)',
+                        color: ev.is_settled ? 'var(--text-muted)' : ev.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)',
+                        textDecoration: ev.is_settled ? 'line-through' : 'none',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {ev.type === 'income' ? '+' : '-'}{formatCurrency(ev.amount)}
+                    </div>
+
+                    {ev.event_key && ev.can_settle !== false && (
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${ev.is_settled ? 'btn-secondary' : 'btn-ghost'}`}
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '0.75rem',
+                          borderRadius: 6,
+                          border: '1px solid var(--border-color)',
+                          whiteSpace: 'nowrap',
+                        }}
+                        disabled={settlingKey === ev.event_key}
+                        onClick={() => handleToggleSettle(ev)}
+                        title={ev.is_settled ? '點擊取消已繳，恢復列入現金流預測計算' : '勾選已繳後將不列入現金流預測計算'}
+                      >
+                        {settlingKey === ev.event_key ? '處理中…' : ev.is_settled ? '↩️ 取消已繳' : '☑️ 已繳'}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

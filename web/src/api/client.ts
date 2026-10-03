@@ -148,6 +148,7 @@ export const budgetsApi = {
 export const forecastApi = {
   get: (scope?: string) => get<ForecastResult>(`/forecast${scope ? '?scope=' + scope : ''}`),
   purchaseCheck: (amount: number, scope?: string) => post<PurchaseCheckResult>('/forecast/purchase-check', { amount, scope }),
+  toggleSettle: (event_key: string, settled: boolean) => post<{ event_key: string; is_settled: boolean }>('/forecast/settle', { event_key, settled }),
 };
 
 // Export
@@ -315,12 +316,15 @@ export interface ForecastResult {
 }
 
 export interface DayEvent {
+  event_key?: string;
   date: string;
   name: string;
   type: string;
   amount: number;
   is_shared?: number;
   account_name?: string;
+  is_settled?: boolean;
+  can_settle?: boolean;
 }
 
 export interface PurchaseCheckResult {

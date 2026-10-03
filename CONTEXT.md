@@ -225,8 +225,12 @@ _Avoid_: 分期 (installment)、平滑化 (smoothing)、攤提 (proration)
 _Avoid_: 單一混合預測 (unscoped mixed forecast)、起點與帳戶餘額脫鉤 (decoupled starting balance)
 
 **Card Payment Event (繳卡費事件)**:
-現金流預測時間軸上，信用卡於繳款日產生的一筆支出事件，金額為該卡「已出帳餘額」，依視角僅計入對應之公帳代墊或個人部分。預測僅供參考，不需「標記已入信用卡帳」，亦不自動建立交易。
-_Avoid_: 標記已入帳 (mark as posted)、自動繳卡 (auto repayment)
+現金流預測時間軸上，信用卡於繳款日產生的一筆支出事件，金額為該卡「已出帳餘額」，依視角僅計入對應之公帳代墊或個人部分。
+_Avoid_: 自動繳卡 (auto repayment)
+
+**Settled Forecast Event (已繳預測事件)**:
+未來 30 天現金流預測排程中，已被使用者勾選標記為「✅ 已繳」之單次排程事件（涵蓋週期支出、週期收入與💳 繳卡費，以 `項目 ID + 預計日期 YYYY-MM-DD` 唯一識別）。當一筆事件已經實際刷卡入帳（進入信用卡未出帳）或已提前消費扣款時，勾選「已繳」即可將該次事件從 30 天現金流折線圖與購買力試算中豁免（不列入計算，防止重複扣款），並在排程清單中保留顯示為半透明刪除線狀態，支援隨時取消勾選恢復計算。
+_Avoid_: 刪除排程 (delete schedule)、永久停用 (permanent disable)
 
 **Savings Goal (儲蓄目標)**:
 使用者設定具有目標總額與預計達成日的專項資產目標，其每月提撥額實質鎖定可支配現金。
