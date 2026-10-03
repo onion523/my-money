@@ -21,10 +21,14 @@ import {
   Sparkles,
   ArrowRight,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Globe,
+  Users,
+  Lock
 } from 'lucide-react'
 
 export default function Forecast() {
+  const [scope, setScope] = useState<'all' | 'household' | 'personal'>('all')
   const [forecast, setForecast] = useState<ForecastResult | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -34,10 +38,10 @@ export default function Forecast() {
   const [checking, setChecking] = useState(false)
   const [checkError, setCheckError] = useState('')
 
-  const loadForecast = async () => {
+  const loadForecast = async (targetScope: 'all' | 'household' | 'personal' = scope) => {
     try {
       setLoading(true)
-      const data = await forecastApi.get()
+      const data = await forecastApi.get(targetScope)
       setForecast(data)
     } catch (e) {
       console.error(e)
@@ -47,8 +51,16 @@ export default function Forecast() {
   }
 
   useEffect(() => {
-    loadForecast()
-  }, [])
+    loadForecast(scope)
+    if (checkAmount) {
+      const amt = parseFloat(checkAmount)
+      if (!isNaN(amt) && amt > 0) {
+        forecastApi.purchaseCheck(amt, scope)
+          .then(res => setCheckResult(res))
+          .catch(() => {})
+      }
+    }
+  }, [scope])
 
   const handlePurchaseCheck = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,7 +73,7 @@ export default function Forecast() {
 
     try {
       setChecking(true)
-      const res = await forecastApi.purchaseCheck(amt)
+      const res = await forecastApi.purchaseCheck(amt, scope)
       setCheckResult(res)
     } catch (err: any) {
       setCheckError(err.message || '檢查失敗')
@@ -83,9 +95,49 @@ export default function Forecast() {
   return (
     <div className="fade-in">
       {/* 頁面標題 */}
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 16 }}>
         <h1 className="page-title">現金流預測 & 購買力試算 🔮</h1>
         <p className="page-subtitle">模擬未來 30 天資金流向，精確防範透支風險，並提供智慧購物決策支援</p>
+      </div>
+
+      {/* 帳本視角切換器 */}
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: 4,
+        background: 'var(--bg-surface-2)',
+        borderRadius: 12,
+        border: '1px solid var(--border-color)',
+        marginBottom: 20
+      }}>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('all')}
+        >
+          <Globe size={15} />
+          <span>全部</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('household')}
+        >
+          <Users size={15} />
+          <span>🏠 公帳</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('personal')}
+        >
+          <Lock size={15} />
+          <span>🔒 私帳</span>
+        </button>
       </div>
 
       {/* 30 天安全指標卡片 */}
@@ -151,7 +203,11 @@ export default function Forecast() {
             未來 30 天逐日現金流模擬趨勢
           </h2>
           <div className="text-xs text-muted">
-            起始餘額：銀行總額扣除信用卡已出及未出帳
+            {scope === 'household'
+              ? '起始餘額：公帳存款扣除共同卡及私卡代墊款 (權責淨額)'
+              : scope === 'personal'
+              ? '起始餘額：個人存款扣除個人卡款'
+              : '起始餘額：全戶存款扣除信用卡已出及未出帳'}
           </div>
         </div>
 
@@ -273,7 +329,7 @@ export default function Forecast() {
               <div style={{ fontSize: '0.875rem', lineHeight: 1.7, color: 'var(--text-secondary)' }}>
                 {checkResult.verdict === 'safe' && (
                   <p>
-                    消費 <strong>{formatCurrency(checkResult.amount)}</strong> 後，未來 30 天內現金流依舊充裕（最低點仍有 <strong>{formatCurrency(checkResult.minBalance)}</strong>），且完全不影響現有儲蓄目標進度。
+                    消費 <strong>{formatCurrency(checkResult.amount)}</strong> 後，未來 30 天內現金流依舊充裕（最低點仍有 <strong>{formatCurrency(checkResult.minBalance)}</strong>）{scope === 'household' ? '。' : '，且完全不影響現有儲蓄目標進度。'}
                   </p>
                 )}
                 {checkResult.verdict === 'caution' && (
@@ -318,8 +374,18 @@ export default function Forecast() {
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{ev.name}</div>
-                    <div className="text-xs text-muted">預計日期：{ev.date}</div>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>{ev.name}</span>
+                      {ev.is_shared === 1 ? (
+                        <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>🏠 公帳</span>
+                      ) : (
+                        <span className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>🔒 私帳</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                      <span>預計日期：{ev.date}</span>
+                      {ev.account_name && <span>({ev.account_name})</span>}
+                    </div>
                   </div>
 
                   <div

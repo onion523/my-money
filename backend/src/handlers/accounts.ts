@@ -46,6 +46,7 @@ import { Hono } from 'hono';
 import { Env } from '../types';
 import { authMiddleware, generateId } from '../middleware/jwt';
 import { getUserHousehold } from './households';
+import { ensureRecurringSchema } from './recurring';
 
 type Vars = { userId: string; userEmail: string; userName: string };
 const accounts = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -509,13 +510,31 @@ accounts.get('/balance', async (c) => {
 
   const available = cashTotal + bankTotal - ccBilled - ccUnbilled;
 
-  const recurring = await c.env.DB.prepare(`SELECT * FROM recurring_items WHERE user_id IN (${placeholders}) AND type = 'expense'`).bind(...memberUserIds).all();
+  await ensureRecurringSchema(c.env.DB);
+  let recCondition = `((r.user_id = ? AND r.is_shared = 0) OR (r.user_id IN (${placeholders}) AND r.is_shared = 1))`;
+  let recParams: any[] = [userId, ...memberUserIds];
+  if (scope === 'household') {
+    recCondition = `r.user_id IN (${placeholders}) AND r.is_shared = 1`;
+    recParams = [...memberUserIds];
+  } else if (scope === 'personal') {
+    recCondition = `r.user_id = ? AND r.is_shared = 0`;
+    recParams = [userId];
+  }
+
+  const recurring = await c.env.DB.prepare(
+    `SELECT amount, cycle FROM recurring_items r WHERE ${recCondition} AND type = 'expense'`
+  ).bind(...recParams).all();
   const cycleMonths: Record<string, number> = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
   const monthlyFixed = (recurring.results as Array<{ amount: number; cycle: string }>)
     .reduce((s, r) => s + r.amount / (cycleMonths[r.cycle] || 1), 0);
 
-  const goals = await c.env.DB.prepare(`SELECT monthly_reserve FROM goals WHERE user_id IN (${placeholders})`).bind(...memberUserIds).all();
-  const monthlyGoals = (goals.results as Array<{ monthly_reserve: number }>).reduce((s, g) => s + g.monthly_reserve, 0);
+  let monthlyGoals = 0;
+  if (scope !== 'household') {
+    const goalsCondition = scope === 'personal' ? 'user_id = ?' : `user_id IN (${placeholders})`;
+    const goalsParams = scope === 'personal' ? [userId] : memberUserIds;
+    const goals = await c.env.DB.prepare(`SELECT monthly_reserve FROM goals WHERE ${goalsCondition}`).bind(...goalsParams).all();
+    monthlyGoals = (goals.results as Array<{ monthly_reserve: number }>).reduce((s, g) => s + g.monthly_reserve, 0);
+  }
 
   const disposable = available - monthlyFixed - monthlyGoals;
   return c.json({ success: true, data: { cashTotal, bankTotal, ccBilled, ccUnbilled, available, monthlyFixed, monthlyGoals, disposable } });

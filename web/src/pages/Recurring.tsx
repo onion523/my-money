@@ -1,6 +1,7 @@
 import { RecurringSkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
-import { recurringApi, accountsApi, exportApi, RecurringItem, Account, AmortizeResult } from '../api/client'
+import { recurringApi, accountsApi, exportApi, householdApi, RecurringItem, Account, AmortizeResult } from '../api/client'
+import { useStore } from '../store/useStore'
 import { formatCurrency, CYCLE_LABELS } from '../components/utils'
 import Modal from '../components/Modal'
 import {
@@ -14,7 +15,10 @@ import {
   CreditCard,
   TrendingDown,
   TrendingUp,
-  Info
+  Info,
+  Globe,
+  Users,
+  Lock
 } from 'lucide-react'
 
 const CYCLE_DIVISORS: Record<string, number> = {
@@ -47,9 +51,12 @@ function formatScheduleLabel(item: RecurringItem, actionText: '扣款' | '入帳
 }
 
 export default function Recurring() {
+  const { user } = useStore()
   const [items, setItems] = useState<RecurringItem[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [amortize, setAmortize] = useState<AmortizeResult | null>(null)
+  const [myRole, setMyRole] = useState<'admin' | 'member' | null>(null)
+  const [scope, setScope] = useState<'all' | 'household' | 'personal'>('all')
   const [loading, setLoading] = useState(true)
 
   // Modal 狀態
@@ -63,6 +70,7 @@ export default function Recurring() {
     day_of_cycle: '1',
     month_of_cycle: '1',
     account_id: '',
+    is_shared: 0,
   })
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -81,18 +89,20 @@ export default function Recurring() {
     }
   }, [deleteTimer, modalDeleteTimer])
 
-  const loadData = async () => {
+  const loadData = async (currentScope: 'all' | 'household' | 'personal' = scope) => {
     try {
       setLoading(true)
       setLoadError(null)
-      const [recList, accs, amort] = await Promise.all([
-        recurringApi.list(),
-        accountsApi.list(),
-        recurringApi.amortize(),
+      const [recList, accs, amort, householdData] = await Promise.all([
+        recurringApi.list(currentScope),
+        accountsApi.list('all'),
+        recurringApi.amortize(currentScope),
+        householdApi.current().catch(() => null),
       ])
       setItems(recList)
       setAccounts(accs)
       if (amort) setAmortize(amort)
+      if (householdData?.myRole) setMyRole(householdData.myRole)
     } catch (err: any) {
       console.error('Failed to load recurring data:', err)
       setLoadError(err.message || '週期收支資料載入失敗，請檢查連線')
@@ -101,9 +111,18 @@ export default function Recurring() {
     }
   }
 
+  // 權限檢查 (ADR 0013 & ADR 0016)：
+  const canModifyRecurring = (item: RecurringItem) => {
+    if (item.is_shared === 0 || !item.is_shared) {
+      return !user || item.user_id === user.id
+    }
+    // 家庭公帳週期收支：建立者本人或家庭管理員共治
+    return (!user || item.user_id === user.id) || myRole === 'admin'
+  }
+
   useEffect(() => {
-    loadData()
-  }, [])
+    loadData(scope)
+  }, [scope])
 
   const handleCycleChange = (newCycle: typeof form.cycle) => {
     setForm(prev => {
@@ -134,6 +153,7 @@ export default function Recurring() {
       day_of_cycle: '1',
       month_of_cycle: '1',
       account_id: '',
+      is_shared: scope === 'household' ? 1 : 0,
     })
     setErrorMsg('')
     setConfirmingModalDelete(false)
@@ -141,6 +161,7 @@ export default function Recurring() {
   }
 
   const handleOpenEdit = (item: RecurringItem) => {
+    if (!canModifyRecurring(item)) return
     setEditingItem(item)
     setForm({
       name: item.name,
@@ -150,6 +171,7 @@ export default function Recurring() {
       day_of_cycle: item.day_of_cycle.toString(),
       month_of_cycle: (item.month_of_cycle || 1).toString(),
       account_id: item.account_id || '',
+      is_shared: item.is_shared ?? 0,
     })
     setErrorMsg('')
     setConfirmingModalDelete(false)
@@ -182,6 +204,7 @@ export default function Recurring() {
           day_of_cycle: day,
           month_of_cycle: month,
           account_id: form.account_id || undefined,
+          is_shared: form.is_shared,
         })
       } else {
         await recurringApi.create({
@@ -192,10 +215,11 @@ export default function Recurring() {
           day_of_cycle: day,
           month_of_cycle: month,
           account_id: form.account_id || undefined,
+          is_shared: form.is_shared,
         })
       }
       setShowModal(false)
-      loadData()
+      loadData(scope)
     } catch (err: any) {
       setErrorMsg(err.message || '儲存失敗')
     } finally {
@@ -297,6 +321,46 @@ export default function Recurring() {
         </div>
       </div>
 
+      {/* 帳本視角切換器 */}
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: 4,
+        background: 'var(--bg-surface-2)',
+        borderRadius: 12,
+        border: '1px solid var(--border-color)',
+        marginBottom: 20
+      }}>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('all')}
+        >
+          <Globe size={15} />
+          <span>全部</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'household' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('household')}
+        >
+          <Users size={15} />
+          <span>🏠 公帳</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${scope === 'personal' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ borderRadius: 8, padding: '6px 14px', fontSize: '0.85rem' }}
+          onClick={() => setScope('personal')}
+        >
+          <Lock size={15} />
+          <span>🔒 私帳</span>
+        </button>
+      </div>
+
       {/* 月分攤平滑統計卡片 */}
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
         <div className="stat-card">
@@ -348,11 +412,21 @@ export default function Recurring() {
                   <div
                     key={item.id}
                     className="recurring-card"
-                    onClick={() => handleOpenEdit(item)}
+                    onClick={() => canModifyRecurring(item) && handleOpenEdit(item)}
                   >
                     <div className="recurring-card-main">
                       <div className="recurring-card-header">
                         <span className="recurring-card-title">{item.name}</span>
+                        {item.is_shared === 1 ? (
+                          <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>🏠 公帳</span>
+                        ) : (
+                          <span className="badge badge-secondary" style={{ fontSize: '0.7rem' }}>🔒 私帳</span>
+                        )}
+                        {item.user_name && (
+                          <span className="badge" style={{ background: 'rgba(0,0,0,0.06)', fontSize: '0.7rem' }}>
+                            {item.user_name}
+                          </span>
+                        )}
                         <span className="badge badge-expense">
                           {CYCLE_LABELS[item.cycle] || item.cycle}
                         </span>
@@ -376,30 +450,32 @@ export default function Recurring() {
                         </div>
                       </div>
 
-                      <div className="recurring-card-actions">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleOpenEdit(item)
-                          }}
-                          title="編輯"
-                        >
-                          <Edit2 size={15} />
-                          <span>編輯</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${isConfirming ? 'btn-danger' : 'btn-ghost'}`}
-                          style={isConfirming ? {} : { color: 'var(--color-danger)' }}
-                          onClick={(e) => handleDeleteClick(e, item.id)}
-                          title="刪除"
-                        >
-                          <Trash2 size={15} />
-                          <span>{isConfirming ? '確定刪除？' : '刪除'}</span>
-                        </button>
-                      </div>
+                      {canModifyRecurring(item) && (
+                        <div className="recurring-card-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleOpenEdit(item)
+                            }}
+                            title="編輯"
+                          >
+                            <Edit2 size={15} />
+                            <span>編輯</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${isConfirming ? 'btn-danger' : 'btn-ghost'}`}
+                            style={isConfirming ? {} : { color: 'var(--color-danger)' }}
+                            onClick={(e) => handleDeleteClick(e, item.id)}
+                            title="刪除"
+                          >
+                            <Trash2 size={15} />
+                            <span>{isConfirming ? '確定刪除？' : '刪除'}</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -429,11 +505,21 @@ export default function Recurring() {
                   <div
                     key={item.id}
                     className="recurring-card"
-                    onClick={() => handleOpenEdit(item)}
+                    onClick={() => canModifyRecurring(item) && handleOpenEdit(item)}
                   >
                     <div className="recurring-card-main">
                       <div className="recurring-card-header">
                         <span className="recurring-card-title">{item.name}</span>
+                        {item.is_shared === 1 ? (
+                          <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>🏠 公帳</span>
+                        ) : (
+                          <span className="badge badge-secondary" style={{ fontSize: '0.7rem' }}>🔒 私帳</span>
+                        )}
+                        {item.user_name && (
+                          <span className="badge" style={{ background: 'rgba(0,0,0,0.06)', fontSize: '0.7rem' }}>
+                            {item.user_name}
+                          </span>
+                        )}
                         <span className="badge badge-income">{CYCLE_LABELS[item.cycle] || item.cycle}</span>
                         <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>{formatScheduleLabel(item, '入帳')}</span>
                       </div>
@@ -450,30 +536,32 @@ export default function Recurring() {
                         <div className="recurring-card-cycle">{CYCLE_LABELS[item.cycle]}收</div>
                       </div>
 
-                      <div className="recurring-card-actions">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleOpenEdit(item)
-                          }}
-                          title="編輯"
-                        >
-                          <Edit2 size={15} />
-                          <span>編輯</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${isConfirming ? 'btn-danger' : 'btn-ghost'}`}
-                          style={isConfirming ? {} : { color: 'var(--color-danger)' }}
-                          onClick={(e) => handleDeleteClick(e, item.id)}
-                          title="刪除"
-                        >
-                          <Trash2 size={15} />
-                          <span>{isConfirming ? '確定刪除？' : '刪除'}</span>
-                        </button>
-                      </div>
+                      {canModifyRecurring(item) && (
+                        <div className="recurring-card-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleOpenEdit(item)
+                            }}
+                            title="編輯"
+                          >
+                            <Edit2 size={15} />
+                            <span>編輯</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${isConfirming ? 'btn-danger' : 'btn-ghost'}`}
+                            style={isConfirming ? {} : { color: 'var(--color-danger)' }}
+                            onClick={(e) => handleDeleteClick(e, item.id)}
+                            title="刪除"
+                          >
+                            <Trash2 size={15} />
+                            <span>{isConfirming ? '確定刪除？' : '刪除'}</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -668,7 +756,15 @@ export default function Recurring() {
                 id="rec-account"
                 className="input"
                 value={form.account_id}
-                onChange={e => setForm(p => ({ ...p, account_id: e.target.value }))}
+                onChange={e => {
+                  const selectedId = e.target.value
+                  const targetAcc = accounts.find(a => a.id === selectedId)
+                  setForm(p => ({
+                    ...p,
+                    account_id: selectedId,
+                    ...(targetAcc ? { is_shared: targetAcc.is_joint === 1 ? 1 : 0 } : {})
+                  }))
+                }}
               >
                 <option value="">無特定帳戶</option>
                 {accounts.map(acc => (
@@ -677,6 +773,50 @@ export default function Recurring() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* 帳本歸屬 */}
+            <div className="input-group">
+              <label className="input-label">帳本歸屬</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  id="rec-is-shared-0"
+                  className={`btn ${form.is_shared === 0 ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{
+                    border: form.is_shared === 0 ? 'none' : '1px solid var(--border-color)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}
+                  onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
+                >
+                  <Lock size={15} />
+                  <span>🔒 私帳</span>
+                </button>
+                <button
+                  type="button"
+                  id="rec-is-shared-1"
+                  className={`btn ${form.is_shared === 1 ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{
+                    border: form.is_shared === 1 ? 'none' : '1px solid var(--border-color)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}
+                  onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
+                >
+                  <Users size={15} />
+                  <span>🏠 公帳</span>
+                </button>
+              </div>
+              <p className="text-xs text-muted" style={{ marginTop: 4 }}>
+                {form.is_shared === 1
+                  ? '🏠 家庭公帳：此項週期收支計入家庭公共現金流與固定收支，家庭管理員與建立者皆可管理。'
+                  : '🔒 個人私帳：僅本人可見並計入個人現金流。若選用個人信用卡固定扣繳公用費用，可手動切換為公帳。'}
+              </p>
             </div>
 
             {/* 操作按鈕列：編輯時左側提供刪除按鈕，右側為儲存按鈕 */}

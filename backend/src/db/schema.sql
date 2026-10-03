@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS recurring_items (
   cycle TEXT NOT NULL CHECK(cycle IN ('monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual')),
   day_of_cycle INTEGER NOT NULL DEFAULT 1,
   month_of_cycle INTEGER NOT NULL DEFAULT 1,
+  is_shared INTEGER NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

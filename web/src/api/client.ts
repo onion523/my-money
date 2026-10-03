@@ -121,8 +121,8 @@ export const txApi = {
 
 // Recurring
 export const recurringApi = {
-  list: () => get<RecurringItem[]>('/recurring'),
-  amortize: () => get<AmortizeResult>('/recurring/amortize'),
+  list: (scope?: string) => get<RecurringItem[]>(`/recurring${scope ? '?scope=' + scope : ''}`),
+  amortize: (scope?: string) => get<AmortizeResult>(`/recurring/amortize${scope ? '?scope=' + scope : ''}`),
   create: (body: Partial<RecurringItem>) => post<RecurringItem>('/recurring', body),
   update: (id: string, body: Partial<RecurringItem>) => put<RecurringItem>(`/recurring/${id}`, body),
   remove: (id: string) => del<null>(`/recurring/${id}`),
@@ -146,8 +146,8 @@ export const budgetsApi = {
 
 // Forecast & Purchase check
 export const forecastApi = {
-  get: () => get<ForecastResult>('/forecast'),
-  purchaseCheck: (amount: number) => post<PurchaseCheckResult>('/forecast/purchase-check', { amount }),
+  get: (scope?: string) => get<ForecastResult>(`/forecast${scope ? '?scope=' + scope : ''}`),
+  purchaseCheck: (amount: number, scope?: string) => post<PurchaseCheckResult>('/forecast/purchase-check', { amount, scope }),
 };
 
 // Export
@@ -263,12 +263,15 @@ export interface RecurringItem {
   user_id: string;
   account_id?: string | null;
   account_name?: string;
+  account_is_joint?: number;
+  user_name?: string;
   name: string;
   type: 'income' | 'expense';
   amount: number;
   cycle: 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual';
   day_of_cycle: number;
   month_of_cycle?: number;
+  is_shared?: number;
   created_at: string;
 }
 
@@ -316,6 +319,8 @@ export interface DayEvent {
   name: string;
   type: string;
   amount: number;
+  is_shared?: number;
+  account_name?: string;
 }
 
 export interface PurchaseCheckResult {

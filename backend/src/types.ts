@@ -58,7 +58,11 @@ export interface RecurringItem {
   cycle: 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual';
   day_of_cycle: number;
   month_of_cycle?: number;
+  is_shared?: number;
+  account_is_joint?: number;
   created_at: string;
+  user_name?: string;
+  account_name?: string;
 }
 
 export interface Goal {
