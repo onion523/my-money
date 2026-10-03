@@ -355,7 +355,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
     let statementYear = currYear;
     let statementMonth = currMonth;
 
-    if (currDay <= card.statement_day) {
+    if (currDay < card.statement_day) {
       statementMonth -= 1;
       if (statementMonth === 0) {
         statementMonth = 12;
@@ -494,38 +494,32 @@ accounts.post('/:id/reconcile', async (c) => {
     return c.json({ success: false, error: '權限不足：個人信用卡校準僅限持卡人本人操作' }, 403);
   }
 
-  // 計算上期結帳日 (作為未出帳歷史區間下限)
-  let prevStatementDate = '';
+  // 計算最近一次已發生之基準結帳日 (Cutoff Statement Date，作為未出帳歷史區間下限)
+  let cutoffStatementDate = '';
   if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
     const taipeiDateStr = getTaipeiDateString();
     const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
-    let statementYear = currYear;
-    let statementMonth = currMonth;
+    let cutoffYear = currYear;
+    let cutoffMonth = currMonth;
 
-    if (currDay <= card.statement_day) {
-      statementMonth -= 1;
-      if (statementMonth === 0) {
-        statementMonth = 12;
-        statementYear -= 1;
+    // 若當前日尚未到達結帳日 (currDay < card.statement_day)，則基準結帳日為上個月結帳日
+    if (currDay < card.statement_day) {
+      cutoffMonth -= 1;
+      if (cutoffMonth === 0) {
+        cutoffMonth = 12;
+        cutoffYear -= 1;
       }
     }
-    // 推算上一個結帳日
-    let prevYear = statementYear;
-    let prevMonth = statementMonth - 1;
-    if (prevMonth === 0) {
-      prevMonth = 12;
-      prevYear -= 1;
-    }
-    const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
-    const pDay = Math.min(card.statement_day, prevLastDay);
-    prevStatementDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`;
+    const lastDayOfMonth = new Date(cutoffYear, cutoffMonth, 0).getDate();
+    const day = Math.min(card.statement_day, lastDayOfMonth);
+    cutoffStatementDate = `${cutoffYear}-${String(cutoffMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 
   let timeFilter = '';
   let queryParams: (string | number)[] = [id];
-  if (prevStatementDate) {
+  if (cutoffStatementDate) {
     timeFilter = ' AND ((date > ?) OR (date <= ? AND defer_to_next_statement = 1))';
-    queryParams.push(prevStatementDate, prevStatementDate);
+    queryParams.push(cutoffStatementDate, cutoffStatementDate);
   }
 
   // 1. 所有未出帳之消費支出總額 (is_billed = 0，範圍在上期結帳日後或過去延期)
@@ -549,9 +543,9 @@ accounts.post('/:id/reconcile', async (c) => {
   // 3. 當期還款沖抵未出帳總額 (未結算之 unbilled_offset)
   let offsetFilter = '';
   let offsetParams: (string | number)[] = [id];
-  if (prevStatementDate) {
+  if (cutoffStatementDate) {
     offsetFilter = ' AND date > ?';
-    offsetParams.push(prevStatementDate);
+    offsetParams.push(cutoffStatementDate);
   }
 
   const repaymentRow = await c.env.DB.prepare(`

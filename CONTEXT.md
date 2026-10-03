@@ -83,7 +83,10 @@ _Avoid_: 帳單狀態 (bill status)、結案標記 (settled flag)
 _Avoid_: 雙步覆蓋 (two-step overwrite)、夾零截斷 (zero clamping)、已出帳凍結 (billed freeze)
 
 **Credit Card Balance Reconciliation (信用卡未出帳自動校準)**:
-針對信用卡帳戶，使用者可一鍵自動依據當前掛在該卡底下、範圍為「上期結帳日之後至今（date > prevStatementDate）之所有未出帳（is_billed = 0）」＋「上期結帳日或更早之前勾選延至下期（defer_to_next_statement = 1）之未出帳」，精準計算「有效消費支出 - 刷退退款 - 當期未出帳還款沖抵額（unbilled_offset）」，消除歷史落差並即刻復原公私帳刷卡分流（shared_debt 與 personal_debt）。
+針對信用卡帳戶，使用者可一鍵自動依據當前掛在該卡底下、以「最近一次已發生之結帳日（Cutoff Statement Date，當前日未達結帳日時為上月結帳日，已達結帳日時為當月結帳日）」為界限：
+1. 納入該結帳日之後至今（date > Cutoff Date）之所有未出帳交易（is_billed = 0）。
+2. 納入該結帳日或更早之前（date <= Cutoff Date）勾選延至下期（defer_to_next_statement = 1）且未出帳（is_billed = 0）之交易。
+精準加總「有效消費支出 - 刷退退款 - 當期未出帳還款沖抵額（unbilled_offset）」，消除歷史落差並即刻復原公私帳刷卡分流（shared_debt 與 personal_debt）。
 _Avoid_: 全額還款扣減 (full repayment deduction)、暴力重算 (hard reset)、人工對帳 (manual audit), 依時間戳校準 (timestamp reconciliation), 無界限全量舊帳加總 (unbounded historical aggregation)
 
 ---

@@ -23,11 +23,14 @@
    - 採**淨額出帳**：`出帳淨額 = 符合條件之消費支出加總 - 符合條件之刷退退款加總`。
    - 結算後，參與出帳之消費與刷退交易同步更新為 `is_billed = 1`。
    - 卡片欠款更新：`balance = balance + 出帳淨額`，`unbilled = MAX(0, unbilled - 出帳淨額)`。
-4. **信用卡未出帳自動校準邏輯重構為區間加總與延期整合**：
+4. **信用卡未出帳自動校準邏輯重構為基準結帳日區間加總與延期整合**：
    - 徹底廢除脆弱的 `created_at > last_rollover_at` 時間戳比對。
-   - 同時避免將歷史已久遠的未出帳舊帳無差別灌入當前未出帳，校準計算區間定義為：
-     - `上期結帳日之後至今（date > prevStatementDate）之所有未出帳（is_billed = 0）`
-     - 加上 `更早之前勾選延至下期（date <= prevStatementDate AND defer_to_next_statement = 1）之未出帳`
+   - 以「最近一次已發生之結帳日（$S_{\text{cutoff}}$）」作為基準線：
+     - 若當前日尚未達結帳日（$d < D$），$S_{\text{cutoff}}$ 為**上個月的結帳日**（例如 10/4 時，結帳日 13 號之 $S_{\text{cutoff}} = \text{2026-09-13}$）。
+     - 若當前日已達結帳日（$d \ge D$），$S_{\text{cutoff}}$ 為**當月的結帳日**（例如 10/13 當天即視為結帳日到達）。
+   - 納入未出帳加總的交易集合（`is_billed = 0`）：
+     - `date > S_cutoff` 之所有當期未出帳（如 9/14～10/4 之未出帳，無論是否延期）。
+     - `date <= S_cutoff AND defer_to_next_statement = 1` 之過去延至本期之未出帳（如 9/9～9/13 勾選延至下期者）。
    - 公式：
      $$\text{校準未出帳} = \max\Big(0,\ \sum_{\text{符合區間}}\text{未出帳消費} - \sum_{\text{符合區間}}\text{未出帳刷退} - \sum_{\text{符合區間}}\text{unbilled\_offset}\Big)$$
    - 確保校準金額既不漏掉任何延期收支，亦不會受到過往未出帳舊紀錄污染。
