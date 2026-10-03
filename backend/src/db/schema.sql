@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   date TEXT NOT NULL,
   is_shared INTEGER NOT NULL DEFAULT 1,
   unbilled_offset REAL DEFAULT 0,
+  is_billed INTEGER NOT NULL DEFAULT 0,
+  defer_to_next_statement INTEGER NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

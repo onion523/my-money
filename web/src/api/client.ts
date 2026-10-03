@@ -243,6 +243,8 @@ export interface Transaction {
   date: string;
   is_shared?: number;
   unbilled_offset?: number;
+  is_billed?: number;
+  defer_to_next_statement?: number;
   created_at: string;
   account_name?: string;
   user_name?: string;

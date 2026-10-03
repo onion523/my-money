@@ -13,6 +13,27 @@ async function ensureAccountsSchema(db: any) {
     await db.prepare('ALTER TABLE transactions ADD COLUMN unbilled_offset REAL DEFAULT 0').run();
   } catch (_) {}
   try {
+    await db.prepare('ALTER TABLE transactions ADD COLUMN is_billed INTEGER NOT NULL DEFAULT 0').run();
+  } catch (_) {}
+  try {
+    await db.prepare('ALTER TABLE transactions ADD COLUMN defer_to_next_statement INTEGER NOT NULL DEFAULT 0').run();
+  } catch (_) {}
+  try {
+    await db.prepare(`
+      UPDATE transactions
+      SET is_billed = 1
+      WHERE id IN (
+        SELECT t.id
+        FROM transactions t
+        JOIN accounts a ON t.account_id = a.id
+        WHERE a.type = 'credit_card'
+          AND a.last_rollover_at IS NOT NULL
+          AND t.created_at <= a.last_rollover_at
+          AND t.is_billed = 0
+      )
+    `).run();
+  } catch (_) {}
+  try {
     const tableInfo = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'").first();
     if (tableInfo && tableInfo.sql && !tableInfo.sql.includes("'cash'")) {
       await db.prepare("PRAGMA foreign_keys = OFF").run();
@@ -315,7 +336,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
 
   const card = await c.env.DB.prepare(
     `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
-  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; is_joint: number; user_id: string }>();
+  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; is_joint: number; user_id: string }>();
 
   if (!card) return c.json({ success: false, error: '信用卡不存在' }, 404);
 
@@ -323,19 +344,127 @@ accounts.post('/:id/rollover-statement', async (c) => {
   if ((card.is_joint === 0 || card.is_joint === null) && card.user_id !== userId) {
     return c.json({ success: false, error: '權限不足：個人信用卡出帳作業僅限持卡人本人操作' }, 403);
   }
-  if ((card.unbilled || 0) <= 0) return c.json({ success: false, error: '目前無未出帳金額需出帳' }, 400);
 
-  const newBalance = (card.balance || 0) + card.unbilled;
-  await c.env.DB.prepare('UPDATE accounts SET balance = ?, unbilled = 0, last_rollover_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .bind(newBalance, id).run();
+  // 計算結帳週期區間 (以卡片設定之結帳日為基準)
+  let statementDate = '';
+  let prevStatementDate = '';
+
+  if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
+    const taipeiDateStr = getTaipeiDateString();
+    const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
+    let statementYear = currYear;
+    let statementMonth = currMonth;
+
+    if (currDay <= card.statement_day) {
+      statementMonth -= 1;
+      if (statementMonth === 0) {
+        statementMonth = 12;
+        statementYear -= 1;
+      }
+    }
+    const lastDayOfMonth = new Date(statementYear, statementMonth, 0).getDate();
+    const day = Math.min(card.statement_day, lastDayOfMonth);
+    statementDate = `${statementYear}-${String(statementMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    // 推算上一個結帳日
+    let prevYear = statementYear;
+    let prevMonth = statementMonth - 1;
+    if (prevMonth === 0) {
+      prevMonth = 12;
+      prevYear -= 1;
+    }
+    const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
+    const pDay = Math.min(card.statement_day, prevLastDay);
+    prevStatementDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`;
+  }
+
+  // 1. 撈取符合本期出帳之消費支出
+  // 條件：(date <= statementDate AND defer_to_next_statement = 0) OR (date <= prevStatementDate AND defer_to_next_statement = 1)
+  let expQuery = `
+    SELECT id, amount, is_shared
+    FROM transactions
+    WHERE account_id = ? AND type = 'expense' AND is_billed = 0
+      AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+  `;
+  const expParams: (string | number)[] = [id];
+  if (statementDate) {
+    expQuery += `
+      AND (
+        (date <= ? AND defer_to_next_statement = 0)
+        OR (date <= ? AND defer_to_next_statement = 1)
+      )
+    `;
+    expParams.push(statementDate, prevStatementDate);
+  } else {
+    expQuery += ` AND defer_to_next_statement = 0`;
+  }
+
+  const expenseTxs = await c.env.DB.prepare(expQuery).bind(...expParams).all();
+  const expResults = (expenseTxs.results || []) as Array<{ id: string; amount: number; is_shared: number }>;
+
+  // 2. 撈取符合本期出帳之刷退收入
+  let refQuery = `
+    SELECT id, amount
+    FROM transactions
+    WHERE account_id = ? AND type = 'income' AND is_billed = 0
+      AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+  `;
+  const refParams: (string | number)[] = [id];
+  if (statementDate) {
+    refQuery += ` AND date <= ?`;
+    refParams.push(statementDate);
+  }
+
+  const refundTxs = await c.env.DB.prepare(refQuery).bind(...refParams).all();
+  const refResults = (refundTxs.results || []) as Array<{ id: string; amount: number }>;
+
+  if (expResults.length === 0 && refResults.length === 0) {
+    return c.json({ success: false, error: '目前結帳週期內無待出帳之消費記錄' }, 400);
+  }
+
+  const totalExpense = expResults.reduce((s, t) => s + t.amount, 0);
+  const totalRefund = refResults.reduce((s, t) => s + t.amount, 0);
+  const netRolledAmount = Math.max(0, totalExpense - totalRefund);
+
+  // 3. 批次將參與出帳之消費與刷退標記為 is_billed = 1
+  const txIdsToBill = [...expResults.map(t => t.id), ...refResults.map(t => t.id)];
+  const batchStatements: any[] = [];
+
+  for (const txId of txIdsToBill) {
+    batchStatements.push(c.env.DB.prepare('UPDATE transactions SET is_billed = 1 WHERE id = ?').bind(txId));
+  }
+
+  // 同步結算已在區間內沖抵的還款流水
+  if (statementDate) {
+    batchStatements.push(
+      c.env.DB.prepare("UPDATE transactions SET is_billed = 1 WHERE account_id = ? AND category = '信用卡還款' AND is_billed = 0 AND date <= ?").bind(id, statementDate)
+    );
+  }
+
+  const newBalance = (card.balance || 0) + netRolledAmount;
+  const newUnbilled = Math.max(0, (card.unbilled || 0) - netRolledAmount);
+
+  batchStatements.push(
+    c.env.DB.prepare('UPDATE accounts SET balance = ?, unbilled = ?, last_rollover_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .bind(newBalance, newUnbilled, id)
+  );
+
+  await c.env.DB.batch(batchStatements);
 
   return c.json({
     success: true,
     data: {
       id,
       balance: newBalance,
-      unbilled: 0,
-      message: `帳單出帳作業完成！已轉入已出帳待繳款。`
+      unbilled: newUnbilled,
+      rolledAmount: netRolledAmount,
+      totalExpense,
+      totalRefund,
+      txCount: expResults.length,
+      refundCount: refResults.length,
+      statementDate,
+      prevStatementDate,
+      message: `帳單出帳作業完成！本期結算 ${expResults.length} 筆消費${totalRefund > 0 ? ` (扣除刷退 NT$ ${totalRefund.toLocaleString()})` : ''}，淨額 NT$ ${netRolledAmount.toLocaleString()} 已轉入已出帳待繳款。`
     }
   });
 });
@@ -358,61 +487,28 @@ accounts.post('/:id/reconcile', async (c) => {
     return c.json({ success: false, error: '權限不足：個人信用卡校準僅限持卡人本人操作' }, 403);
   }
 
-  // 計算當期結帳週期起點 (優先依據最後出帳作業時間點)
-  let timeCondition = '';
-  let sqlParams: (string | number)[] = [id];
-
-  const cardWithRollover = await c.env.DB.prepare('SELECT last_rollover_at FROM accounts WHERE id = ?').bind(id).first<{ last_rollover_at: string | null }>();
-
-  if (cardWithRollover && cardWithRollover.last_rollover_at) {
-    timeCondition = ' AND created_at > ?';
-    sqlParams.push(cardWithRollover.last_rollover_at);
-  } else if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
-    const taipeiDateStr = getTaipeiDateString();
-    const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
-    let statementYear = currYear;
-    let statementMonth = currMonth;
-
-    if (currDay <= card.statement_day) {
-      statementMonth -= 1;
-      if (statementMonth === 0) {
-        statementMonth = 12;
-        statementYear -= 1;
-      }
-    }
-    const lastDayOfMonth = new Date(statementYear, statementMonth, 0).getDate();
-    const day = Math.min(card.statement_day, lastDayOfMonth);
-    const statementDate = `${statementYear}-${String(statementMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-    timeCondition = ' AND date > ?';
-    sqlParams.push(statementDate);
-  }
-
-  // 1. 當期消費支出總額
+  // 1. 所有尚未出帳之消費支出總額 (is_billed = 0)
   const expenseRow = await c.env.DB.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM transactions
-    WHERE account_id = ? AND type = 'expense'
+    WHERE account_id = ? AND type = 'expense' AND is_billed = 0
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-      ${timeCondition}
-  `).bind(...sqlParams).first<{ total: number }>();
+  `).bind(id).first<{ total: number }>();
 
-  // 2. 當期刷退收入總額 (卡片收入退貨)
+  // 2. 所有尚未出帳之刷退收入總額 (is_billed = 0)
   const refundRow = await c.env.DB.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM transactions
-    WHERE account_id = ? AND type = 'income'
+    WHERE account_id = ? AND type = 'income' AND is_billed = 0
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-      ${timeCondition}
-  `).bind(...sqlParams).first<{ total: number }>();
+  `).bind(id).first<{ total: number }>();
 
-  // 3. 當期還款沖抵未出帳總額 (category = '信用卡還款'，僅加總 unbilled_offset，避免誤扣沖銷已出帳之款項)
+  // 3. 當期還款沖抵未出帳總額 (未結算之 unbilled_offset)
   const repaymentRow = await c.env.DB.prepare(`
     SELECT COALESCE(SUM(unbilled_offset), 0) as total
     FROM transactions
-    WHERE account_id = ? AND category = '信用卡還款'
-      ${timeCondition}
-  `).bind(...sqlParams).first<{ total: number }>();
+    WHERE account_id = ? AND category = '信用卡還款' AND is_billed = 0
+  `).bind(id).first<{ total: number }>();
 
   const totalExp = expenseRow ? Number(expenseRow.total) : 0;
   const totalRef = refundRow ? Number(refundRow.total) : 0;

@@ -46,6 +46,7 @@ export default function Transactions() {
     note: '',
     date: today(),
     is_shared: 1, // 1: 公帳, 0: 個人私帳
+    defer_to_next_statement: 0,
   })
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -129,6 +130,7 @@ export default function Transactions() {
       note: '',
       date: today(),
       is_shared: 1,
+      defer_to_next_statement: 0,
     })
     setIsCategoryManuallyChanged(false)
     setRecommendationHint(null)
@@ -149,6 +151,7 @@ export default function Transactions() {
       note: tx.note || '',
       date: tx.date,
       is_shared: tx.is_shared !== undefined ? tx.is_shared : 1,
+      defer_to_next_statement: tx.defer_to_next_statement || 0,
     })
     setErrorMsg('')
     setShowModal(true)
@@ -179,6 +182,7 @@ export default function Transactions() {
           note: form.note.trim(),
           date: form.date,
           is_shared: form.is_shared,
+          defer_to_next_statement: form.defer_to_next_statement,
         })
       } else {
         await txApi.create({
@@ -189,6 +193,7 @@ export default function Transactions() {
           note: form.note.trim(),
           date: form.date,
           is_shared: form.is_shared,
+          defer_to_next_statement: form.defer_to_next_statement,
         })
       }
       setShowModal(false)
@@ -440,7 +445,7 @@ export default function Transactions() {
                         {CATEGORY_ICONS[tx.category] || (tx.type === 'income' ? '💰' : '💸')}
                       </div>
                       <div className="tx-info">
-                        <div className="tx-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div className="tx-name" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           <span>{tx.category}</span>
                           {tx.note && <span className="text-muted" style={{ fontWeight: 400 }}>· {tx.note}</span>}
                           {tx.is_shared === 0 ? (
@@ -450,6 +455,16 @@ export default function Transactions() {
                           ) : (
                             <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px' }}>
                               🏠 公帳
+                            </span>
+                          )}
+                          {tx.is_billed === 1 && (
+                            <span className="badge" style={{ background: 'var(--bg-surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border-color)', fontSize: '0.7rem', padding: '1px 6px' }}>
+                              📑 已出帳
+                            </span>
+                          )}
+                          {tx.defer_to_next_statement === 1 && tx.is_billed === 0 && (
+                            <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#D97706', fontSize: '0.7rem', padding: '1px 6px' }}>
+                              🗓️ 延至下期
                             </span>
                           )}
                         </div>
@@ -632,6 +647,50 @@ export default function Transactions() {
                 ))}
               </select>
             </div>
+
+            {/* 信用卡專屬：列入下期帳單勾選 */}
+            {(() => {
+              const selectedAcc = accounts.find(a => a.id === form.account_id)
+              const isCreditCard = selectedAcc?.type === 'credit_card'
+              if (!isCreditCard || form.type !== 'expense') return null
+
+              return (
+                <div
+                  style={{
+                    background: form.defer_to_next_statement === 1 ? 'rgba(245, 158, 11, 0.08)' : 'var(--bg-surface-2)',
+                    border: form.defer_to_next_statement === 1 ? '1px solid #F59E0B' : '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md, 8px)',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onClick={() => setForm(p => ({ ...p, defer_to_next_statement: p.defer_to_next_statement === 1 ? 0 : 1 }))}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>🗓️ 列入下期帳單</span>
+                      {form.defer_to_next_statement === 1 && (
+                        <span className="badge" style={{ background: '#F59E0B', color: '#fff', fontSize: '0.7rem', padding: '1px 6px' }}>
+                          遞延結算
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted" style={{ marginTop: 2 }}>
+                      適用於商家延遲請款或跨結帳日刷卡，本期出帳作業時自動保留於未出帳
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={form.defer_to_next_statement === 1}
+                    onChange={e => setForm(p => ({ ...p, defer_to_next_statement: e.target.checked ? 1 : 0 }))}
+                    style={{ width: 18, height: 18, cursor: 'pointer' }}
+                  />
+                </div>
+              )
+            })()}
 
             {/* 日期 */}
             <div className="input-group">

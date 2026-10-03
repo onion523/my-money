@@ -226,7 +226,10 @@ export default function Accounts() {
   }
 
   const handleRollover = async (card: Account) => {
-    if (!window.confirm(`確定要將「${card.name}」的未出帳消費 NT$ ${card.unbilled.toLocaleString()} 出帳作業為本期已出帳待繳嗎？`)) {
+    const cyclePrompt = card.statement_day
+      ? `確定要依據「${card.name}」的每月結帳日（${card.statement_day} 號），將本期結帳區間內的有效刷卡消費（自動扣除刷退，排除延至下期者）結算並出帳為已出帳待繳款嗎？`
+      : `確定要將「${card.name}」所有未延期的未出帳消費結算並出帳為已出帳待繳款嗎？`
+    if (!window.confirm(cyclePrompt)) {
       return
     }
     try {

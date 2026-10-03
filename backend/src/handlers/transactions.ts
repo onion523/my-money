@@ -98,6 +98,7 @@ transactions.post('/', async (c) => {
   const body = await c.req.json();
   const { account_id, type, category, amount, note = '', date } = body;
   const is_shared = body.is_shared !== undefined ? (Number(body.is_shared) ? 1 : 0) : 1;
+  const defer_to_next_statement = body.defer_to_next_statement !== undefined ? (Number(body.defer_to_next_statement) ? 1 : 0) : 0;
 
   if (!account_id || !type || !category || !amount || !date) {
     return c.json({ success: false, error: '請填寫必填欄位' }, 400);
@@ -111,8 +112,8 @@ transactions.post('/', async (c) => {
 
   const id = generateId();
   await c.env.DB.prepare(
-    'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, userId, account_id, type, category, amount, note, date, is_shared).run();
+    'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, is_billed, defer_to_next_statement) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)'
+  ).bind(id, userId, account_id, type, category, amount, note, date, is_shared, defer_to_next_statement).run();
 
   // 更新帳戶餘額
   const stmts = await getSyncAccountStatements(c.env.DB, account_id, type, amount, false);
@@ -221,9 +222,13 @@ transactions.put('/:id', async (c) => {
     accountStmts = [...oldStmts, ...newStmts];
   }
 
+  const defer_to_next_statement = body.defer_to_next_statement !== undefined
+    ? (Number(body.defer_to_next_statement) ? 1 : 0)
+    : (existing.defer_to_next_statement || 0);
+
   const updateTxStmt = c.env.DB.prepare(
-    'UPDATE transactions SET account_id = ?, type = ?, category = ?, amount = ?, note = ?, date = ?, is_shared = ? WHERE id = ?'
-  ).bind(account_id, type, category, amount, note, date, is_shared, id);
+    'UPDATE transactions SET account_id = ?, type = ?, category = ?, amount = ?, note = ?, date = ?, is_shared = ?, defer_to_next_statement = ? WHERE id = ?'
+  ).bind(account_id, type, category, amount, note, date, is_shared, defer_to_next_statement, id);
 
   await c.env.DB.batch([...accountStmts, updateTxStmt]);
 
