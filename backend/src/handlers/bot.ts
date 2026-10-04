@@ -1,8 +1,9 @@
 import { getTaipeiDateString } from '../utils/date';
-﻿import { Hono } from 'hono';
+import { Hono } from 'hono';
 import { Env, BotBinding, Transaction, Account } from '../types';
 import { authMiddleware, generateId } from '../middleware/jwt';
 import { getUserHousehold } from './households';
+import { ensureAccountsSchema, reconcileCreditCardUnbilled } from './accounts';
 
 type Vars = { userId: string; userEmail: string; userName: string };
 const bot = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -158,6 +159,27 @@ bot.delete('/bindings/:id', authMiddleware, async (c) => {
   return c.json({ success: true, message: '已解除綁定' });
 });
 
+// 取得使用者可見之個人與家庭共同帳戶（本人優先）
+async function fetchVisibleAccounts(db: D1Database, userId: string, memberUserIds: string[]): Promise<Account[]> {
+  const placeholders = memberUserIds.map(() => '?').join(',');
+  const accRows = await db.prepare(`
+    SELECT * FROM accounts
+    WHERE user_id = ? OR (user_id IN (${placeholders}) AND is_joint = 1)
+    ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END, created_at ASC
+  `).bind(userId, ...memberUserIds, userId).all<Account>();
+  return accRows.results;
+}
+
+// 彙整現金、銀行活存、信用卡已出帳與未出帳及即時可用餘額
+function computeAvailableTotals(accounts: Account[]) {
+  const cashTotal = accounts.filter(a => a.type === 'cash').reduce((s, a) => s + a.balance, 0);
+  const bankTotal = accounts.filter(a => a.type === 'bank').reduce((s, a) => s + a.balance, 0);
+  const ccBilled = accounts.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.balance, 0);
+  const ccUnbilled = accounts.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.unbilled, 0);
+  const available = cashTotal + bankTotal - ccBilled - ccUnbilled;
+  return { cashTotal, bankTotal, ccBilled, ccUnbilled, available };
+}
+
 // 核心記帳與查帳執行邏輯
 async function handleBotAction(
   db: D1Database,
@@ -167,6 +189,7 @@ async function handleBotAction(
   displayName = '',
   directUserId?: string
 ): Promise<string> {
+  await ensureAccountsSchema(db);
   const parsed = parseNaturalMessage(text);
 
   // 1. 處理配對綁定
@@ -232,17 +255,8 @@ async function handleBotAction(
     const { memberUserIds } = await getUserHousehold(db, userId);
     const placeholders = memberUserIds.map(() => '?').join(',');
 
-    const accRows = await db.prepare(`
-      SELECT * FROM accounts 
-      WHERE user_id = ? OR (user_id IN (${placeholders}) AND is_joint = 1)
-    `).bind(userId, ...memberUserIds).all<Account>();
-    const accounts = accRows.results;
-
-    const cashTotal = accounts.filter(a => a.type === 'cash').reduce((s, a) => s + a.balance, 0);
-    const bankTotal = accounts.filter(a => a.type === 'bank').reduce((s, a) => s + a.balance, 0);
-    const ccBilled = accounts.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.balance, 0);
-    const ccUnbilled = accounts.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.unbilled, 0);
-    const available = cashTotal + bankTotal - ccBilled - ccUnbilled;
+    const accounts = await fetchVisibleAccounts(db, userId, memberUserIds);
+    const { cashTotal, bankTotal, ccUnbilled, available } = computeAvailableTotals(accounts);
 
     // 固定收支月攤提
     const recRows = await db.prepare(`SELECT * FROM recurring_items WHERE user_id IN (${placeholders})`).bind(...memberUserIds).all<any>();
@@ -274,8 +288,7 @@ async function handleBotAction(
     const { memberUserIds } = await getUserHousehold(db, userId);
     const placeholders = memberUserIds.map(() => '?').join(',');
 
-    const accRows = await db.prepare(`SELECT * FROM accounts WHERE user_id IN (${placeholders})`).bind(...memberUserIds).all<Account>();
-    const accounts = accRows.results;
+    const accounts = await fetchVisibleAccounts(db, userId, memberUserIds);
 
     if (accounts.length === 0) {
       return '⚠️ 目前尚未建立任何帳戶，請先至網頁版建立帳戶後再記帳！';
@@ -301,46 +314,47 @@ async function handleBotAction(
     let category = parsed.category!;
     const note = parsed.note || '';
 
-    // 雙層推薦：優先檢索該用戶或家庭近期的同名備註歷史
+    // 雙層推薦：優先檢索該用戶或家庭近期的同名或包含關係備註歷史（使用 instr 避免 SQLite LIKE 50-byte 溢位與空字串誤匹配）
     if (note && note.trim()) {
-      const histRow = await db.prepare(`
-        SELECT category FROM transactions
-        WHERE user_id IN (${placeholders})
-          AND type = ?
-          AND (note = ? OR ? LIKE '%' || note || '%')
-          AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-        ORDER BY date DESC, created_at DESC
-        LIMIT 1
-      `).bind(...memberUserIds, parsed.type, note.trim(), note.trim()).first<{ category: string }>();
+      const trimmedNote = note.trim();
+      try {
+        const histRow = await db.prepare(`
+          SELECT category FROM transactions
+          WHERE user_id IN (${placeholders})
+            AND type = ?
+            AND note != ''
+            AND (note = ? OR instr(?, note) > 0)
+            AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+          ORDER BY CASE WHEN note = ? THEN 0 ELSE 1 END, date DESC, created_at DESC
+          LIMIT 1
+        `).bind(...memberUserIds, parsed.type, trimmedNote, trimmedNote, trimmedNote).first<{ category: string }>();
 
-      if (histRow && histRow.category) {
-        category = histRow.category;
+        if (histRow && histRow.category) {
+          category = histRow.category;
+        }
+      } catch (err) {
+        console.error('Historical category lookup fallback:', err);
       }
     }
 
     // 新增交易 (Q7: 支援公帳 vs 私帳)
     const isShared = (parsed as any).isShared ? 1 : 0;
     await db.prepare(`
-      INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, is_billed, defer_to_next_statement)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
     `).bind(txId, userId, targetAccount.id, parsed.type, category, amount, note, today, isShared).run();
 
-    // 更新帳戶餘額
-    if (targetAccount.type === 'bank') {
+    // 更新帳戶餘額（活存與現金皆更新 balance；信用卡則呼叫統一歸戶函式 reconcileCreditCardUnbilled）
+    if (targetAccount.type === 'bank' || targetAccount.type === 'cash') {
       const delta = parsed.type === 'income' ? amount : -amount;
       await db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(delta, targetAccount.id).run();
-    } else {
-      // 信用卡支出增加未出帳
-      const delta = parsed.type === 'expense' ? amount : -amount;
-      await db.prepare('UPDATE accounts SET unbilled = MAX(0, unbilled + ?) WHERE id = ?').bind(delta, targetAccount.id).run();
+    } else if (targetAccount.type === 'credit_card') {
+      await reconcileCreditCardUnbilled(db, targetAccount.id);
     }
 
     // 取得最新可用餘額
-    const updatedAccs = await db.prepare(`SELECT * FROM accounts WHERE user_id IN (${placeholders})`).bind(...memberUserIds).all<Account>();
-    const bTotal = updatedAccs.results.filter(a => a.type === 'bank').reduce((s, a) => s + a.balance, 0);
-    const cBilled = updatedAccs.results.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.balance, 0);
-    const cUnbilled = updatedAccs.results.filter(a => a.type === 'credit_card').reduce((s, a) => s + a.unbilled, 0);
-    const currentAvailable = bTotal - cBilled - cUnbilled;
+    const updatedAccounts = await fetchVisibleAccounts(db, userId, memberUserIds);
+    const { available: currentAvailable } = computeAvailableTotals(updatedAccounts);
 
     const emojiMap: Record<string, string> = {
       '餐飲':'🍜', '交通':'🚇', '汽機車輛':'🚗', '居家水電':'⚡', '數位訂閱':'📱',
@@ -378,7 +392,13 @@ bot.post('/webhook/line', async (c) => {
         const text = event.message.text;
         const replyToken = event.replyToken;
 
-        const replyText = await handleBotAction(c.env.DB, 'line', lineUserId, text);
+        let replyText: string;
+        try {
+          replyText = await handleBotAction(c.env.DB, 'line', lineUserId, text);
+        } catch (actionErr: any) {
+          console.error('LINE handleBotAction err:', actionErr);
+          replyText = `⚠️ 記帳處理發生異常：${actionErr.message || '未知錯誤'}，請稍後再試。`;
+        }
 
         // 如果設定了 LINE_CHANNEL_ACCESS_TOKEN 則呼叫 LINE Reply API
         if (c.env.LINE_CHANNEL_ACCESS_TOKEN && replyToken) {
@@ -400,18 +420,19 @@ bot.post('/webhook/line', async (c) => {
     return c.json({ ok: true });
   } catch (err: any) {
     console.error('Line webhook err:', err);
-    return c.json({ ok: false, error: err.message }, 500);
+    return c.json({ ok: true, error: err.message });
   }
 });
 
 // POST /bot/webhook/telegram
 bot.post('/webhook/telegram', async (c) => {
+  let chatId: number | string | undefined;
   try {
     const update = await c.req.json();
     const msg = update.message;
     if (msg && msg.text) {
       const tgUserId = String(msg.from.id);
-      const chatId = msg.chat.id;
+      chatId = msg.chat?.id;
       const text = msg.text;
       const displayName = [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || '';
 
@@ -430,21 +451,36 @@ bot.post('/webhook/telegram', async (c) => {
     return c.json({ ok: true });
   } catch (err: any) {
     console.error('Telegram webhook err:', err);
-    return c.json({ ok: false, error: err.message }, 500);
+    if (c.env.TELEGRAM_BOT_TOKEN && chatId) {
+      await fetch(`https://api.telegram.org/bot${c.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `⚠️ 記帳處理發生異常：${err.message || '未知錯誤'}，請稍後再試。`,
+        }),
+      }).catch(e => console.error('Telegram fallback error reply failed:', e));
+    }
+    return c.json({ ok: true, error: err.message });
   }
 });
 
 // 測試用模擬訊息發送端點（方便使用者在前端或開發測試 Bot 對話）
 bot.post('/test-simulate', authMiddleware, async (c) => {
-  const userId = c.get('userId');
-  const user = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(userId).first<{ name: string }>();
-  const userName = user?.name || '模擬測試助手';
-  const { text, platform = 'line' } = await c.req.json();
-  if (!text) return c.json({ success: false, error: '請輸入測試訊息' }, 400);
+  try {
+    const userId = c.get('userId');
+    const user = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(userId).first<{ name: string }>();
+    const userName = user?.name || '模擬測試助手';
+    const { text, platform = 'line' } = await c.req.json();
+    if (!text) return c.json({ success: false, error: '請輸入測試訊息' }, 400);
 
-  // 直接以認證通過之 userId 處理，不向 bot_bindings 寫入任何模擬假綁定資料
-  const reply = await handleBotAction(c.env.DB, platform as any, `sim_${userId}`, text, userName, userId);
-  return c.json({ success: true, data: { input: text, reply } });
+    // 直接以認證通過之 userId 處理，不向 bot_bindings 寫入任何模擬假綁定資料
+    const reply = await handleBotAction(c.env.DB, platform as any, `sim_${userId}`, text, userName, userId);
+    return c.json({ success: true, data: { input: text, reply } });
+  } catch (err: any) {
+    console.error('Bot test-simulate err:', err);
+    return c.json({ success: false, error: err.message || '模擬對話執行失敗' }, 500);
+  }
 });
 
 export default bot;

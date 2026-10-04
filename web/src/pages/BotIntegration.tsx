@@ -41,9 +41,10 @@ export default function BotIntegration() {
     }
   ])
 
-  const webhookBase = window.location.origin.includes('localhost')
-    ? 'https://your-domain.workers.dev'
-    : window.location.origin
+  const rawApiBase = (import.meta as any).env?.VITE_API_URL || ''
+  const webhookBase = rawApiBase.startsWith('http')
+    ? rawApiBase.replace(/\/api\/?$/, '').replace(/\/$/, '')
+    : 'https://my-money-api.onion523.workers.dev'
 
   const loadBindings = async () => {
     try {
@@ -363,7 +364,7 @@ export default function BotIntegration() {
                   borderRadius: 6, margin: '6px 0', fontSize: '0.8rem',
                   fontFamily: 'monospace', wordBreak: 'break-all'
                 }}>
-                  {webhookBase}/api/bot/webhook/line
+                  {webhookBase}/bot/webhook/line
                 </div>
               </li>
               <li>開啟「<b>Use Webhook</b>」開關。</li>
@@ -390,7 +391,7 @@ export default function BotIntegration() {
                   borderRadius: 6, margin: '6px 0', fontSize: '0.8rem',
                   fontFamily: 'monospace', wordBreak: 'break-all'
                 }}>
-                  https://api.telegram.org/bot&lt;TOKEN&gt;/setWebhook?url={webhookBase}/api/bot/webhook/telegram
+                  https://api.telegram.org/bot&lt;TOKEN&gt;/setWebhook?url={webhookBase}/bot/webhook/telegram
                 </div>
               </li>
               <li>在 Telegram 私訊機器人發送綁定驗證碼即可啟用！</li>

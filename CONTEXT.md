@@ -213,8 +213,8 @@ _Avoid_: 自訂分類表 (custom category table)、動態標籤 (dynamic tags)�
 _Avoid_: 自由輸入類別 (freeform category)、舊版八大類 (legacy 8 categories)
 
 **Two-Tier Category Recommendation (雙層分類推薦引擎)**:
-在使用者輸入交易備註或通訊軟體自然語句時，自動推測最合適分類的雙層架構：第一層優先檢索個人/家庭近期歷史交易備註（Historical Note Memory），若有歷史同名或包含紀錄則優先採納個人既有習慣；第二層若無歷史紀錄，則落入內建生活語意關鍵字庫（Lexicon Fallback，涵蓋高頻品牌、交通、水電、訂閱、寵物等名詞）進行精準匹配。
-_Avoid_: 純關鍵字暴力匹配 (hardcoded keyword matching only)、全盲隨機猜測 (blind guess)
+在使用者輸入交易備註或通訊軟體自然語句時，自動推測最合適分類的雙層架構：第一層優先檢索個人/家庭近期歷史交易備註（Historical Note Memory），以 `note != '' AND (note = ? OR instr(?, note) > 0)` 檢索非空歷史備註（嚴禁將資料庫 `note` 置於 `LIKE '%' || note || '%'` 樣板端，以免長備註觸發 SQLite `LIKE or GLOB pattern too complex` 上限崩潰或空字串萬用誤配），若有歷史同名或包含紀錄則優先採納個人既有習慣；第二層若無歷史紀錄，則落入內建生活語意關鍵字庫（Lexicon Fallback，涵蓋高頻品牌、交通、水電、訂閱、寵物等名詞）進行精準匹配。
+_Avoid_: 純關鍵字暴力匹配 (hardcoded keyword matching only)、全盲隨機猜測 (blind guess)、欄位拼接 LIKE 樣板 (`LIKE '%' || note || '%'`)
 
 **Adaptive Category Preselection (自適應分類預選與鎖定保護)**:
 前端記帳表單在使用者鍵入交易備註或商家名稱時，即時調用雙層分類推薦引擎自動切換分類下拉選單並顯示「✨ 已智慧推薦為【類別】」柔和微光徽章。若使用者在該次填表中主動手動點選更換過分類，系統即刻啟動「選擇鎖定 (User Choice Lock)」，後續打字將嚴格保留使用者手動設定，杜絕反覆覆蓋干擾。
@@ -276,8 +276,8 @@ _Avoid_: 購買模擬 (purchase simulation)、預算檢查 (budget check)、試�
 _Avoid_: 授權 (auth)、連線 (connection)、配對 (pairing)
 
 **Natural Message (自然語言指令)**:
-使用者於通訊聊天室輸入非結構化日常語句（例如：好市多 3200 公帳玉山），由系統解析為記帳交易。
-_Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick entry)
+使用者於通訊聊天室輸入非結構化日常語句（例如：`早餐 100`、`早餐100`、`好市多 3200 公帳玉山`），由系統解析為收支明細並即時雙向連動資產帳戶餘額（`Bank Account` 與 `Cash Wallet` 扣減／增加 `balance`，`Credit Card` 增加未出帳並觸發 `Credit Card Balance Reconciliation`），回傳包含現金、活存與信用卡欠款之真實 `Available Balance (淨可用餘額)`。Webhook 端點遇未知例外時必須捕獲並回傳 HTTP 200 與友善錯誤提示，嚴禁回傳 HTTP 500 導致 Telegram Webhook 佇列（`pending_update_count`）阻塞死鎖。
+_Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick entry)、Webhook 500 佇列阻塞 (webhook 500 queue stalling)
 
 ---
 
