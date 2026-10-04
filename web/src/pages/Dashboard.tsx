@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { accountsApi, txApi, recurringApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
-import { formatCurrency, formatDate, today, thisMonth, getGreeting, CATEGORIES, CATEGORY_ICONS, buildHistoryMemo, recommendCategory } from '../components/utils'
+import { formatCurrency, formatDate, today, thisMonth, getGreeting, CATEGORIES, buildHistoryMemo, recommendCategory } from '../components/utils'
+import { GoalIcon } from '../components/icons'
 import ScopeTabBar from '../components/ScopeTabBar'
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
@@ -23,6 +24,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Calendar,
+  Home,
+  Lock,
+  User,
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -158,7 +162,7 @@ export default function Dashboard() {
         <div className="alert alert-danger flex items-center justify-between" style={{ marginBottom: 20 }}>
           <div className="flex items-center gap-2">
             <AlertCircle size={18} />
-            <span>⚠️ <strong>資料載入失敗</strong>：{loadError}</span>
+            <span><strong>資料載入失敗</strong>：{loadError}</span>
           </div>
           <button
             className="btn btn-secondary"
@@ -172,7 +176,10 @@ export default function Dashboard() {
       {/* 頁面標題 */}
       <div className="page-header-row">
         <div>
-          <h1 className="page-title">{getGreeting()}，{user?.name || '朋友'} 👋</h1>
+          <h1 className="page-title flex items-center gap-xs">
+            <span>{getGreeting()}，{user?.name || '朋友'}</span>
+            <Sparkles size={24} color="var(--color-primary)" />
+          </h1>
           <p className="page-subtitle">這裡是您本月的財務總覽與即時收支數據</p>
         </div>
         <button
@@ -284,7 +291,7 @@ export default function Dashboard() {
 
             {displayAccounts.length === 0 ? (
               <div className="empty-state" style={{ padding: '24px 0' }}>
-                <div className="emoji">💳</div>
+                <div className="emoji"><CreditCard size={40} /></div>
                 <h3>{viewScope === 'household' ? '目前無家庭公用帳戶' : viewScope === 'personal' ? '目前無個人私帳' : '尚未建立帳戶'}</h3>
                 <p style={{ fontSize: '0.875rem', marginBottom: 12 }}>
                   {viewScope === 'household' ? '至帳戶管理將帳戶屬性設為家庭公用（共同基金或家庭卡）即可在此呈現' : '至帳戶管理新增你的銀行、現金或信用卡'}
@@ -322,12 +329,14 @@ export default function Dashboard() {
                         </div>
                         <div className="acc-card-badges">
                           {acc.is_joint === 1 ? (
-                            <span className="badge badge-primary" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
-                              🏠 公帳
+                            <span className="badge badge-primary" style={{ fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
+                              <Home size={11} style={{ flexShrink: 0 }} />
+                              <span>公帳</span>
                             </span>
                           ) : (
-                            <span className="badge badge-secondary" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
-                              🔒 私帳
+                            <span className="badge badge-secondary" style={{ fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
+                              <Lock size={11} style={{ flexShrink: 0 }} />
+                              <span>私帳</span>
                             </span>
                           )}
                           <span className="badge" style={{ fontSize: '0.68rem', padding: '1px 5px', background: 'rgba(0,0,0,0.05)' }}>
@@ -351,9 +360,15 @@ export default function Dashboard() {
                         <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                           {totalDue > 0 ? (
                             <div className="acc-card-debt-row" style={{ background: 'rgba(0,0,0,0.03)', padding: '3px 6px', borderRadius: 4, marginBottom: 2 }}>
-                              <span>🏠 代墊：<strong>{formatCurrency(acc.shared_debt || 0)}</strong></span>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                <Home size={11} style={{ flexShrink: 0 }} />
+                                <span>代墊：<strong>{formatCurrency(acc.shared_debt || 0)}</strong></span>
+                              </span>
                               <span className="acc-card-debt-sep">·</span>
-                              <span>👤 個人私帳：<strong>{formatCurrency(acc.personal_debt || 0)}</strong></span>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                <User size={11} style={{ flexShrink: 0 }} />
+                                <span>個人私帳：<strong>{formatCurrency(acc.personal_debt || 0)}</strong></span>
+                              </span>
                             </div>
                           ) : (
                             <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>卡費已全數結清</span>
@@ -430,8 +445,9 @@ export default function Dashboard() {
                 {goalsList.slice(0, 3).map(goal => (
                   <div key={goal.id}>
                     <div className="flex items-center justify-between text-sm" style={{ marginBottom: 4 }}>
-                      <span style={{ fontWeight: 600 }}>
-                        {goal.emoji || '🎯'} {goal.name}
+                      <span className="flex items-center gap-xs" style={{ fontWeight: 600 }}>
+                        <GoalIcon name={goal.emoji} size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                        <span>{goal.name}</span>
                       </span>
                       <span className="text-muted">
                         {formatCurrency(goal.saved_amount)} / {formatCurrency(goal.target_amount)}
@@ -484,7 +500,8 @@ export default function Dashboard() {
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 12px' }}
                   onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
                 >
-                  <span>🏠 公帳</span>
+                  <Home size={15} />
+                  <span>公帳</span>
                 </button>
                 <button
                   type="button"
@@ -492,7 +509,8 @@ export default function Dashboard() {
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 12px' }}
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
-                  <span>🔒 私帳</span>
+                  <Lock size={15} />
+                  <span>私帳</span>
                 </button>
               </div>
             </div>
@@ -538,8 +556,9 @@ export default function Dashboard() {
               <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
                 <label className="input-label" style={{ margin: 0 }}>分類</label>
                 {recommendationHint && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-dark)', background: 'rgba(255, 107, 107, 0.12)', padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>
-                    {recommendationHint}
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-dark)', background: 'rgba(255, 107, 107, 0.12)', padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Sparkles size={12} />
+                    <span>{recommendationHint}</span>
                   </span>
                 )}
               </div>
@@ -555,7 +574,7 @@ export default function Dashboard() {
               >
                 {CATEGORIES[form.type].map(cat => (
                   <option key={cat} value={cat}>
-                    {CATEGORY_ICONS[cat] || ''} {cat}
+                    {cat}
                   </option>
                 ))}
               </select>
@@ -574,7 +593,7 @@ export default function Dashboard() {
                 <option value="" disabled>-- 請選擇扣款 / 存入帳戶 --</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 銀行存款帳戶' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 公帳' : '🔒 私帳'})
+                    {acc.type === 'cash' ? '現金' : acc.type === 'bank' ? '銀行存款帳戶' : '信用卡'} - {acc.name} ({acc.is_joint === 1 ? '公帳' : '私帳'})
                   </option>
                 ))}
               </select>
@@ -610,7 +629,7 @@ export default function Dashboard() {
                       const rec = recommendCategory(newNote, p.type, historyMemo);
                       if (rec) {
                         next.category = rec.category;
-                        setRecommendationHint(rec.source === 'history' ? `✨ 依歷史習慣推薦【${rec.category}】` : `✨ 智慧推薦為【${rec.category}】`);
+                        setRecommendationHint(rec.source === 'history' ? `依歷史習慣推薦【${rec.category}】` : `智慧推薦為【${rec.category}】`);
                       } else {
                         setRecommendationHint(null);
                       }

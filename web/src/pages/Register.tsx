@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { authApi } from '../api/client'
+import { Sparkles } from 'lucide-react'
 
 export default function Register() {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
@@ -38,7 +39,9 @@ export default function Register() {
     <div style={{ minHeight: '100vh', background: 'var(--bg-page)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ width: '100%', maxWidth: 400 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>✨</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, color: 'var(--color-primary)' }}>
+            <Sparkles size={48} />
+          </div>
           <h1 className="font-display" style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--color-primary)' }}>建立帳號</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>開始記錄你的財務生活</p>
         </div>

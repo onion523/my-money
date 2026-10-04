@@ -276,7 +276,7 @@ async function handleBotAction(
     `).bind(parsed.pairingCode, now).first<{ user_id: string }>();
 
     if (!pairing) {
-      return '❌ 配對碼無效或已過期（有效期限 10 分鐘）。\n請前往網頁版「我的記帳本」重新產生配對碼！';
+      return '配對碼無效或已過期（有效期限 10 分鐘）。\n請前往網頁版「我的記帳本」重新產生配對碼！';
     }
 
     const id = generateId();
@@ -289,7 +289,7 @@ async function handleBotAction(
     // 刪除已使用的配對碼
     await db.prepare('DELETE FROM bot_pairing_codes WHERE code = ?').bind(parsed.pairingCode).run();
 
-    return '🎉 綁定成功！\n\n您現在可以直接發送文字快速記帳：\n• 輸入「午餐 120」\n• 輸入「計程車 250 信用卡」\n• 輸入「薪水 70000 銀行」\n• 輸入「餘額」查詢即時資金！';
+    return '綁定成功！\n\n您現在可以直接發送文字快速記帳：\n• 輸入「午餐 120」\n• 輸入「計程車 250 信用卡」\n• 輸入「薪水 70000 銀行」\n• 輸入「餘額」查詢即時資金！';
   }
 
   // 2. 檢查使用者是否已綁定 (或由測試模擬直接傳入 userId)
@@ -305,7 +305,7 @@ async function handleBotAction(
     `).bind(platform, platformUserId).first<{ user_id: string; user_name: string }>();
 
     if (!binding) {
-      return '👋 您好！您尚未綁定「我的記帳本」帳號。\n\n請依以下步驟完成設定：\n1. 開啟記帳網站登入您的帳號\n2. 點擊「機器人串接」並產生 6 位數配對碼\n3. 在此輸入「綁定 <code>」（例如：綁定 8K29M4）\n完成後即可開始智慧記帳！';
+      return '您好！您尚未綁定「我的記帳本」帳號。\n\n請依以下步驟完成設定：\n1. 開啟記帳網站登入您的帳號\n2. 點擊「機器人串接」並產生 6 位數配對碼\n3. 在此輸入「綁定 <code>」（例如：綁定 8K29M4）\n完成後即可開始智慧記帳！';
     }
     userId = binding.user_id;
     userName = binding.user_name;
@@ -313,7 +313,7 @@ async function handleBotAction(
 
   // 3. 處理幫助說明
   if (parsed.type === 'help') {
-    return `📒 我的記帳本 — 智慧指令說明：\n\n` +
+    return `我的記帳本 — 智慧指令說明：\n\n` +
       `【快速記帳】\n` +
       `• 午餐 120\n` +
       `• 加油 800 信用卡\n` +
@@ -346,16 +346,16 @@ async function handleBotAction(
     const monthlyGoals = goalRows.results.reduce((s: number, g: any) => s + (g.monthly_reserve || 0), 0);
     const disposable = available - monthlyFixed - monthlyGoals;
 
-    return `📊 即時財務總覽\n` +
+    return `即時財務總覽\n` +
       `━━━━━━━━━━━━━━━\n` +
-      `💵 隨身現金：NT$ ${cashTotal.toLocaleString()}\n` +
-      `🏦 銀行活存：NT$ ${bankTotal.toLocaleString()}\n` +
-      `💳 信用卡未出帳：NT$ ${ccUnbilled.toLocaleString()}\n` +
-      `✨ 即時可用餘額：NT$ ${available.toLocaleString()}\n` +
+      `▪ 隨身現金：NT$ ${cashTotal.toLocaleString()}\n` +
+      `▪ 銀行活存：NT$ ${bankTotal.toLocaleString()}\n` +
+      `▪ 信用卡未出帳：NT$ ${ccUnbilled.toLocaleString()}\n` +
+      `▪ 即時可用餘額：NT$ ${available.toLocaleString()}\n` +
       `━━━━━━━━━━━━━━━\n` +
-      `🔄 固定月攤提：NT$ ${Math.round(monthlyFixed).toLocaleString()}\n` +
-      `🎯 儲蓄月預留：NT$ ${monthlyGoals.toLocaleString()}\n` +
-      `💡 可自由花用：NT$ ${Math.round(disposable).toLocaleString()}`;
+      `▪ 固定月攤提：NT$ ${Math.round(monthlyFixed).toLocaleString()}\n` +
+      `▪ 儲蓄月預留：NT$ ${monthlyGoals.toLocaleString()}\n` +
+      `▪ 可自由花用：NT$ ${Math.round(disposable).toLocaleString()}`;
   }
 
   // 5. 處理收支記帳
@@ -366,7 +366,7 @@ async function handleBotAction(
     const accounts = await fetchVisibleAccounts(db, userId, memberUserIds);
 
     if (accounts.length === 0) {
-      return '⚠️ 目前尚未建立任何帳戶，請先至網頁版建立帳戶後再記帳！';
+      return '目前尚未建立任何帳戶，請先至網頁版建立帳戶後再記帳！';
     }
 
     // 結合實際可見帳戶名稱再次解析，確保自訂帳戶名稱也能從備註中乾淨剝離
@@ -445,28 +445,20 @@ async function handleBotAction(
     const updatedAccounts = await fetchVisibleAccounts(db, userId, memberUserIds);
     const { available: currentAvailable } = computeAvailableTotals(updatedAccounts);
 
-    const emojiMap: Record<string, string> = {
-      '餐飲':'🍜', '交通':'🚇', '汽機車輛':'🚗', '居家水電':'⚡', '數位訂閱':'📱',
-      '購物':'🛍️', '生活':'💡', '娛樂':'🎮', '美妝保養':'💄', '醫療':'💊',
-      '教育':'📚', '寵物毛孩':'🐱', '旅行度假':'✈️', '社交人情':'🧧', '保險稅費':'📑',
-      '薪資':'💵', '獎金':'🎁', '投資':'📈', '兼職':'💼', '政府補貼':'🏛️',
-      '禮金餽贈':'🧧', '二手出清':'♻️', '其他':'📦',
-    };
-
-    return `📝 記帳成功！\n` +
+    return `記帳成功！\n` +
       `━━━━━━━━━━━━━━━\n` +
-      `▫️ 項目：${note}\n` +
-      `▫️ 類型：${parsed.type === 'income' ? '收入 📈' : '支出 📉'}\n` +
-      `▫️ 歸屬：${(parsed as any).isShared ? '🏠 家庭公帳（代墊）' : '👤 個人私帳'}\n` +
-      `▫️ 分類：${emojiMap[category] || '📌'} ${category}\n` +
-      `▫️ 金額：NT$ ${amount.toLocaleString()}\n` +
-      `▫️ 帳戶：${targetAccount.name}\n` +
-      `▫️ 記帳人：${userName}\n` +
+      `▪ 項目：${note}\n` +
+      `▪ 類型：${parsed.type === 'income' ? '收入' : '支出'}\n` +
+      `▪ 歸屬：${(parsed as any).isShared ? '家庭公帳（代墊）' : '個人私帳'}\n` +
+      `▪ 分類：${category}\n` +
+      `▪ 金額：NT$ ${amount.toLocaleString()}\n` +
+      `▪ 帳戶：${targetAccount.name}\n` +
+      `▪ 記帳人：${userName}\n` +
       `━━━━━━━━━━━━━━━\n` +
-      `💰 目前可用餘額：NT$ ${currentAvailable.toLocaleString()}`;
+      `目前可用餘額：NT$ ${currentAvailable.toLocaleString()}`;
   }
 
-  return '❓ 無法理解此訊息，您可以直接輸入「午餐 120」記帳，或輸入「餘額」查帳！';
+  return '無法理解此訊息，您可以直接輸入「午餐 120」記帳，或輸入「餘額」查帳！';
 }
 
 // POST /bot/webhook/line
@@ -486,7 +478,7 @@ bot.post('/webhook/line', async (c) => {
           replyText = await handleBotAction(c.env.DB, 'line', lineUserId, text);
         } catch (actionErr: any) {
           console.error('LINE handleBotAction err:', actionErr);
-          replyText = `⚠️ 記帳處理發生異常：${actionErr.message || '未知錯誤'}，請稍後再試。`;
+          replyText = `記帳處理發生異常：${actionErr.message || '未知錯誤'}，請稍後再試。`;
         }
 
         // 如果設定了 LINE_CHANNEL_ACCESS_TOKEN 則呼叫 LINE Reply API
@@ -546,7 +538,7 @@ bot.post('/webhook/telegram', async (c) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: chatId,
-          text: `⚠️ 記帳處理發生異常：${err.message || '未知錯誤'}，請稍後再試。`,
+          text: `記帳處理發生異常：${err.message || '未知錯誤'}，請稍後再試。`,
         }),
       }).catch(e => console.error('Telegram fallback error reply failed:', e));
     }

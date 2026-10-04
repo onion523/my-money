@@ -164,40 +164,44 @@ _Avoid_: 自由提款 (unrestricted withdrawal)、代領 (proxy reimbursement)
 
 ### 帳本視角與範疇 (Ledger Scope & Filter Terminology)
 
+**Vector SVG Icon System (全站向量圖示系統)**:
+全站介面（包含導覽、頁面標題、統計卡片、空狀態插圖、三態視角切換、交易列與預測狀態徽章、27 種收支分類圖示與 12 款儲蓄目標圖示）全面採用 `lucide-react` 向量 SVG 圖示，徹底捨棄系統字型 Emoji。瀏覽器原生 `<select><option>` 下拉選單僅呈現乾淨純文字；Telegram 與 LINE 機器人純文字回覆亦移除 Emoji，改用純文字幾何排版符號（如 `▪`、`•`）。
+_Avoid_: 系統字型 Emoji (system font emoji)、跨平台不一致繪文字 (platform-dependent pictographs)
+
 **Unified Ledger Scope (統一帳本範疇體系)**:
-全站各頁面（Dashboard 總覽、Transactions 收支明細、Accounts 帳戶資產、Recurring 週期收支、Analytics 財務分析、Forecast 現金流預測）在提供資料範圍過濾或切換檢視時，一律採用「全部 (all)」、「公帳 (household)」、「私帳 (personal)」三態結構，並固定搭配高對比單一語意符號（全部採用高對比向量地球圖示，避免遭粉紅主題色吃色；公私帳採用標準符號）：🌐 全部、🏠 公帳、🔒 私帳。切換器為純選項群組，不附「檢視範圍」等標題文字；彈窗內之公帳／私帳歸屬二態按鈕沿用同一符號與用語。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語。
-_Avoid_: 全貌合併 (full merge)、檢視合併 (combined view)、家庭公用 (household common)
+全站各頁面（Dashboard 總覽、Transactions 收支明細、Accounts 帳戶資產、Recurring 週期收支、Analytics 財務分析、Forecast 現金流預測）在提供資料範圍過濾或切換檢視時，一律採用「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」三態結構，並固定搭配高對比 Lucide 向量 SVG 圖示：`Globe` 全部、`Home` 公帳、`Lock` 私帳。切換器為純選項群組，不附「檢視範圍」等標題文字；彈窗內之公帳／私帳歸屬二態按鈕沿用同一 SVG 圖示與用語。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語及任何 Emoji 符號。
+_Avoid_: 全貌合併 (full merge)、檢視合併 (combined view)、家庭公用 (household common)、Emoji 視角符號 (emoji scope pictographs)
 
 **All Scope (全部)**:
-全站三態切換的首個選項（value: `all`，顯示「🌐 全部」且在啟用時採用純白高對比向量地球圖示），聚合呈現目前登入者之「個人私帳」以及家庭全體成員共用之「家庭公帳／共同基金」，提供全方位家庭財務與資產流水概覽。
+全站三態切換的首個選項（value: `all`，搭配 `Globe` 向量地球圖示），聚合呈現目前登入者之「個人私帳」以及家庭全體成員共用之「家庭公帳／共同基金」，提供全方位家庭財務與資產流水概覽。
 _Avoid_: 全部 (本人 + 家庭公用) (all with verbose suffix)、全貌合併 (complete merge)、總體 (total)
 
 **Shared Scope (公帳)**:
-全站三態切換的第二個選項（value: `household`，顯示「🏠 公帳」），專注呈現標記為家庭公用之收支流水（`is_shared = 1`）、家庭共同基金帳戶（`is_joint = 1`）與共同信用卡，完全聚焦於家庭公共生活財務。
-_Avoid_: 🏠 家庭公帳 (household shared)、🏠 家庭公用 (共同基金/家庭卡) (verbose household tag)
+全站三態切換的第二個選項（value: `household`，搭配 `Home` 向量房屋圖示），專注呈現標記為家庭公用之收支流水（`is_shared = 1`）、家庭共同基金帳戶（`is_joint = 1`）與共同信用卡，完全聚焦於家庭公共生活財務。
+_Avoid_: 家庭公帳 (household shared)、家庭公用 (共同基金/家庭卡) (verbose household tag)
 
 **Personal Scope (私帳)**:
-全站三態切換的第三個選項（value: `personal`，顯示「🔒 私帳」），嚴格僅呈現登入者本人名下之個人私密收支（`is_shared = 0`）、個人現金皮夾、活存銀行存款與個人信用卡（`is_joint = 0`），徹底隔離家庭公帳與他人帳務。
-_Avoid_: 👤 個人私帳 (personal account verbose)、🔒 個人私帳 (personal private)、私帳 (plain text without canonical icon)
+全站三態切換的第三個選項（value: `personal`，搭配 `Lock` 向量鎖頭圖示），嚴格僅呈現登入者本人名下之個人私密收支（`is_shared = 0`）、個人現金皮夾、活存銀行存款與個人信用卡（`is_joint = 0`），徹底隔離家庭公帳與他人帳務。
+_Avoid_: 個人私帳 (personal account verbose)、無圖示純文字私帳 (plain text without canonical SVG icon)
 
 **Modal Scope Toggle (記帳歸屬二態切換)**:
-在快速記帳、新增交易、信用卡還款、週期收支設定等表單彈窗（Modal）中，收支歸屬固定簡化正名為「🏠 公帳」與「🔒 私帳」二元切換按鈕，移除多餘之「(公開)」、「(隱私)」等括號贅詞。
-_Avoid_: 🏠 家庭公帳 (公開) (verbose public)、🔒 個人私帳 (隱私) (verbose private)
+在快速記帳、新增交易、信用卡還款、週期收支設定等表單彈窗（Modal）中，收支歸屬固定簡化正名為搭配 `Home` 圖示之「公帳」與搭配 `Lock` 圖示之「私帳」二元切換按鈕，移除多餘之「(公開)」、「(隱私)」等括號贅詞。
+_Avoid_: 家庭公帳 (公開) (verbose public)、個人私帳 (隱私) (verbose private)
 
 **Household Scope Advance Visibility (公帳視角代墊透視)**:
-在帳戶管理之「🏠 公帳」視角下，系統除呈現家庭共同基金與共同信用卡（is_joint = 1）外，同時納入「含有家庭代墊公帳欠款（shared_debt > 0）之個人信用卡」以及「家庭公帳代墊待沖款總覽橫幅（Pending Household Advances Banner）」，讓全家成員清楚掌握家庭實質應負擔之所有公帳資產與代墊負債。
+在帳戶管理之「公帳」視角下，系統除呈現家庭共同基金與共同信用卡（is_joint = 1）外，同時納入「含有家庭代墊公帳欠款（shared_debt > 0）之個人信用卡」以及「家庭公帳代墊待沖款總覽橫幅（Pending Household Advances Banner）」，讓全家成員清楚掌握家庭實質應負擔之所有公帳資產與代墊負債。
 _Avoid_: 私卡完全遮蔽 (full private card block)、漏列公帳代墊 (omitted advances)
 
 **Sanitized Private Card Shared View (私卡公帳脫敏檢視)**:
-當家庭成員在公帳視角檢視非本人之代墊個人信用卡時，系統執行嚴格資訊脫敏（Data Masking），僅揭示卡片名稱、持卡人姓名、家庭代墊公帳待繳額（shared_debt）與結帳/繳款日，徹底遮蔽持卡人之個人信用額度（credit_limit）與個人私帳消費額（personal_debt）。非持卡人僅開放點擊「🏠 繳家庭代墊」協助自共同基金清償公帳欠款，禁止執行校準、出帳作業、修改或刪除。
+當家庭成員在公帳視角檢視非本人之代墊個人信用卡時，系統執行嚴格資訊脫敏（Data Masking），僅揭示卡片名稱、持卡人姓名、家庭代墊公帳待繳額（shared_debt）與結帳/繳款日，徹底遮蔽持卡人之個人信用額度（credit_limit）與個人私帳消費額（personal_debt）。非持卡人僅開放點擊「繳家庭代墊」協助自共同基金清償公帳欠款，禁止執行校準、出帳作業、修改或刪除。
 _Avoid_: 完整私卡暴露 (unmasked private card)、越權出帳 (unauthorized rollover)
 
 **Accrual Household Balance (公帳權責淨餘額)**:
-公帳視角下的「💳 信用卡總待繳」與「💎 淨可用餘額」採權責會計責任制，將「家庭共同信用卡欠款」與「全體成員個人私卡上之公帳代墊欠款（shared_debt）」合併計入家庭負債，真實反映扣除所有公帳待付責任後的家庭淨可用資金。
+公帳視角下的「信用卡總待繳」與「淨可用餘額」採權責會計責任制，將「家庭共同信用卡欠款」與「全體成員個人私卡上之公帳代墊欠款（shared_debt）」合併計入家庭負債，真實反映扣除所有公帳待付責任後的家庭淨可用資金。
 _Avoid_: 虛胖可用餘額 (inflated available balance)、純共同帳戶窄視角 (narrow joint-only balance)
 
 **Mobile Account Card Overflow Guard (手機帳戶卡片防溢出)**:
-手機版儀表板「帳戶一覽」卡片採兩行標題（第一行圖示＋帳戶名稱，過長以省略號截斷；第二行公私帳與類型徽章）、信用卡「🏠 代墊」與「👤 個人私帳」金額分行靠右，且網格欄位使用 `minmax(0, 1fr)` 與 `min-width: 0`，確保卡片絕不超出螢幕寬度。
+手機版儀表板「帳戶一覽」卡片採兩行標題（第一行 SVG 圖示＋帳戶名稱，過長以省略號截斷；第二行公私帳與類型徽章）、信用卡「代墊」與「個人私帳」金額分行靠右，且網格欄位使用 `minmax(0, 1fr)` 與 `min-width: 0`，確保卡片絕不超出螢幕寬度。
 _Avoid_: 單列硬擠 (single-row cramming)、橫向截斷 (horizontal clipping)
 
 ---
@@ -205,19 +209,19 @@ _Avoid_: 單列硬擠 (single-row cramming)、橫向截斷 (horizontal clipping)
 ### 交易分類體系 (Category Taxonomy)
 
 **Curated Category Taxonomy (標準擴充分類庫)**:
-系統內建定義之標準收支分類集合，覆蓋日常生活高頻場景，具備標準 Emoji 圖示、語意推薦關鍵字庫與統計圖表適配，不開放建立零碎自訂資料表以確保家庭成員在統計、預算與圓餅圖上擁有統一的分析維度。
-_Avoid_: 自訂分類表 (custom category table)、動態標籤 (dynamic tags)、未分類 (unclassified)
+系統內建定義之標準收支分類集合，覆蓋日常生活高頻場景，具備標準 Lucide 向量 SVG 圖示（`CategoryIcon`）、語意推薦關鍵字庫與統計圖表適配，不開放建立零碎自訂資料表以確保家庭成員在統計、預算與圓餅圖上擁有統一的分析維度。
+_Avoid_: 自訂分類表 (custom category table)、動態標籤 (dynamic tags)、未分類 (unclassified)、Emoji 分類圖示 (emoji category icons)
 
 **Standard Category Set (標準分類清單)**:
-系統內建定義之標準收支分類集合，包含 16 項支出（餐飲 🍜、交通 🚇、汽機車輛 🚗、居家水電 ⚡、數位訂閱 📱、購物 🛍️、生活 💡、娛樂 🎮、美妝保養 💄、醫療 💊、教育 📚、寵物毛孩 🐱、旅行度假 ✈️、社交人情 🧧、保險稅費 📑、其他 📦）以及 8 項收入（薪資 💵、獎金 🎁、投資 📈、兼職 💼、政府補貼 🏛️、禮金餽贈 🧧、二手出清 ♻️、其他 📦）。
-_Avoid_: 自由輸入類別 (freeform category)、舊版八大類 (legacy 8 categories)
+系統內建定義之標準收支分類與專屬向量圖示集合，包含 16 項支出（餐飲 `Utensils`、交通 `TrainFront`、汽機車輛 `Car`、居家水電 `Zap`、數位訂閱 `Smartphone`、購物 `ShoppingBag`、生活 `Lightbulb`、娛樂 `Gamepad2`、美妝保養 `Sparkles`、醫療 `Pill`、教育 `BookOpen`、寵物毛孩 `PawPrint`、旅行度假 `Plane`、社交人情 `HeartHandshake`、保險稅費 `ShieldCheck`、其他 `Package`）、8 項收入（薪資 `Banknote`、獎金 `Gift`、投資 `TrendingUp`、兼職 `Briefcase`、政府補貼 `Landmark`、禮金餽贈 `Heart`、二手出清 `Recycle`、其他 `Package`）與 4 項系統類別（信用卡還款 `CreditCard`、內部轉帳 `ArrowLeftRight`、ATM提款 `Coins`、公帳代墊報銷 `HandCoins`）。
+_Avoid_: 自由輸入類別 (freeform category)、舊版八大類 (legacy 8 categories)、Emoji 字串映射 (emoji string mapping)
 
 **Two-Tier Category Recommendation (雙層分類推薦引擎)**:
 在使用者輸入交易備註或通訊軟體自然語句時，自動推測最合適分類的雙層架構：第一層優先檢索個人/家庭近期歷史交易備註（Historical Note Memory），以 `note != '' AND (note = ? OR instr(?, note) > 0)` 檢索非空歷史備註（嚴禁將資料庫 `note` 置於 `LIKE '%' || note || '%'` 樣板端，以免長備註觸發 SQLite `LIKE or GLOB pattern too complex` 上限崩潰或空字串萬用誤配），若有歷史同名或包含紀錄則優先採納個人既有習慣；第二層若無歷史紀錄，則落入內建生活語意關鍵字庫（Lexicon Fallback，涵蓋高頻品牌、交通、水電、訂閱、寵物等名詞）進行精準匹配。
 _Avoid_: 純關鍵字暴力匹配 (hardcoded keyword matching only)、全盲隨機猜測 (blind guess)、欄位拼接 LIKE 樣板 (`LIKE '%' || note || '%'`)
 
 **Adaptive Category Preselection (自適應分類預選與鎖定保護)**:
-前端記帳表單在使用者鍵入交易備註或商家名稱時，即時調用雙層分類推薦引擎自動切換分類下拉選單並顯示「✨ 已智慧推薦為【類別】」柔和微光徽章。若使用者在該次填表中主動手動點選更換過分類，系統即刻啟動「選擇鎖定 (User Choice Lock)」，後續打字將嚴格保留使用者手動設定，杜絕反覆覆蓋干擾。
+前端記帳表單在使用者鍵入交易備註或商家名稱時，即時調用雙層分類推薦引擎自動切換分類下拉選單並顯示搭配 `Sparkles` 向量圖示之「已智慧推薦為【類別】」柔和微光徽章。若使用者在該次填表中主動手動點選更換過分類，系統即刻啟動「選擇鎖定 (User Choice Lock)」，後續打字將嚴格保留使用者手動設定，杜絕反覆覆蓋干擾。
 _Avoid_: 強迫覆蓋 (forced overwrite)、生硬彈窗 (intrusive popup)、無感靜默 (silent shift)
 
 ### 規劃與預測 (Planning & Forecasting)
@@ -227,7 +231,7 @@ _Avoid_: 強迫覆蓋 (forced overwrite)、生硬彈窗 (intrusive popup)、無�
 _Avoid_: 訂閱 (subscription)、固定支出 (fixed expense)、週期契約 (contract)
 
 **Recurring Ledger Attribution (週期收支公私帳歸屬)**:
-每筆週期收支具備顯式之公私帳歸屬標記（`is_shared`：🏠 公帳 / 🔒 私帳）。於表單選取扣款帳戶時自動預帶該帳戶之公私屬性，並允許手動切換以支援「以個人私卡固定代扣家庭公帳（如水電、網路費）」之代墊情境。私帳週期項目僅建立者本人可見與改刪；公帳週期項目對全體家庭成員透明共享，並由建立者與家庭管理員共治管理。
+每筆週期收支具備顯式之公私帳歸屬標記（`is_shared`：搭配 `Home` 圖示之公帳 / 搭配 `Lock` 圖示之私帳）。於表單選取扣款帳戶時自動預帶該帳戶之公私屬性，並允許手動切換以支援「以個人私卡固定代扣家庭公帳（如水電、網路費）」之代墊情境。私帳週期項目僅建立者本人可見與改刪；公帳週期項目對全體家庭成員透明共享，並由建立者與家庭管理員共治管理。
 _Avoid_: 純依賴帳戶歸屬 (account-only inference)、無公私帳區分之固定收支 (unscoped recurring item)
 
 **Exact Recurring Schedule (確切週期繳費排程)**:
@@ -239,7 +243,7 @@ _Avoid_: 模除猜測 (modulo guessing)、固定雙數月 (hardcoded even months
 _Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑化 (smoothing)、攤提 (proration)
 
 **Scoped Cash Flow Forecast (三態現金流預測)**:
-支援切換「🌐 全部 (`all`)」、「🏠 公帳 (`household`)」、「🔒 私帳 (`personal`)」之未來 30 天逐日資金流模擬引擎。各視角之第 0 天起始基準餘額與帳戶管理頁之「💎 淨可用餘額（含公帳權責代墊扣減）」100% 對齊，並依視角過濾未來 30 天預定發生之週期收支排程事件，於時間軸卡片標示 `🏠 公帳` / `🔒 私帳` 徽章與扣款帳戶。
+支援切換「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」之未來 30 天逐日資金流模擬引擎。各視角之第 0 天起始基準餘額與帳戶管理頁之「淨可用餘額（含公帳權責代墊扣減）」100% 對齊，並依視角過濾未來 30 天預定發生之週期收支排程事件，於時間軸卡片標示 `Home` 公帳 / `Lock` 私帳向量徽章與扣款帳戶。
 _Avoid_: 單一混合預測 (unscoped mixed forecast)、起點與帳戶餘額脫鉤 (decoupled starting balance)
 
 **Card Payment Event (繳卡費事件)**:
@@ -251,19 +255,19 @@ _Avoid_: 自動繳卡 (auto repayment)
 _Avoid_: 刷卡日直接扣款 (immediate swipe cash deduction)、粗暴合併繳卡費 (opaque card merge)
 
 **Settled Forecast Event (已繳預測事件)**:
-未來 30 天現金流預測排程中，已被使用者勾選標記為「✅ 已繳」之單次排程事件（涵蓋週期支出、週期收入與💳 繳卡費，以 `項目 ID + 預計日期 YYYY-MM-DD` 唯一識別）。當一筆事件已經實際刷卡入帳（進入信用卡未出帳）或已提前消費扣款時，勾選「已繳」即可將該次事件從 30 天現金流折線圖與購買力試算中豁免（不列入計算，防止重複扣款），並在排程清單中保留顯示為半透明刪除線狀態，支援隨時取消勾選恢復計算。
+未來 30 天現金流預測排程中，已被使用者勾選標記為「已繳」（搭配 `CheckCircle2` / `Circle` 向量圖示）之單次排程事件（涵蓋週期支出、週期收入與繳卡費，以 `項目 ID + 預計日期 YYYY-MM-DD` 唯一識別）。當一筆事件已經實際刷卡入帳（進入信用卡未出帳）或已提前消費扣款時，勾選「已繳」即可將該次事件從 30 天現金流折線圖與購買力試算中豁免（不列入計算，防止重複扣款），並在排程清單中保留顯示為半透明刪除線狀態，支援隨時取消勾選恢復計算。
 _Avoid_: 刪除排程 (delete schedule)、永久停用 (permanent disable)
 
 **Savings Goal (儲蓄目標)**:
-使用者設定具有目標總額與預計達成日的專項資產目標，其每月提撥額實質鎖定可支配現金。
-_Avoid_: 存錢筒 (piggy bank)、夢想基金 (fund target)、願望 (wish)
+使用者設定具有目標總額與預計達成日的專項資產目標，其每月提撥額實質鎖定可支配現金。目標圖示採用 12 款預設 Lucide 向量 SVG 圖示選擇器（將圖示代號存入 `emoji` 欄位，並對既有資料庫中舊有 Emoji 字串自動向後相容轉譯為對應 SVG 圖示）。
+_Avoid_: 存錢筒 (piggy bank)、夢想基金 (fund target)、願望 (wish)、直接渲染生文字 Emoji (raw emoji rendering)
 
 **Budget (預算額度)**:
 針對特定月份與特定消費類別所設定之支出上限，並具備即時預警監控。
 _Avoid_: 額度 (spending limit)、花費上限 (cap)、配額 (allowance)
 
 **Affordability Check (購買力試算)**:
-使用者面臨大額消費前，隨當前所選視角（全部 / 公帳 / 私帳）即時試算扣除該筆開銷並模擬未來 30 天該視角週期收支後，是否會發生透支或擠壓儲蓄目標預留款的安全檢查。在「🏠 公帳」視角下，專注檢核共同基金是否透支，嚴格隔離成員個人私密儲蓄目標。
+使用者面臨大額消費前，隨當前所選視角（全部 / 公帳 / 私帳）即時試算扣除該筆開銷並模擬未來 30 天該視角週期收支後，是否會發生透支或擠壓儲蓄目標預留款的安全檢查。在「公帳」視角下，專注檢核共同基金是否透支，嚴格隔離成員個人私密儲蓄目標。
 _Avoid_: 購買模擬 (purchase simulation)、預算檢查 (budget check)、試算 (simulation)
 
 
@@ -276,7 +280,7 @@ _Avoid_: 購買模擬 (purchase simulation)、預算檢查 (budget check)、試�
 _Avoid_: 授權 (auth)、連線 (connection)、配對 (pairing)
 
 **Natural Message (自然語言指令)**:
-使用者於通訊聊天室輸入非結構化日常語句（例如：`早餐 100`、`晚餐 100 公帳 現金`、`好市多 3200 公帳玉山`），由系統自動拆解並剝離「金額」、「公私帳歸屬詞彙（`公帳`、`公費`、`家用`、`私帳`、`個人`）」與「帳戶關鍵字或類型詞彙（自訂帳戶名稱，或通用類型詞 `現金`/`錢包` 對應 `Cash Wallet`、`信用卡`/`刷卡` 對應 `Credit Card`、`銀行`/`活存` 對應 `Bank Account`）」，將剩餘純品項文字作為交易備註（`note`），無論各詞彙輸入順序或是否含空白皆互不覆蓋污染；並即時雙向連動資產帳戶餘額（`Bank Account` 與 `Cash Wallet` 扣減／增加 `balance`，`Credit Card` 增加未出帳並觸發 `Credit Card Balance Reconciliation`），回傳包含現金、活存與信用卡欠款之真實 `Available Balance (淨可用餘額)`。Webhook 端點遇未知例外時必須捕獲並回傳 HTTP 200 與友善錯誤提示，嚴禁回傳 HTTP 500 導致 Telegram Webhook 佇列（`pending_update_count`）阻塞死鎖。
+使用者於通訊聊天室輸入非結構化日常語句（例如：`早餐 100`、`晚餐 100 公帳 現金`、`好市多 3200 公帳玉山`），由系統自動拆解並剝離「金額」、「公私帳歸屬詞彙（`公帳`、`公費`、`家用`、`私帳`、`個人`）」與「帳戶關鍵字或類型詞彙（自訂帳戶名稱，或通用類型詞 `現金`/`錢包` 對應 `Cash Wallet`、`信用卡`/`刷卡` 對應 `Credit Card`、`銀行`/`活存` 對應 `Bank Account`）」，將剩餘純品項文字作為交易備註（`note`），無論各詞彙輸入順序或是否含空白皆互不覆蓋污染；並即時雙向連動資產帳戶餘額（`Bank Account` 與 `Cash Wallet` 扣減／增加 `balance`，`Credit Card` 增加未出帳並觸發 `Credit Card Balance Reconciliation`），回傳包含現金、活存與信用卡欠款之真實 `Available Balance (淨可用餘額)`（回覆訊息全面使用純文字幾何符號如 `▪`、`•` 排版，不使用 Emoji）。Webhook 端點遇未知例外時必須捕獲並回傳 HTTP 200 與友善錯誤提示，嚴禁回傳 HTTP 500 導致 Telegram Webhook 佇列（`pending_update_count`）阻塞死鎖。
 _Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick entry)、固定雙詞切分 (naive 2-token split)、Webhook 500 佇列阻塞 (webhook 500 queue stalling)
 
 ---

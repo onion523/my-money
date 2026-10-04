@@ -2,7 +2,7 @@ import { TransactionsSkeleton } from '../components/Skeleton'
 import { useState, useEffect, useMemo } from 'react'
 import { txApi, accountsApi, exportApi, householdApi, Transaction, Account } from '../api/client'
 import { useStore } from '../store/useStore'
-import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS, buildHistoryMemo, recommendCategory } from '../components/utils'
+import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, buildHistoryMemo, recommendCategory } from '../components/utils'
 import Modal from '../components/Modal'
 import ScopeTabBar from '../components/ScopeTabBar'
 import TransactionRow from '../components/TransactionRow'
@@ -18,6 +18,10 @@ import {
   Tag,
   Lock,
   CreditCard,
+  FileText,
+  Home,
+  CalendarClock,
+  Sparkles,
 } from 'lucide-react'
 
 export default function Transactions() {
@@ -260,7 +264,10 @@ export default function Transactions() {
       {/* 標題與操作按鈕 */}
       <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
         <div>
-          <h1 className="page-title">收支明細 📜</h1>
+          <h1 className="page-title flex items-center gap-xs">
+            <FileText size={26} color="var(--color-primary)" />
+            <span>收支明細</span>
+          </h1>
           <p className="page-subtitle">追蹤與管理所有個人與家庭收支明細、快速篩選與匯出</p>
         </div>
         <div className="flex gap-sm">
@@ -344,7 +351,7 @@ export default function Transactions() {
             >
               <option value="全部">全部分類</option>
               {Array.from(new Set([...CATEGORIES.expense, ...CATEGORIES.income])).map(c => (
-                <option key={c} value={c}>{CATEGORY_ICONS[c] || ''} {c}</option>
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>
@@ -363,7 +370,7 @@ export default function Transactions() {
               <option value="all">全部帳戶</option>
               {scopedAccounts.map(acc => (
                 <option key={acc.id} value={acc.id}>
-                  {acc.is_joint === 1 ? '🏠 ' : '🔒 '}{acc.name} ({acc.type === 'cash' ? '現金' : acc.type === 'bank' ? '活存' : '信用卡'})
+                  [{acc.is_joint === 1 ? '公帳' : '私帳'}] {acc.name} ({acc.type === 'cash' ? '現金' : acc.type === 'bank' ? '銀行存款帳戶' : '信用卡'})
                 </option>
               ))}
             </select>
@@ -410,7 +417,7 @@ export default function Transactions() {
         <TransactionsSkeleton />
       ) : sortedDates.length === 0 ? (
         <div className="card empty-state">
-          <div className="emoji">🔍</div>
+          <div className="emoji"><Search size={40} /></div>
           <h3>沒有符合條件的明細</h3>
           <p style={{ fontSize: '0.875rem', marginBottom: 16 }}>試著調整篩選條件，或新增第一筆收支</p>
           <button className="btn btn-primary" onClick={handleOpenAdd}>
@@ -459,7 +466,7 @@ export default function Transactions() {
                               padding: '3px 8px',
                               borderRadius: 6,
                             }}
-                            title="🔒 系統內部平帳還款紀錄受保護。若金額有誤，請至帳戶管理校正餘額。"
+                            title="系統內部平帳還款紀錄受保護。若金額有誤，請至帳戶管理校正餘額。"
                           >
                             <Lock size={12} />
                             <span>系統保護</span>
@@ -517,7 +524,8 @@ export default function Transactions() {
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px' }}
                   onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
                 >
-                  <span>🏠 公帳</span>
+                  <Home size={15} />
+                  <span>公帳</span>
                 </button>
                 <button
                   type="button"
@@ -525,7 +533,8 @@ export default function Transactions() {
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px' }}
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
-                  <span>🔒 私帳</span>
+                  <Lock size={15} />
+                  <span>私帳</span>
                 </button>
               </div>
             </div>
@@ -570,8 +579,9 @@ export default function Transactions() {
               <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
                 <label className="input-label" style={{ margin: 0 }}>分類</label>
                 {recommendationHint && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-dark)', background: 'rgba(255, 107, 107, 0.12)', padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>
-                    {recommendationHint}
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-dark)', background: 'rgba(255, 107, 107, 0.12)', padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Sparkles size={12} />
+                    <span>{recommendationHint}</span>
                   </span>
                 )}
               </div>
@@ -586,7 +596,7 @@ export default function Transactions() {
               >
                 {CATEGORIES[form.type].map(cat => (
                   <option key={cat} value={cat}>
-                    {CATEGORY_ICONS[cat] || ''} {cat}
+                    {cat}
                   </option>
                 ))}
               </select>
@@ -604,7 +614,7 @@ export default function Transactions() {
                 <option value="" disabled>-- 請選擇扣款 / 存入帳戶 --</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 活存' : '💳 信用卡'} - {acc.name} ({acc.is_joint === 1 ? '🏠 公帳' : '🔒 私帳'})
+                    {acc.type === 'cash' ? '現金' : acc.type === 'bank' ? '銀行存款帳戶' : '信用卡'} - {acc.name} ({acc.is_joint === 1 ? '公帳' : '私帳'})
                   </option>
                 ))}
               </select>
@@ -633,7 +643,8 @@ export default function Transactions() {
                 >
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>🗓️ 列入下期帳單</span>
+                      <CalendarClock size={16} color="#D97706" />
+                      <span>列入下期帳單</span>
                       {form.defer_to_next_statement === 1 && (
                         <span className="badge" style={{ background: '#F59E0B', color: '#fff', fontSize: '0.7rem', padding: '1px 6px' }}>
                           遞延結算
@@ -684,7 +695,7 @@ export default function Transactions() {
                       const rec = recommendCategory(newNote, p.type, historyMemo);
                       if (rec) {
                         next.category = rec.category;
-                        setRecommendationHint(rec.source === 'history' ? `✨ 依歷史習慣推薦【${rec.category}】` : `✨ 智慧推薦為【${rec.category}】`);
+                        setRecommendationHint(rec.source === 'history' ? `依歷史習慣推薦【${rec.category}】` : `智慧推薦為【${rec.category}】`);
                       } else {
                         setRecommendationHint(null);
                       }

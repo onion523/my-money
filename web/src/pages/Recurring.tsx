@@ -17,6 +17,9 @@ import {
   TrendingDown,
   TrendingUp,
   Info,
+  Home,
+  Lock,
+  FileText,
 } from 'lucide-react'
 
 const CYCLE_DIVISORS: Record<string, number> = {
@@ -290,7 +293,7 @@ export default function Recurring() {
         <div className="alert alert-danger flex items-center justify-between" style={{ marginBottom: 20 }}>
           <div className="flex items-center gap-2">
             <AlertCircle size={18} />
-            <span>⚠️ <strong>週期收支資料載入失敗</strong>：{loadError}</span>
+            <span><strong>週期收支資料載入失敗</strong>：{loadError}</span>
           </div>
           <button
             className="btn btn-secondary"
@@ -304,7 +307,10 @@ export default function Recurring() {
       {/* 標題與操作按鈕 */}
       <div className="page-header-row">
         <div>
-          <h1 className="page-title">週期收支 🔄</h1>
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>週期收支</span>
+            <RefreshCw size={24} style={{ color: 'var(--color-primary)' }} />
+          </h1>
           <p className="page-subtitle">管理每月定期租金、水電、訂閱與薪資，自動計算平均每月支出</p>
         </div>
         <div className="header-actions">
@@ -360,7 +366,7 @@ export default function Recurring() {
 
         {expenseItems.length === 0 ? (
           <div className="card empty-state">
-            <div className="emoji">📝</div>
+            <div className="emoji"><FileText size={40} /></div>
             <h3>尚未新增週期支出</h3>
             <p style={{ fontSize: '0.875rem', marginBottom: 12 }}>如房租、網路費、Netflix 訂閱、保險費等</p>
             <button className="btn btn-primary btn-sm" onClick={handleOpenAdd}>立即新增</button>
@@ -381,9 +387,13 @@ export default function Recurring() {
                       <div className="recurring-card-header">
                         <span className="recurring-card-title">{item.name}</span>
                         {item.is_shared === 1 ? (
-                          <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>🏠 公帳</span>
+                          <span className="badge badge-primary" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <Home size={11} /> 公帳
+                          </span>
                         ) : (
-                          <span className="badge badge-secondary" style={{ fontSize: '0.7rem' }}>🔒 私帳</span>
+                          <span className="badge badge-secondary" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <Lock size={11} /> 私帳
+                          </span>
                         )}
                         {item.user_name && (
                           <span className="badge" style={{ background: 'rgba(0,0,0,0.06)', fontSize: '0.7rem' }}>
@@ -474,9 +484,13 @@ export default function Recurring() {
                       <div className="recurring-card-header">
                         <span className="recurring-card-title">{item.name}</span>
                         {item.is_shared === 1 ? (
-                          <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>🏠 公帳</span>
+                          <span className="badge badge-primary" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <Home size={11} /> 公帳
+                          </span>
                         ) : (
-                          <span className="badge badge-secondary" style={{ fontSize: '0.7rem' }}>🔒 私帳</span>
+                          <span className="badge badge-secondary" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <Lock size={11} /> 私帳
+                          </span>
                         )}
                         {item.user_name && (
                           <span className="badge" style={{ background: 'rgba(0,0,0,0.06)', fontSize: '0.7rem' }}>
@@ -732,7 +746,7 @@ export default function Recurring() {
                 <option value="">無特定帳戶</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.type === 'cash' ? '💵 現金' : acc.type === 'bank' ? '🏦 銀行存款帳戶' : '💳 信用卡'})
+                    {acc.name} ({acc.type === 'cash' ? '現金' : acc.type === 'bank' ? '銀行存款帳戶' : '信用卡'})
                   </option>
                 ))}
               </select>
@@ -755,7 +769,8 @@ export default function Recurring() {
                   }}
                   onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
                 >
-                  <span>🔒 私帳</span>
+                  <Lock size={14} />
+                  <span>私帳</span>
                 </button>
                 <button
                   type="button"
@@ -770,13 +785,14 @@ export default function Recurring() {
                   }}
                   onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
                 >
-                  <span>🏠 公帳</span>
+                  <Home size={14} />
+                  <span>公帳</span>
                 </button>
               </div>
               <p className="text-xs text-muted" style={{ marginTop: 4 }}>
                 {form.is_shared === 1
-                  ? '🏠 家庭公帳：此項週期收支計入家庭公共現金流與固定收支，家庭管理員與建立者皆可管理。'
-                  : '🔒 個人私帳：僅本人可見並計入個人現金流。若選用個人信用卡固定扣繳公用費用，可手動切換為公帳。'}
+                  ? '家庭公帳：此項週期收支計入家庭公共現金流與固定收支，家庭管理員與建立者皆可管理。'
+                  : '個人私帳：僅本人可見並計入個人現金流。若選用個人信用卡固定扣繳公用費用，可手動切換為公帳。'}
               </p>
             </div>
 
@@ -791,7 +807,7 @@ export default function Recurring() {
                   disabled={submitting}
                 >
                   <Trash2 size={16} />
-                  <span>{confirmingModalDelete ? '⚠️ 確定刪除？再次點擊' : '刪除此項目'}</span>
+                  <span>{confirmingModalDelete ? '確定刪除？再次點擊' : '刪除此項目'}</span>
                 </button>
               )}
               <button

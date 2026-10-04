@@ -16,6 +16,11 @@ import {
   TrendingUp,
   AlertTriangle,
   CheckCircle,
+  CheckCircle2,
+  Circle,
+  RotateCcw,
+  Home,
+  Lock,
   HelpCircle,
   ShoppingCart,
   Calendar,
@@ -116,7 +121,10 @@ export default function Forecast() {
     <div className="fade-in">
       {/* 頁面標題 */}
       <div style={{ marginBottom: 16 }}>
-        <h1 className="page-title">現金流預測 & 購買力試算 🔮</h1>
+        <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>現金流預測 & 購買力試算</span>
+          <TrendingUp size={24} style={{ color: 'var(--color-primary)' }} />
+        </h1>
         <p className="page-subtitle">模擬未來 30 天資金流向，精確防範透支風險，並提供智慧購物決策支援</p>
       </div>
 
@@ -147,9 +155,16 @@ export default function Forecast() {
               fontSize: '1.4rem',
               color: forecast?.willOverdraft ? 'var(--color-danger)' : 'var(--color-success)',
               marginTop: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
             }}
           >
-            {forecast?.willOverdraft ? '⚠️ 存在透支風險' : '🟢 現金流充裕安全'}
+            {forecast?.willOverdraft ? (
+              <><AlertTriangle size={20} /> 存在透支風險</>
+            ) : (
+              <><CheckCircle2 size={20} /> 現金流充裕安全</>
+            )}
           </div>
           <div className="stat-sub">
             {forecast?.willOverdraft ? '預計餘額將跌破 0，請及早調整' : '在排定所有收支後皆保持正值'}
@@ -198,7 +213,7 @@ export default function Forecast() {
 
         {chartData.length === 0 ? (
           <div className="empty-state" style={{ padding: '40px 0' }}>
-            <div className="emoji">📈</div>
+            <div className="emoji"><TrendingUp size={40} /></div>
             <h3>正在模擬未來現金流…</h3>
           </div>
         ) : (
@@ -304,10 +319,10 @@ export default function Forecast() {
 
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>
                   {checkResult.verdict === 'safe'
-                    ? '🎉 評估結果：可以放心購買！'
+                    ? '評估結果：可以放心購買！'
                     : checkResult.verdict === 'caution'
-                    ? '⚠️ 評估結果：建議審慎評估！'
-                    : '🚨 評估結果：強烈不建議購買！'}
+                    ? '評估結果：建議審慎評估！'
+                    : '評估結果：強烈不建議購買！'}
                 </h3>
               </div>
 
@@ -368,13 +383,17 @@ export default function Forecast() {
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <span style={{ textDecoration: ev.is_settled ? 'line-through' : 'none' }}>{ev.name}</span>
                       {ev.is_shared === 1 ? (
-                        <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>🏠 公帳</span>
+                        <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <Home size={10} /> 公帳
+                        </span>
                       ) : (
-                        <span className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>🔒 私帳</span>
+                        <span className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <Lock size={10} /> 私帳
+                        </span>
                       )}
                       {ev.is_settled && (
-                        <span className="badge badge-income" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
-                          ✅ 已繳（不計入預測）
+                        <span className="badge badge-income" style={{ fontSize: '0.65rem', padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <CheckCircle2 size={10} /> 已繳（不計入預測）
                         </span>
                       )}
                     </div>
@@ -407,12 +426,21 @@ export default function Forecast() {
                           borderRadius: 6,
                           border: '1px solid var(--border-color)',
                           whiteSpace: 'nowrap',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
                         }}
                         disabled={settlingKey === ev.event_key}
                         onClick={() => handleToggleSettle(ev)}
                         title={ev.is_settled ? '點擊取消已繳，恢復列入現金流預測計算' : '勾選已繳後將不列入現金流預測計算'}
                       >
-                        {settlingKey === ev.event_key ? '處理中…' : ev.is_settled ? '↩️ 取消已繳' : '☑️ 已繳'}
+                        {settlingKey === ev.event_key ? (
+                          '處理中…'
+                        ) : ev.is_settled ? (
+                          <><RotateCcw size={12} /> 取消已繳</>
+                        ) : (
+                          <><Circle size={12} /> 已繳</>
+                        )}
                       </button>
                     )}
                   </div>

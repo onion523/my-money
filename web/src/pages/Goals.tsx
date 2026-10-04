@@ -11,12 +11,12 @@ import {
   Target,
   PiggyBank,
   CheckCircle,
+  CheckCircle2,
   Calendar,
   Sparkles,
   Coins
 } from 'lucide-react'
-
-const EMOJI_PRESETS = ['🎯', '✈️', '🏠', '🚗', '💍', '💻', '👶', '🎓', '🏥', '🏖️', '🎒', '🎨']
+import { GoalIcon, GOAL_ICON_PRESETS, normalizeGoalIconKey } from '../components/icons'
 
 export default function Goals() {
   const [goals, setGoals] = useState<Goal[]>([])
@@ -27,7 +27,7 @@ export default function Goals() {
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [form, setForm] = useState({
     name: '',
-    emoji: '🎯',
+    emoji: 'target',
     target_amount: '',
     monthly_reserve: '',
     deadline: '',
@@ -60,7 +60,7 @@ export default function Goals() {
     setEditingGoal(null)
     setForm({
       name: '',
-      emoji: '🎯',
+      emoji: 'target',
       target_amount: '',
       monthly_reserve: '',
       deadline: '',
@@ -73,7 +73,7 @@ export default function Goals() {
     setEditingGoal(goal)
     setForm({
       name: goal.name,
-      emoji: goal.emoji || '🎯',
+      emoji: normalizeGoalIconKey(goal.emoji),
       target_amount: goal.target_amount.toString(),
       monthly_reserve: goal.monthly_reserve?.toString() || '0',
       deadline: goal.deadline || '',
@@ -172,7 +172,10 @@ export default function Goals() {
       {/* 標題與操作按鈕 */}
       <div className="page-header-row">
         <div>
-          <h1 className="page-title">儲蓄目標 🎯</h1>
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>儲蓄目標</span>
+            <Target size={24} style={{ color: 'var(--color-primary)' }} />
+          </h1>
           <p className="page-subtitle">設立旅行、購屋、緊急備用金等夢想目標，按月預留並逐步實現</p>
         </div>
         <button id="btn-add-goal" className="btn btn-primary" onClick={handleOpenAdd}>
@@ -211,7 +214,7 @@ export default function Goals() {
       {/* 目標清單 */}
       {goals.length === 0 ? (
         <div className="card empty-state">
-          <div className="emoji">🌴</div>
+          <div className="emoji"><Target size={40} /></div>
           <h3>尚未設立任何儲蓄目標</h3>
           <p style={{ fontSize: '0.875rem', marginBottom: 16 }}>為自己和家庭設立第一個儲蓄目標吧，一步步累積安心感！</p>
           <button className="btn btn-primary btn-sm" onClick={handleOpenAdd}>立刻設定目標</button>
@@ -281,26 +284,30 @@ export default function Goals() {
           )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* Emoji 選擇 */}
+            {/* 圖示選擇 */}
             <div className="input-group">
               <label className="input-label">選擇圖示</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {EMOJI_PRESETS.map(em => (
+                {GOAL_ICON_PRESETS.map(preset => (
                   <button
-                    key={em}
+                    key={preset}
                     type="button"
-                    onClick={() => setForm(p => ({ ...p, emoji: em }))}
+                    title={preset}
+                    onClick={() => setForm(p => ({ ...p, emoji: preset }))}
                     style={{
-                      fontSize: '1.4rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                       width: 40,
                       height: 40,
                       borderRadius: 8,
-                      background: form.emoji === em ? 'rgba(255,138,138,0.2)' : 'var(--bg-surface-2)',
-                      border: form.emoji === em ? '2px solid var(--color-primary)' : '1px solid var(--border-color)',
+                      color: form.emoji === preset ? 'var(--color-primary)' : 'var(--text-primary)',
+                      background: form.emoji === preset ? 'rgba(255,138,138,0.2)' : 'var(--bg-surface-2)',
+                      border: form.emoji === preset ? '2px solid var(--color-primary)' : '1px solid var(--border-color)',
                       cursor: 'pointer',
                     }}
                   >
-                    {em}
+                    <GoalIcon name={preset} size={20} />
                   </button>
                 ))}
               </div>
@@ -380,13 +387,15 @@ export default function Goals() {
       {/* 存錢 Modal */}
       {depositGoal && (
         <Modal
-          title={`存入「${depositGoal.emoji} ${depositGoal.name}」`}
+          title={`存入「${depositGoal.name}」`}
           onClose={() => setDepositGoal(null)}
           maxWidth={400}
         >
           <form onSubmit={handleDepositSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ textAlign: 'center', padding: '10px 0' }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: 6 }}>💰</div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,138,138,0.12)', color: 'var(--color-primary)', marginBottom: 6 }}>
+                <GoalIcon name={depositGoal.emoji} size={28} />
+              </div>
               <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                 目前已存：{formatCurrency(depositGoal.saved_amount)} / 目標：{formatCurrency(depositGoal.target_amount)}
               </div>
@@ -442,7 +451,9 @@ function GoalCard({
     <div className="card" style={{ borderTop: isDone ? '4px solid var(--color-success)' : '4px solid var(--color-primary)' }}>
       <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: '1.6rem' }}>{goal.emoji || '🎯'}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: 10, background: 'rgba(255,138,138,0.12)', color: 'var(--color-primary)' }}>
+            <GoalIcon name={goal.emoji} size={20} />
+          </span>
           <div>
             <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{goal.name}</div>
             {goal.deadline && (
@@ -485,8 +496,8 @@ function GoalCard({
           onClick={onDeposit}
           disabled={isDone}
         >
-          <Coins size={14} />
-          <span>{isDone ? '已達成目標 🎉' : '存錢進度 +'}</span>
+          {isDone ? <CheckCircle2 size={14} /> : <Coins size={14} />}
+          <span>{isDone ? '已達成目標' : '存錢進度 +'}</span>
         </button>
       </div>
     </div>

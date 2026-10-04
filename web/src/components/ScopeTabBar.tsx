@@ -1,5 +1,5 @@
 import React from 'react'
-import { Globe } from 'lucide-react'
+import { Globe, Home, Lock } from 'lucide-react'
 
 export type LedgerScope = 'all' | 'household' | 'personal'
 
@@ -62,7 +62,8 @@ export default function ScopeTabBar({ scope, onChange, label, className = '', st
         }}
         onClick={() => onChange('household')}
       >
-        <span>🏠 公帳</span>
+        <Home size={15} style={{ flexShrink: 0 }} />
+        <span>公帳</span>
       </button>
       <button
         type="button"
@@ -78,7 +79,8 @@ export default function ScopeTabBar({ scope, onChange, label, className = '', st
         }}
         onClick={() => onChange('personal')}
       >
-        <span>🔒 私帳</span>
+        <Lock size={15} style={{ flexShrink: 0 }} />
+        <span>私帳</span>
       </button>
     </div>
   )

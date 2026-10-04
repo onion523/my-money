@@ -11,9 +11,9 @@ import {
   formatCurrency,
   thisMonth,
   CATEGORIES,
-  CATEGORY_ICONS,
   ACCOUNT_COLORS
 } from '../components/utils'
+import { CategoryIcon } from '../components/icons'
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
 import ScopeTabBar from '../components/ScopeTabBar'
@@ -41,7 +41,9 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle2,
-  Coins
+  Coins,
+  User,
+  Lightbulb
 } from 'lucide-react'
 
 const PIE_COLORS = [
@@ -175,7 +177,7 @@ export default function Analytics() {
         <div className="alert alert-danger flex items-center justify-between" style={{ marginBottom: 20 }}>
           <div className="flex items-center gap-2">
             <AlertCircle size={18} />
-            <span>⚠️ <strong>統計資料載入失敗</strong>：{loadError}</span>
+            <span><strong>統計資料載入失敗</strong>：{loadError}</span>
           </div>
           <button
             className="btn btn-secondary"
@@ -189,7 +191,10 @@ export default function Analytics() {
       {/* 標題與月份切換 */}
       <div className="page-header-row">
         <div>
-          <h1 className="page-title">統計與分析 📊</h1>
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>統計與分析</span>
+            <PieIcon size={24} style={{ color: 'var(--color-primary)' }} />
+          </h1>
           <p className="page-subtitle">深入洞悉消費佔比、長期收支走勢與嚴格把關年度預算</p>
         </div>
 
@@ -224,7 +229,7 @@ export default function Analytics() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-            {householdShares.map((m, idx) => {
+            {householdShares.map((m) => {
               const pct = totalSharedExpense > 0 ? ((m.total / totalSharedExpense) * 100).toFixed(1) : '0'
               return (
                 <div
@@ -238,7 +243,9 @@ export default function Analytics() {
                   }}
                 >
                   <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>👤 {m.user_name}</span>
+                    <span style={{ fontWeight: 600, fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <User size={14} /> {m.user_name}
+                    </span>
                     <span className="badge badge-safe" style={{ fontSize: '0.75rem' }}>{pct}%</span>
                   </div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-display)' }}>
@@ -257,7 +264,8 @@ export default function Analytics() {
 
           {householdShares.length === 2 && (
             <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(255,212,160,0.15)', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              💡 <strong>平分 (AA制) 結算建議</strong>：
+              <Lightbulb size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              <strong>平分 (AA制) 結算建議</strong>：
               若採兩人均攤，平均每人應負擔 {formatCurrency(Math.round(totalSharedExpense / 2))}。
               {householdShares[0].total !== householdShares[1].total && (
                 <span>
@@ -280,7 +288,7 @@ export default function Analytics() {
 
           {pieData.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 0' }}>
-              <div className="emoji">📊</div>
+              <div className="emoji"><PieIcon size={40} /></div>
               <h3>此範疇本月尚無支出紀錄</h3>
               <p style={{ fontSize: '0.85rem' }}>記錄交易後，這裡將為您分析各分類消費佔比</p>
             </div>
@@ -347,7 +355,7 @@ export default function Analytics() {
 
           {monthlyChartData.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 0' }}>
-              <div className="emoji">📈</div>
+              <div className="emoji"><TrendingUp size={40} /></div>
               <h3>尚無歷史收支數據</h3>
               <p style={{ fontSize: '0.85rem' }}>持續記帳將自動為您繪製年度趨勢</p>
             </div>
@@ -407,7 +415,9 @@ export default function Analytics() {
               >
                 <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
                   <div className="flex items-center gap-sm">
-                    <span style={{ fontSize: '1.2rem' }}>{CATEGORY_ICONS[cat] || '🏷️'}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, background: 'rgba(255,138,138,0.12)', color: 'var(--color-primary)' }}>
+                      <CategoryIcon category={cat} size={16} />
+                    </span>
                     <span style={{ fontWeight: 600 }}>{cat}</span>
                     {isOver && (
                       <span className="badge badge-expense flex items-center gap-xs">
@@ -464,7 +474,7 @@ export default function Analytics() {
                 onChange={e => setSelectedCat(e.target.value)}
               >
                 {CATEGORIES.expense.map(c => (
-                  <option key={c} value={c}>{CATEGORY_ICONS[c] || ''} {c}</option>
+                  <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>

@@ -387,7 +387,8 @@ a { text-decoration: none; color: inherit; }
 .stat-sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
 
 /* ---- 交易項目 ---- */
-.transaction-item {
+.transaction-item,
+.tx-item {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -396,7 +397,8 @@ a { text-decoration: none; color: inherit; }
   transition: background var(--transition-fast);
   cursor: pointer;
 }
-.transaction-item:hover { background: var(--bg-surface-2); }
+.transaction-item:hover,
+.tx-item:hover { background: var(--bg-surface-2); }
 .tx-icon {
   width: 40px;
   height: 40px;
@@ -407,8 +409,8 @@ a { text-decoration: none; color: inherit; }
   font-size: 1.1rem;
   flex-shrink: 0;
 }
-.tx-icon.income  { background: rgba(85, 197, 149, 0.15); }
-.tx-icon.expense { background: rgba(255, 107, 107, 0.12); }
+.tx-icon.income  { background: rgba(85, 197, 149, 0.15); color: var(--color-success); }
+.tx-icon.expense { background: rgba(255, 107, 107, 0.12); color: var(--color-danger); }
 .tx-info { flex: 1; min-width: 0; }
 .tx-name {
   font-weight: 600;
@@ -434,7 +436,14 @@ a { text-decoration: none; color: inherit; }
   padding: var(--space-3xl) var(--space-xl);
   color: var(--text-muted);
 }
-.empty-state .emoji { font-size: 3rem; margin-bottom: var(--space-md); }
+.empty-state .emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  margin-bottom: var(--space-md);
+  color: var(--color-primary);
+}
 .empty-state h3 { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: var(--space-xs); }
 
 /* ---- 載入骨架 (統一收斂至底端微光動效區塊) ---- */

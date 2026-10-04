@@ -784,7 +784,7 @@ accounts.post('/transfer', async (c) => {
   return c.json({
     success: true,
     data: {
-      message: `${isAtm ? 'ATM 提款' : '內部轉帳'}成功 NT$ ${amt.toLocaleString()} (${fromAcc.name} ➡️ ${toAcc.name})`,
+      message: `${isAtm ? 'ATM 提款' : '內部轉帳'}成功 NT$ ${amt.toLocaleString()} (${fromAcc.name} -> ${toAcc.name})`,
       from_balance: fromAcc.balance - amt,
       to_balance: toAcc.balance + amt
     }

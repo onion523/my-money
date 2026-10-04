@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -37,7 +38,9 @@ export default class ErrorBoundary extends Component<Props, State> {
           fontFamily: 'sans-serif',
           color: 'var(--text-primary, #2D3436)'
         }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <div style={{ color: 'var(--color-danger, #EF4444)', marginBottom: 16 }}>
+            <AlertTriangle size={48} />
+          </div>
           <h2 style={{ fontSize: '1.4rem', marginBottom: 8, fontWeight: 700 }}>頁面遇到了一點小問題</h2>
           <p style={{ color: 'var(--text-secondary, #636E72)', fontSize: '0.9rem', marginBottom: 16, textAlign: 'center', maxWidth: 450 }}>
             {this.state.error?.message || '發生未預期的錯誤'}

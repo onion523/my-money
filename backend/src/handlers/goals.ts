@@ -1,4 +1,4 @@
-﻿import { Hono } from 'hono';
+import { Hono } from 'hono';
 import { Env } from '../types';
 import { authMiddleware, generateId } from '../middleware/jwt';
 
@@ -14,7 +14,7 @@ goals.get('/', async (c) => {
 
 goals.post('/', async (c) => {
   const userId = c.get('userId');
-  const { name, emoji = '🎯', target_amount, monthly_reserve = 0, deadline } = await c.req.json();
+  const { name, emoji = 'target', target_amount, monthly_reserve = 0, deadline } = await c.req.json();
   if (!name || !target_amount) return c.json({ success: false, error: '請填寫目標名稱和金額' }, 400);
   const id = generateId();
   await c.env.DB.prepare('INSERT INTO goals (id, user_id, name, emoji, target_amount, saved_amount, monthly_reserve, deadline) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')

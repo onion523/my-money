@@ -245,7 +245,7 @@ async function getForecastStartingBalance(
       cardEvents.push({
         event_key: eventKey,
         date: dueDate,
-        name: `💳 繳卡費 · ${card.name}`,
+        name: `繳卡費 · ${card.name}`,
         type: 'expense',
         amount: Math.round(billed * 100) / 100,
         is_shared: isShared,

@@ -25,7 +25,8 @@ import {
   ChevronDown,
   ChevronUp,
   Receipt,
-  History
+  History,
+  Lightbulb
 } from 'lucide-react'
 
 export default function Family() {
@@ -222,7 +223,10 @@ export default function Family() {
       {/* 標題與說明 */}
       <div className="page-header-row">
         <div>
-          <h1 className="page-title">家庭協同管理 👨‍👩‍👧</h1>
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>家庭協同管理</span>
+            <Users size={24} style={{ color: 'var(--color-primary)' }} />
+          </h1>
           <p className="page-subtitle">與伴侶或家人共同管理即時資金、分擔開支與追蹤儲蓄進度</p>
         </div>
         {hasHousehold && (
@@ -329,15 +333,15 @@ export default function Family() {
                   width: 56, height: 56, borderRadius: 16,
                   background: 'white', display: 'flex',
                   alignItems: 'center', justifyContent: 'center',
-                  fontSize: '1.8rem', boxShadow: 'var(--shadow-sm)'
+                  color: 'var(--color-primary)', boxShadow: 'var(--shadow-sm)'
                 }}>
-                  🏡
+                  <Home size={28} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{data.household?.name}</h2>
-                    <span className="badge badge-default" style={{ fontSize: '0.75rem' }}>
-                      {data.myRole === 'admin' ? '👑 家庭管理員' : '👤 家庭群組成員'}
+                    <span className="badge badge-default" style={{ fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {data.myRole === 'admin' ? <><Shield size={12} /> 家庭管理員</> : <><User size={12} /> 家庭群組成員</>}
                     </span>
                   </div>
                   <p className="text-sm" style={{ color: 'var(--text-muted)', marginTop: 4 }}>
@@ -368,7 +372,7 @@ export default function Family() {
               <div>
                 <h3 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <DollarSign size={20} color="var(--color-primary)" />
-                  家庭公帳代墊與報銷中心 📑
+                  家庭公帳代墊與報銷中心
                 </h3>
                 <p className="text-sm" style={{ color: 'var(--text-secondary)', marginTop: 2 }}>
                   即時統計各成員掏個人錢包或信用卡為家庭代墊的公帳，支援從共同基金一鍵撥款報銷平帳！
@@ -490,7 +494,7 @@ export default function Family() {
                             <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
                               <h4 style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
                                 <Receipt size={16} color="var(--color-primary)" />
-                                📌 個人代墊消費明細 ({advanceItems.length} 筆)
+                                個人代墊消費明細 ({advanceItems.length} 筆)
                               </h4>
                               <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
                                 僅計入自個人私帳、私卡或現金錢包支付之公帳
@@ -559,7 +563,7 @@ export default function Family() {
                             <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
                               <h4 style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
                                 <History size={16} color="var(--color-success)" />
-                                💸 共同基金撥款沖帳紀錄 ({reimbItems.length} 筆)
+                                共同基金撥款沖帳紀錄 ({reimbItems.length} 筆)
                               </h4>
                               <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
                                 從家庭共同基金撥回該成員個人帳戶之已報銷紀錄
@@ -696,7 +700,7 @@ export default function Family() {
 
       {/* 邀請碼 Modal */}
       {showInviteModal && (
-        <Modal title="邀請家庭群組成員加入 💌" onClose={() => setShowInviteModal(false)}>
+        <Modal title="邀請家庭群組成員加入" onClose={() => setShowInviteModal(false)}>
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
             <p className="text-sm" style={{ color: 'var(--text-muted)', marginBottom: 16 }}>
               請將以下邀請碼分享給你的家人，對方登入網站後至「家庭協同」輸入即可加入家庭帳本：
@@ -733,13 +737,14 @@ export default function Family() {
         <Modal
           
           onClose={() => setReimburseModalTarget(null)}
-          title={`💸 從共同基金撥款報銷給 ${reimburseModalTarget.user_name}`}
+          title={`從共同基金撥款報銷給 ${reimburseModalTarget.user_name}`}
         >
           <form onSubmit={handleReimburseSubmit}>
             {reimburseError && <div className="alert alert-danger" style={{ marginBottom: 14 }}>{reimburseError}</div>}
 
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.85rem', color: '#1E40AF' }}>
-              💡 此操作將從家庭共同基金扣款，並撥入該成員的個人帳戶，自動結清公帳代墊款，<strong>不會被重複計入家庭消費支出</strong>！
+              <Lightbulb size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              此操作將從家庭共同基金扣款，並撥入該成員的個人帳戶，自動結清公帳代墊款，<strong>不會被重複計入家庭消費支出</strong>！
             </div>
 
             <div className="form-group">
@@ -770,7 +775,7 @@ export default function Family() {
                 <option value="" disabled>-- 請選擇收款個人帳戶 --</option>
                 {(reimburseModalTarget.receiving_accounts || []).map((a: any) => (
                   <option key={a.id} value={a.id}>
-                    {a.type === 'cash' ? '💵 現金' : '🏦 銀行'} - {a.name}
+                    {a.type === 'cash' ? '現金' : '銀行'} - {a.name}
                   </option>
                 ))}
               </select>

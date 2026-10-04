@@ -36,7 +36,7 @@ export default function BotIntegration() {
   const [simMessages, setSimMessages] = useState<Array<{ sender: 'user' | 'bot'; text: string; time: string }>>([
     {
       sender: 'bot',
-      text: '👋 您好！我是您的家庭記帳小秘書。\n您可以試著傳送「午餐 120」或「查帳」試試看喔！',
+      text: '您好！我是您的家庭記帳小秘書。\n您可以試著傳送「午餐 120」或「查帳」試試看喔！',
       time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
     }
   ])
@@ -129,7 +129,7 @@ export default function BotIntegration() {
         ...prev,
         {
           sender: 'bot',
-          text: `⚠️ 錯誤：${err.message || '無法處理請求'}`,
+          text: `錯誤：${err.message || '無法處理請求'}`,
           time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
         }
       ])
@@ -142,7 +142,10 @@ export default function BotIntegration() {
     <div className="fade-in">
       {/* 標題與說明 */}
       <div style={{ marginBottom: 24 }}>
-        <h1 className="page-title">智慧機器人串接 🤖</h1>
+        <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>智慧機器人串接</span>
+          <Bot size={24} style={{ color: 'var(--color-primary)' }} />
+        </h1>
         <p className="page-subtitle">透過 LINE 或 Telegram 隨手打字快速記帳，自動推測分類、更新餘額與查帳</p>
       </div>
 

@@ -31,7 +31,9 @@ export default function Login() {
     <div style={{ minHeight: '100vh', background: 'var(--bg-page)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ width: '100%', maxWidth: 400 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>📒</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, color: 'var(--color-primary)' }}>
+            <BookHeart size={48} />
+          </div>
           <h1 className="font-display" style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--color-primary)' }}>我的記帳本</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>家庭財務，輕鬆掌握</p>
         </div>

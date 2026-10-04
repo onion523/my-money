@@ -1,6 +1,8 @@
 import React from 'react';
+import { Home, Lock, FileText, CalendarClock, User } from 'lucide-react';
 import { Transaction } from '../api/client';
-import { CATEGORY_ICONS, formatCurrency, formatDate } from './utils';
+import { formatCurrency, formatDate } from './utils';
+import { CategoryIcon } from './icons';
 
 interface TransactionRowProps {
   tx: Transaction;
@@ -12,29 +14,33 @@ export default function TransactionRow({ tx, showDate = false, actions }: Transa
   return (
     <div className="tx-item">
       <div className={`tx-icon ${tx.type}`}>
-        {CATEGORY_ICONS[tx.category] || (tx.type === 'income' ? '💰' : '💸')}
+        <CategoryIcon category={tx.category} size={18} />
       </div>
       <div className="tx-info">
         <div className="tx-name" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span>{tx.category}</span>
           {tx.note && <span className="text-muted" style={{ fontWeight: 400 }}>· {tx.note}</span>}
           {tx.is_shared === 0 ? (
-            <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.7rem', padding: '1px 6px' }}>
-              🔒 私帳
+            <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
+              <Lock size={11} style={{ flexShrink: 0 }} />
+              <span>私帳</span>
             </span>
           ) : (
-            <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px' }}>
-              🏠 公帳
+            <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
+              <Home size={11} style={{ flexShrink: 0 }} />
+              <span>公帳</span>
             </span>
           )}
           {tx.is_billed === 1 && (
-            <span className="badge" style={{ background: 'var(--bg-surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border-color)', fontSize: '0.7rem', padding: '1px 6px' }}>
-              📑 已出帳
+            <span className="badge" style={{ background: 'var(--bg-surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border-color)', fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
+              <FileText size={11} style={{ flexShrink: 0 }} />
+              <span>已出帳</span>
             </span>
           )}
           {tx.defer_to_next_statement === 1 && tx.is_billed === 0 && (
-            <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#D97706', fontSize: '0.7rem', padding: '1px 6px' }}>
-              🗓️ 延至下期
+            <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#D97706', fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
+              <CalendarClock size={11} style={{ flexShrink: 0 }} />
+              <span>延至下期</span>
             </span>
           )}
         </div>
@@ -43,8 +49,9 @@ export default function TransactionRow({ tx, showDate = false, actions }: Transa
             {showDate ? `${formatDate(tx.date)} · ` : ''}帳戶：{tx.account_name || '預設帳戶'}
           </span>
           {tx.user_name && (
-            <span className="badge badge-safe" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
-              👤 {tx.user_name}
+            <span className="badge badge-safe" style={{ fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
+              <User size={11} style={{ flexShrink: 0 }} />
+              <span>{tx.user_name}</span>
             </span>
           )}
         </div>
