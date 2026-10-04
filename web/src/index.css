@@ -410,8 +410,20 @@ a { text-decoration: none; color: inherit; }
 .tx-icon.income  { background: rgba(85, 197, 149, 0.15); }
 .tx-icon.expense { background: rgba(255, 107, 107, 0.12); }
 .tx-info { flex: 1; min-width: 0; }
-.tx-name { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tx-meta { font-size: 0.78rem; color: var(--text-muted); }
+.tx-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.tx-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .tx-amount { font-family: var(--font-display); font-weight: 700; font-size: 1rem; flex-shrink: 0; }
 .tx-amount.income  { color: var(--color-success); }
 .tx-amount.expense { color: var(--color-danger); }

@@ -5,6 +5,7 @@ import { useStore } from '../store/useStore'
 import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, CATEGORY_ICONS, buildHistoryMemo, recommendCategory } from '../components/utils'
 import Modal from '../components/Modal'
 import ScopeTabBar from '../components/ScopeTabBar'
+import TransactionRow from '../components/TransactionRow'
 import {
   Plus,
   Filter,
@@ -440,92 +441,53 @@ export default function Transactions() {
                 {/* 當日明細列表 */}
                 <div className="tx-list">
                   {dayTxs.map(tx => (
-                    <div key={tx.id} className="tx-item">
-                      <div className={`tx-icon ${tx.type}`}>
-                        {CATEGORY_ICONS[tx.category] || (tx.type === 'income' ? '💰' : '💸')}
-                      </div>
-                      <div className="tx-info">
-                        <div className="tx-name" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span>{tx.category}</span>
-                          {tx.note && <span className="text-muted" style={{ fontWeight: 400 }}>· {tx.note}</span>}
-                          {tx.is_shared === 0 ? (
-                            <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.7rem', padding: '1px 6px' }}>
-                              🔒 私帳
-                            </span>
-                          ) : (
-                            <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px' }}>
-                              🏠 公帳
-                            </span>
-                          )}
-                          {tx.is_billed === 1 && (
-                            <span className="badge" style={{ background: 'var(--bg-surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border-color)', fontSize: '0.7rem', padding: '1px 6px' }}>
-                              📑 已出帳
-                            </span>
-                          )}
-                          {tx.defer_to_next_statement === 1 && tx.is_billed === 0 && (
-                            <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#D97706', fontSize: '0.7rem', padding: '1px 6px' }}>
-                              🗓️ 延至下期
-                            </span>
-                          )}
-                        </div>
-                        <div className="tx-meta">
-                          帳戶：{tx.account_name || '預設帳戶'}
-                          {tx.user_name && (
-                            <span className="badge badge-safe" style={{ fontSize: '0.7rem', padding: '1px 6px', marginLeft: 6 }}>
-                              👤 {tx.user_name}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-md">
-                        <div className={`tx-amount ${tx.type}`} style={{ fontSize: '1.1rem' }}>
-                          {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
-                        </div>
-                        <div className="flex gap-xs">
-                          {['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'].includes(tx.category) ? (
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                fontSize: '0.75rem',
-                                color: 'var(--text-muted)',
-                                background: 'var(--bg-surface-2)',
-                                border: '1px solid var(--border-color)',
-                                padding: '3px 8px',
-                                borderRadius: 6,
-                              }}
-                              title="🔒 系統內部平帳還款紀錄受保護。若金額有誤，請至帳戶管理校正餘額。"
-                            >
-                              <Lock size={12} />
-                              <span>系統保護</span>
-                            </span>
-                          ) : (
-                            canModifyTx(tx) && (
-                              <>
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  style={{ padding: 4 }}
-                                  onClick={() => handleOpenEdit(tx)}
-                                  title="編輯"
-                                >
-                                  <Edit2 size={16} />
-                                </button>
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  style={{ padding: 4, color: 'var(--color-danger)' }}
-                                  onClick={() => handleDelete(tx.id)}
-                                  title="刪除"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    <TransactionRow
+                      key={tx.id}
+                      tx={tx}
+                      showDate={false}
+                      actions={
+                        ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'].includes(tx.category) ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontSize: '0.75rem',
+                              color: 'var(--text-muted)',
+                              background: 'var(--bg-surface-2)',
+                              border: '1px solid var(--border-color)',
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                            }}
+                            title="🔒 系統內部平帳還款紀錄受保護。若金額有誤，請至帳戶管理校正餘額。"
+                          >
+                            <Lock size={12} />
+                            <span>系統保護</span>
+                          </span>
+                        ) : (
+                          canModifyTx(tx) && (
+                            <>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ padding: 4 }}
+                                onClick={() => handleOpenEdit(tx)}
+                                title="編輯"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ padding: 4, color: 'var(--color-danger)' }}
+                                onClick={() => handleDelete(tx.id)}
+                                title="刪除"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )
+                        )
+                      }
+                    />                  ))}
                 </div>
               </div>
             )
