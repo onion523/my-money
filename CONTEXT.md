@@ -192,6 +192,10 @@ _Avoid_: 完整私卡暴露 (unmasked private card)、越權出帳 (unauthorized
 公帳視角下的「💳 信用卡總待繳」與「💎 淨可用餘額」採權責會計責任制，將「家庭共同信用卡欠款」與「全體成員個人私卡上之公帳代墊欠款（shared_debt）」合併計入家庭負債，真實反映扣除所有公帳待付責任後的家庭淨可用資金。
 _Avoid_: 虛胖可用餘額 (inflated available balance)、純共同帳戶窄視角 (narrow joint-only balance)
 
+**Mobile Account Card Overflow Guard (手機帳戶卡片防溢出)**:
+手機版儀表板「帳戶一覽」卡片採兩行標題（第一行圖示＋帳戶名稱，過長以省略號截斷；第二行公私帳與類型徽章）、信用卡「🏠 代墊」與「👤 個人私帳」金額分行靠右，且網格欄位使用 `minmax(0, 1fr)` 與 `min-width: 0`，確保卡片絕不超出螢幕寬度。
+_Avoid_: 單列硬擠 (single-row cramming)、橫向截斷 (horizontal clipping)
+
 ---
 
 ### 交易分類體系 (Category Taxonomy)

@@ -564,8 +564,12 @@ a { text-decoration: none; color: inherit; }
 @media (max-width: 960px) {
   .grid-dashboard-main,
   .grid-forecast-main {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-md);
+  }
+  .grid-dashboard-main > *,
+  .grid-forecast-main > * {
+    min-width: 0;
   }
 }
 
@@ -720,7 +724,8 @@ a { text-decoration: none; color: inherit; }
   /* 格線斷點調適 */
   .grid-4 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .grid-3 { grid-template-columns: 1fr; gap: 10px; }
-  .grid-2 { grid-template-columns: 1fr; gap: 10px; }
+  .grid-2 { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .grid-2 > * { min-width: 0; }
 
   /* 彈出視窗調適 */
   .modal-overlay {
@@ -825,6 +830,60 @@ a { text-decoration: none; color: inherit; }
   background: rgba(255, 107, 107, 0.12);
   border: 1px solid rgba(255, 107, 107, 0.3);
   color: var(--color-danger);
+}
+
+/* ---- 儀表板帳戶卡片：標題與代墊列 (ADR 0021) ---- */
+.acc-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.acc-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+.acc-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acc-card-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.acc-card-debt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+@media (max-width: 640px) {
+  .acc-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .acc-card-title {
+    width: 100%;
+  }
+  .acc-card-debt-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+  .acc-card-debt-row > span:not(.acc-card-debt-sep) {
+    display: flex;
+    justify-content: space-between;
+  }
+  .acc-card-debt-sep {
+    display: none;
+  }
 }
 
 /* ---- 信用卡卡片操作按鈕自適應堆疊 ---- */

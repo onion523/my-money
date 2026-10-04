@@ -308,18 +308,18 @@ export default function Dashboard() {
                         borderLeft: `5px solid ${acc.color || (isCash ? '#10B981' : isCc ? 'var(--color-danger)' : 'var(--color-primary)')}`,
                       }}
                     >
-                      <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-                        <div className="flex items-center gap-xs">
+                      <div className="acc-card-header" style={{ marginBottom: 6 }}>
+                        <div className="acc-card-title">
                           {isCash ? (
-                            <Wallet size={16} color="#10B981" />
+                            <Wallet size={16} color="#10B981" style={{ flexShrink: 0 }} />
                           ) : isCc ? (
-                            <CreditCard size={16} color="var(--color-danger)" />
+                            <CreditCard size={16} color="var(--color-danger)" style={{ flexShrink: 0 }} />
                           ) : (
-                            <Building size={16} color="var(--color-primary)" />
+                            <Building size={16} color="var(--color-primary)" style={{ flexShrink: 0 }} />
                           )}
-                          <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{acc.name}</span>
+                          <span className="acc-card-name" style={{ fontWeight: 600, fontSize: '0.95rem' }}>{acc.name}</span>
                         </div>
-                        <div className="flex items-center gap-xs">
+                        <div className="acc-card-badges">
                           {acc.is_joint === 1 ? (
                             <span className="badge badge-primary" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
                               🏠 公帳
@@ -349,9 +349,9 @@ export default function Dashboard() {
                       {isCc && (
                         <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                           {totalDue > 0 ? (
-                            <div className="flex items-center justify-between" style={{ background: 'rgba(0,0,0,0.03)', padding: '3px 6px', borderRadius: 4, marginBottom: 2 }}>
+                            <div className="acc-card-debt-row" style={{ background: 'rgba(0,0,0,0.03)', padding: '3px 6px', borderRadius: 4, marginBottom: 2 }}>
                               <span>🏠 代墊：<strong>{formatCurrency(acc.shared_debt || 0)}</strong></span>
-                              <span>·</span>
+                              <span className="acc-card-debt-sep">·</span>
                               <span>👤 個人私帳：<strong>{formatCurrency(acc.personal_debt || 0)}</strong></span>
                             </div>
                           ) : (
