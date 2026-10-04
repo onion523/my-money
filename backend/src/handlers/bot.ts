@@ -8,8 +8,16 @@ import { ensureAccountsSchema, reconcileCreditCardUnbilled } from './accounts';
 type Vars = { userId: string; userEmail: string; userName: string };
 const bot = new Hono<{ Bindings: Env; Variables: Vars }>();
 
+// 依據關鍵字判斷對應之帳戶類型 (cash / credit_card / bank)
+function inferAccountType(str: string): Account['type'] | null {
+  if (/現金|錢包|現鈔|零用/.test(str)) return 'cash';
+  if (/信用卡|刷卡/.test(str)) return 'credit_card';
+  if (/銀行|活存|轉帳|存款/.test(str)) return 'bank';
+  return null;
+}
+
 // 自然語言記帳解析器
-export function parseNaturalMessage(text: string): {
+export function parseNaturalMessage(text: string, accountNames: string[] = []): {
   type: 'expense' | 'income' | 'balance' | 'bind' | 'help' | 'unknown';
   amount?: number;
   category?: string;
@@ -37,10 +45,6 @@ export function parseNaturalMessage(text: string): {
   }
 
   // 4. 收支記帳分析
-  // 判斷公私帳關鍵字 (公帳、公費、家用、家、公)
-  const isShared = /公帳|公費|家用|家/i.test(trimmed);
-  // 範例: "午餐 120", "晚餐 180 現金", "薪水 60000 銀行", "加值 500 悠遊卡", "計程車 250"
-  // 匹配: [項目/備註] [金額] [可選帳戶] 或 [金額] [項目]
   const amountMatch = trimmed.match(/(\d+(?:\.\d+)?)/);
   if (!amountMatch) {
     return { type: 'unknown' };
@@ -49,12 +53,80 @@ export function parseNaturalMessage(text: string): {
   const amount = parseFloat(amountMatch[1]);
   if (isNaN(amount) || amount <= 0) return { type: 'unknown' };
 
-  // 移除金額後的文字
-  const withoutAmount = trimmed.replace(amountMatch[1], '').trim();
-  const tokens = withoutAmount.split(/\s+/).filter(Boolean);
+  // 移除金額（以空白取代以保留前後詞彙邊界）
+  let remaining = trimmed.replace(amountMatch[1], ' ');
 
-  let note = tokens[0] || '一般開銷';
-  let accountKeyword = tokens[1] || '';
+  // 判斷公私帳關鍵字（公帳、公費、家用、共同 vs 私帳、個人、自用；單字「家/公」僅限獨立詞彙避免誤傷「全家/家樂福/公車」）
+  const isShared = /公帳|公費|家用|共同/i.test(remaining) || /(?:^|\s)(?:家|公)(?=\s|$)/i.test(remaining);
+
+  // 剝離公私帳歸屬詞彙，避免污染備註 (note) 或帳戶關鍵字 (accountKeyword)
+  remaining = remaining
+    .replace(/公帳|公費|家用|共同|私帳|個人|自用/gi, ' ')
+    .replace(/(?:^|\s)(?:家|公|私)(?=\s|$)/gi, ' ')
+    .trim();
+
+  const sortedCustomNames = [...accountNames].filter(Boolean).sort((a, b) => b.length - a.length);
+  const genericAccountKeywords = ['隨身現金', '零用金', '信用卡', '刷卡', '現金', '現鈔', '錢包', '銀行', '活存', '轉帳', '存款'];
+  const allAccountKeywords = [...sortedCustomNames, ...genericAccountKeywords];
+
+  const isAccountToken = (tok: string): boolean => {
+    if (allAccountKeywords.includes(tok)) return true;
+    if (sortedCustomNames.some(name => name.includes(tok) || tok.includes(name))) return true;
+    if (inferAccountType(tok) !== null && /^(?:隨身)?(?:現金|現鈔|錢包|零用金|信用卡|刷卡|銀行|活存|轉帳|存款)$/.test(tok)) return true;
+    return false;
+  };
+
+  const rawTokens = remaining.split(/\s+/).filter(Boolean);
+  let accountKeyword = '';
+  let noteTokens: string[] = [];
+
+  if (rawTokens.length >= 2) {
+    // 多詞模式：優先找出屬於帳戶名稱或帳戶類型的 token（由後往前找，支援帳戶在句尾或句首）
+    let accIdx = -1;
+    for (let i = rawTokens.length - 1; i >= 0; i--) {
+      if (isAccountToken(rawTokens[i])) {
+        accIdx = i;
+        break;
+      }
+    }
+    if (accIdx !== -1) {
+      accountKeyword = rawTokens[accIdx];
+      noteTokens = rawTokens.filter((_, idx) => idx !== accIdx);
+    } else if (sortedCustomNames.length === 0) {
+      // 未傳入實際帳戶清單時，維持傳統 [項目] [帳戶] 習慣：最後一詞視為帳戶關鍵字
+      accountKeyword = rawTokens[rawTokens.length - 1];
+      noteTokens = rawTokens.slice(0, -1);
+    } else {
+      // 已比對過實際帳戶清單且無任何詞命中帳戶：全數保留為多詞備註（如「午餐 便當 120」）
+      noteTokens = rawTokens;
+    }
+  } else if (rawTokens.length === 1) {
+    const single = rawTokens[0];
+    if (isAccountToken(single)) {
+      accountKeyword = single;
+      noteTokens = [];
+    } else {
+      // 無空白連寫模式（如「早午餐130公帳現金」剝離金額與公帳後為「早午餐現金」）：檢查詞尾或詞首是否黏著帳戶關鍵字
+      let matchedKw = '';
+      for (const kw of allAccountKeywords) {
+        if (single.length > kw.length && single.endsWith(kw)) {
+          matchedKw = kw;
+          noteTokens = [single.slice(0, -kw.length)];
+          break;
+        }
+        if (single.length > kw.length && single.startsWith(kw)) {
+          matchedKw = kw;
+          noteTokens = [single.slice(kw.length)];
+          break;
+        }
+      }
+      if (matchedKw) {
+        accountKeyword = matchedKw;
+      } else {
+        noteTokens = [single];
+      }
+    }
+  }
 
   // 判斷收入或支出
   const isIncome = /薪水|薪資|月薪|底薪|本薪|發薪|獎金|投資|股息|分紅|收入|副業|退稅|入帳|補貼|補助|津貼|二手|出清|收到紅包|禮金收入/.test(trimmed);
@@ -62,7 +134,8 @@ export function parseNaturalMessage(text: string): {
 
   // 分類自動推測
   let category = isIncome ? '薪資' : '其他';
-  const lower = trimmed.toLowerCase();
+  const noteCandidate = noteTokens.join(' ').trim();
+  const lower = (noteCandidate || trimmed).toLowerCase();
 
   if (isIncome) {
     if (/補貼|補助|津貼|退稅|租金補貼|育兒津貼|托育補助|節能補助|生育補助/i.test(lower)) category = '政府補貼';
@@ -105,6 +178,8 @@ export function parseNaturalMessage(text: string): {
       category = '生活';
     }
   }
+
+  const note = noteCandidate || category || '一般開銷';
 
   return { type, amount, category, note, accountKeyword, isShared };
 }
@@ -294,25 +369,39 @@ async function handleBotAction(
       return '⚠️ 目前尚未建立任何帳戶，請先至網頁版建立帳戶後再記帳！';
     }
 
-    // 尋找匹配帳戶
+    // 結合實際可見帳戶名稱再次解析，確保自訂帳戶名稱也能從備註中乾淨剝離
+    const refined = parseNaturalMessage(text, accounts.map(a => a.name));
+    const isSharedBool = Boolean(refined.isShared);
+    const kw = (refined.accountKeyword || '').trim();
+
+    const pickByScope = (candidates: Account[]): Account | undefined => {
+      if (candidates.length === 0) return undefined;
+      return candidates.find(a => Boolean(a.is_joint) === isSharedBool) || candidates[0];
+    };
+
+    // 尋找匹配帳戶：1. 自訂帳戶名稱 -> 2. 帳戶類型關鍵字 (cash / credit_card / bank) -> 3. 預設活存或首個帳戶
     let targetAccount: Account | undefined;
-    if (parsed.accountKeyword) {
-      targetAccount = accounts.find(a => a.name.includes(parsed.accountKeyword!));
+    if (kw) {
+      const nameMatches = accounts.filter(a => a.name.includes(kw) || kw.includes(a.name));
+      if (nameMatches.length > 0) {
+        targetAccount = pickByScope(nameMatches);
+      } else {
+        const kwType = inferAccountType(kw);
+        if (kwType) {
+          targetAccount = pickByScope(accounts.filter(a => a.type === kwType));
+        }
+      }
     }
     if (!targetAccount) {
-      // 預設帳戶：若為信用卡開銷則優先選信用卡，否則選第一個活存
-      if (/信用卡|刷卡/.test(text)) {
-        targetAccount = accounts.find(a => a.type === 'credit_card') || accounts[0];
-      } else {
-        targetAccount = accounts.find(a => a.type === 'bank') || accounts[0];
-      }
+      const fallbackType = inferAccountType(text) || 'bank';
+      targetAccount = pickByScope(accounts.filter(a => a.type === fallbackType)) || accounts[0];
     }
 
     const txId = generateId();
     const today = getTaipeiDateString();
-    const amount = parsed.amount!;
-    let category = parsed.category!;
-    const note = parsed.note || '';
+    const amount = refined.amount!;
+    let category = refined.category!;
+    const note = refined.note || '';
 
     // 雙層推薦：優先檢索該用戶或家庭近期的同名或包含關係備註歷史（使用 instr 避免 SQLite LIKE 50-byte 溢位與空字串誤匹配）
     if (note && note.trim()) {
@@ -327,7 +416,7 @@ async function handleBotAction(
             AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
           ORDER BY CASE WHEN note = ? THEN 0 ELSE 1 END, date DESC, created_at DESC
           LIMIT 1
-        `).bind(...memberUserIds, parsed.type, trimmedNote, trimmedNote, trimmedNote).first<{ category: string }>();
+        `).bind(...memberUserIds, refined.type, trimmedNote, trimmedNote, trimmedNote).first<{ category: string }>();
 
         if (histRow && histRow.category) {
           category = histRow.category;
@@ -338,11 +427,11 @@ async function handleBotAction(
     }
 
     // 新增交易 (Q7: 支援公帳 vs 私帳)
-    const isShared = (parsed as any).isShared ? 1 : 0;
+    const isShared = isSharedBool ? 1 : 0;
     await db.prepare(`
       INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, is_billed, defer_to_next_statement)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
-    `).bind(txId, userId, targetAccount.id, parsed.type, category, amount, note, today, isShared).run();
+    `).bind(txId, userId, targetAccount.id, refined.type, category, amount, note, today, isShared).run();
 
     // 更新帳戶餘額（活存與現金皆更新 balance；信用卡則呼叫統一歸戶函式 reconcileCreditCardUnbilled）
     if (targetAccount.type === 'bank' || targetAccount.type === 'cash') {

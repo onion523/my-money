@@ -276,8 +276,8 @@ _Avoid_: 購買模擬 (purchase simulation)、預算檢查 (budget check)、試�
 _Avoid_: 授權 (auth)、連線 (connection)、配對 (pairing)
 
 **Natural Message (自然語言指令)**:
-使用者於通訊聊天室輸入非結構化日常語句（例如：`早餐 100`、`早餐100`、`好市多 3200 公帳玉山`），由系統解析為收支明細並即時雙向連動資產帳戶餘額（`Bank Account` 與 `Cash Wallet` 扣減／增加 `balance`，`Credit Card` 增加未出帳並觸發 `Credit Card Balance Reconciliation`），回傳包含現金、活存與信用卡欠款之真實 `Available Balance (淨可用餘額)`。Webhook 端點遇未知例外時必須捕獲並回傳 HTTP 200 與友善錯誤提示，嚴禁回傳 HTTP 500 導致 Telegram Webhook 佇列（`pending_update_count`）阻塞死鎖。
-_Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick entry)、Webhook 500 佇列阻塞 (webhook 500 queue stalling)
+使用者於通訊聊天室輸入非結構化日常語句（例如：`早餐 100`、`晚餐 100 公帳 現金`、`好市多 3200 公帳玉山`），由系統自動拆解並剝離「金額」、「公私帳歸屬詞彙（`公帳`、`公費`、`家用`、`私帳`、`個人`）」與「帳戶關鍵字或類型詞彙（自訂帳戶名稱，或通用類型詞 `現金`/`錢包` 對應 `Cash Wallet`、`信用卡`/`刷卡` 對應 `Credit Card`、`銀行`/`活存` 對應 `Bank Account`）」，將剩餘純品項文字作為交易備註（`note`），無論各詞彙輸入順序或是否含空白皆互不覆蓋污染；並即時雙向連動資產帳戶餘額（`Bank Account` 與 `Cash Wallet` 扣減／增加 `balance`，`Credit Card` 增加未出帳並觸發 `Credit Card Balance Reconciliation`），回傳包含現金、活存與信用卡欠款之真實 `Available Balance (淨可用餘額)`。Webhook 端點遇未知例外時必須捕獲並回傳 HTTP 200 與友善錯誤提示，嚴禁回傳 HTTP 500 導致 Telegram Webhook 佇列（`pending_update_count`）阻塞死鎖。
+_Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick entry)、固定雙詞切分 (naive 2-token split)、Webhook 500 佇列阻塞 (webhook 500 queue stalling)
 
 ---
 
