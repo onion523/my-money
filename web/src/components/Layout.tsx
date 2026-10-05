@@ -38,9 +38,16 @@ export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  // 換頁時自動關閉行動端抽屜
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }
+
+  // 換頁時自動關閉行動端抽屜並將畫面捲回頂端
   useEffect(() => {
     setMobileMenuOpen(false)
+    scrollToTop()
   }, [location.pathname])
 
   // 抽屜開啟時防止背景頁面滾動
@@ -147,7 +154,10 @@ export default function Layout() {
               to={to}
               end={end}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-              onClick={() => setMobileMenuOpen(false)}
+              onClick={() => {
+                setMobileMenuOpen(false)
+                scrollToTop()
+              }}
             >
               <Icon size={18} />
               <span>{label}</span>
@@ -194,6 +204,7 @@ export default function Layout() {
           to="/"
           end
           className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+          onClick={scrollToTop}
         >
           <LayoutDashboard size={20} />
           <span>總覽</span>
@@ -201,6 +212,7 @@ export default function Layout() {
         <NavLink
           to="/transactions"
           className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+          onClick={scrollToTop}
         >
           <ArrowLeftRight size={20} />
           <span>明細</span>
@@ -208,6 +220,7 @@ export default function Layout() {
         <NavLink
           to="/accounts"
           className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+          onClick={scrollToTop}
         >
           <CreditCard size={20} />
           <span>帳戶</span>
@@ -215,6 +228,7 @@ export default function Layout() {
         <NavLink
           to="/analytics"
           className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+          onClick={scrollToTop}
         >
           <BarChart2 size={20} />
           <span>統計</span>
