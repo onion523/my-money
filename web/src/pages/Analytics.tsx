@@ -198,11 +198,11 @@ export default function Analytics() {
           <p className="page-subtitle">深入洞悉消費佔比、長期收支走勢與嚴格把關年度預算</p>
         </div>
 
-        <div className="flex items-center gap-sm">
-          <Calendar size={16} color="var(--text-secondary)" />
+        <div className="header-actions flex items-center gap-sm">
+          <Calendar size={16} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
           <input
             className="input"
-            style={{ width: 140, padding: '0.4rem 0.6rem' }}
+            style={{ width: 150, padding: '0.4rem 0.6rem' }}
             type="month"
             value={currentMonth}
             onChange={e => setCurrentMonth(e.target.value)}
@@ -318,21 +318,11 @@ export default function Analytics() {
           )}
 
           {pieData.length > 0 && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-                gap: '8px 12px',
-                marginTop: 16,
-                padding: '10px 12px',
-                background: 'var(--bg-surface-2, rgba(0,0,0,0.02))',
-                borderRadius: 'var(--radius-md, 8px)'
-              }}
-            >
+            <div className="analytics-pie-legend">
               {catSummary.map((item, idx) => {
                 const pct = totalExpense > 0 ? ((item.total / totalExpense) * 100).toFixed(1) : '0'
                 return (
-                  <div key={item.category} className="flex items-center justify-between gap-xs" style={{ fontSize: '0.8rem' }}>
+                  <div key={item.category} className="flex items-center justify-between gap-xs" style={{ fontSize: '0.82rem' }}>
                     <div className="flex items-center gap-xs" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: PIE_COLORS[idx % PIE_COLORS.length] }} />
                       <span style={{ fontWeight: 500 }}>{item.category}</span>
@@ -364,7 +354,13 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                  <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={12} />
+                  <XAxis
+                    dataKey="month"
+                    stroke="var(--text-muted)"
+                    fontSize={isMobile ? 11 : 12}
+                    minTickGap={10}
+                    tickFormatter={(v: string) => isMobile && v.includes('-') ? `${parseInt(v.split('-')[1], 10)}月` : v}
+                  />
                   <YAxis stroke="var(--text-muted)" fontSize={12} tickFormatter={v => `$${v}`} />
                   <Tooltip formatter={(val: number) => formatCurrency(val)} />
                   <Legend />
@@ -379,7 +375,7 @@ export default function Analytics() {
 
       {/* 年度預算管理模組 */}
       <div className="card">
-        <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <div>
             <h2 className="text-xl flex items-center gap-xs">
               <Sliders size={20} color="var(--color-primary)" />
@@ -413,9 +409,9 @@ export default function Analytics() {
                   border: isOver ? '1px solid var(--color-danger)' : '1px solid var(--border-color)',
                 }}
               >
-                <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-                  <div className="flex items-center gap-sm">
-                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, background: 'rgba(255,138,138,0.12)', color: 'var(--color-primary)' }}>
+                <div className="budget-item-header">
+                  <div className="flex items-center gap-sm" style={{ flexWrap: 'wrap' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, background: 'rgba(255,138,138,0.12)', color: 'var(--color-primary)', flexShrink: 0 }}>
                       <CategoryIcon category={cat} size={16} />
                     </span>
                     <span style={{ fontWeight: 600 }}>{cat}</span>
@@ -426,8 +422,8 @@ export default function Analytics() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-md">
-                    <div style={{ textAlign: 'right', fontSize: '0.875rem' }}>
+                  <div className="budget-item-meta">
+                    <div className="budget-item-amounts">
                       已花 <strong>{formatCurrency(spent)}</strong>
                       {hasBudget ? (
                         <span className="text-muted"> / 預算 {formatCurrency(amount)}</span>
@@ -438,7 +434,7 @@ export default function Analytics() {
 
                     <button
                       className="btn btn-ghost btn-sm"
-                      style={{ fontSize: '0.75rem', padding: '3px 8px' }}
+                      style={{ fontSize: '0.78rem', padding: '4px 10px', flexShrink: 0 }}
                       onClick={() => openBudgetDialog(cat, amount)}
                     >
                       {hasBudget ? '調整' : '+ 設定'}

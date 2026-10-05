@@ -197,7 +197,7 @@ export default function Forecast() {
 
       {/* 30 天逐日餘額模擬折線圖 */}
       <div className="card" style={{ marginBottom: 24 }}>
-        <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 6 }}>
           <h2 className="text-xl flex items-center gap-xs">
             <TrendingUp size={20} color="var(--color-primary)" />
             未來 30 天逐日現金流模擬趨勢
@@ -219,7 +219,7 @@ export default function Forecast() {
         ) : (
           <div style={{ height: 300, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="balanceGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#FF8A8A" stopOpacity={0.4} />
@@ -227,7 +227,13 @@ export default function Forecast() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={12} />
+                <XAxis
+                  dataKey="date"
+                  stroke="var(--text-muted)"
+                  fontSize={11}
+                  minTickGap={24}
+                  tickFormatter={(v: string) => v.length >= 10 ? v.slice(5) : v}
+                />
                 <YAxis stroke="var(--text-muted)" fontSize={12} tickFormatter={v => `$${v}`} />
                 <Tooltip formatter={(v: number) => [formatCurrency(v), '預估餘額']} />
                 <Area
@@ -362,21 +368,14 @@ export default function Forecast() {
               <p style={{ fontSize: '0.85rem' }}>未來 30 天無週期收支排程</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflowY: 'auto' }}>
+            <div className="forecast-timeline-list">
               {forecast.events.map((ev, idx) => (
                 <div
                   key={ev.event_key || `${ev.date}-${ev.name}-${idx}`}
+                  className="forecast-event-row"
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 10,
-                    padding: '10px 14px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'var(--bg-surface-2)',
                     borderLeft: `4px solid ${ev.is_settled ? 'var(--border-color)' : ev.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)'}`,
                     opacity: ev.is_settled ? 0.58 : 1,
-                    transition: 'opacity 0.2s ease',
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -397,13 +396,13 @@ export default function Forecast() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-muted" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                    <div className="text-xs text-muted" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
                       <span>預計日期：{ev.date}</span>
                       {ev.account_name && <span>({ev.account_name})</span>}
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div className="forecast-event-side">
                     <div
                       style={{
                         fontWeight: 700,

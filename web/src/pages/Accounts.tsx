@@ -391,7 +391,7 @@ export default function Accounts() {
   return (
     <div className="fade-in">
       {/* 頁面標題與快速操作 */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+      <div className="page-header-row">
         <div>
           <h1 className="page-title flex items-center gap-xs">
             <Wallet size={26} color="var(--color-primary)" />
@@ -399,7 +399,7 @@ export default function Accounts() {
           </h1>
           <p className="page-subtitle">現金錢包、銀行活存與信用卡分離管理，支援公私帳隔離與代墊調度</p>
         </div>
-        <div className="flex gap-sm" style={{ flexWrap: 'wrap' }}>
+        <div className="header-actions accounts-header-actions">
           <button id="btn-atm-transfer" className="btn btn-secondary" onClick={() => handleOpenTransfer()}>
             <ArrowRightLeft size={16} />
             <span>ATM 提款 / 轉帳</span>
@@ -799,26 +799,24 @@ export default function Accounts() {
                         </div>
                       </div>
                       <div>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                             {isMasked ? '公帳代墊待清償' : '未出帳（累計消費）'}
                           </span>
                           {canOperateCard(card) && (
-                            <div className="flex gap-xs">
+                            <div className="flex gap-xs" style={{ flexWrap: 'wrap' }}>
                               <button
                                 id={`btn-reconcile-${card.id}`}
-                                className="btn btn-xs btn-secondary"
-                                style={{ padding: '1px 6px', fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                                className="btn btn-xs btn-secondary cc-sub-action-btn"
                                 title="依當前消費紀錄自動校準未出帳金額"
                                 onClick={() => handleReconcile(card)}
                                 disabled={reconcilingCardId === card.id}
                               >
-                                {reconcilingCardId === card.id ? '校準中...' : <><RefreshCw size={11} /> 校準</>}
+                                {reconcilingCardId === card.id ? '校準中...' : <><RefreshCw size={12} /> 校準</>}
                               </button>
                               {unbilled > 0 && (
                                 <button
-                                  className="btn btn-xs btn-secondary"
-                                  style={{ padding: '1px 6px', fontSize: '0.7rem' }}
+                                  className="btn btn-xs btn-secondary cc-sub-action-btn"
                                   title="結帳日出帳作業"
                                   onClick={() => handleRollover(card)}
                                 >
@@ -1063,7 +1061,7 @@ export default function Accounts() {
             {/* 公私屬性 */}
             <div className="form-group">
               <label className="form-label">帳戶屬性歸屬</label>
-              <div className="grid grid-2 gap-xs">
+              <div className="binary-toggle-grid">
                 <button
                   type="button"
                   className={`btn ${form.is_joint === 0 ? 'btn-primary' : 'btn-secondary'}`}
@@ -1320,7 +1318,7 @@ export default function Accounts() {
                   公帳（僅限自家庭共同帳戶沖抵他人私卡之家庭代墊款）
                 </div>
               ) : (
-              <div className="grid grid-2 gap-xs">
+              <div className="binary-toggle-grid">
                 <button
                   type="button"
                   className={`btn ${payForm.is_shared === 1 ? 'btn-primary' : 'btn-secondary'}`}

@@ -1,6 +1,6 @@
 import { DashboardSkeleton } from '../components/Skeleton'
 import { useState, useEffect, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { accountsApi, txApi, recurringApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
 import { formatCurrency, formatDate, today, thisMonth, getGreeting, CATEGORIES, buildHistoryMemo, recommendCategory } from '../components/utils'
@@ -39,6 +39,15 @@ export default function Dashboard() {
   const [monthlyStats, setMonthlyStats] = useState<any[]>([])
   const [viewScope, setViewScope] = useState<'all' | 'household' | 'personal'>('all')
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('quickAdd') === '1') {
+      setShowAddModal(true)
+      searchParams.delete('quickAdd')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   // 快速新增表單
   const [form, setForm] = useState({
@@ -182,14 +191,16 @@ export default function Dashboard() {
           </h1>
           <p className="page-subtitle">這裡是您本月的財務總覽與即時收支數據</p>
         </div>
-        <button
-          id="btn-quick-add"
-          className="btn btn-primary"
-          onClick={() => setShowAddModal(true)}
-        >
-          <Plus size={18} />
-          <span>快速記帳</span>
-        </button>
+        <div className="header-actions">
+          <button
+            id="btn-quick-add"
+            className="btn btn-primary"
+            onClick={() => setShowAddModal(true)}
+          >
+            <Plus size={18} />
+            <span>快速記帳</span>
+          </button>
+        </div>
       </div>
 
       {/* 帳本視角切換器 */}

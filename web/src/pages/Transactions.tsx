@@ -22,6 +22,8 @@ import {
   Home,
   CalendarClock,
   Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 
 export default function Transactions() {
@@ -39,6 +41,7 @@ export default function Transactions() {
   const [startDate, setStartDate] = useState(`${thisMonth()}-01`)
   const [endDate, setEndDate] = useState(today())
   const [keyword, setKeyword] = useState('')
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   // Modal 狀態
   const [showModal, setShowModal] = useState(false)
@@ -259,10 +262,16 @@ export default function Transactions() {
     .filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !SYSTEM_CATEGORIES.includes(t.category)))
     .reduce((s, t) => s + t.amount, 0);
 
+  const activeFilterCount =
+    (typeFilter !== 'all' ? 1 : 0) +
+    (categoryFilter !== '全部' ? 1 : 0) +
+    (accountFilter !== 'all' ? 1 : 0) +
+    (startDate !== `${thisMonth()}-01` || endDate !== today() ? 1 : 0)
+
   return (
     <div className="fade-in">
       {/* 標題與操作按鈕 */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+      <div className="page-header-row">
         <div>
           <h1 className="page-title flex items-center gap-xs">
             <FileText size={26} color="var(--color-primary)" />
@@ -270,7 +279,7 @@ export default function Transactions() {
           </h1>
           <p className="page-subtitle">追蹤與管理所有個人與家庭收支明細、快速篩選與匯出</p>
         </div>
-        <div className="flex gap-sm">
+        <div className="header-actions">
           <button id="btn-export-csv" className="btn btn-secondary" onClick={handleExportCSV}>
             <Download size={16} />
             <span>匯出 CSV</span>
@@ -283,21 +292,49 @@ export default function Transactions() {
       </div>
 
       {/* 篩選工具列 */}
-      <div className="card" style={{ marginBottom: 20, padding: '16px 20px' }}>
-        {/* 帳本範疇切換 (公帳 / 個人私帳 / 全部) */}
+      <div className="card tx-filter-card" style={{ marginBottom: 20 }}>
+        {/* 帳本範疇切換 (全部 / 公帳 / 私帳) */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          marginBottom: 16,
-          paddingBottom: 14,
+          marginBottom: 14,
+          paddingBottom: 12,
           borderBottom: '1px solid var(--border-color)',
           flexWrap: 'wrap'
         }}>
-          <ScopeTabBar scope={scopeFilter} onChange={setScopeFilter} label="帳本分類：" />
+          <ScopeTabBar scope={scopeFilter} onChange={setScopeFilter} style={{ marginBottom: 0 }} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, alignItems: 'center' }}>
+        {/* 常駐搜尋框 + 行動端進階篩選收合鈕 */}
+        <div className="tx-filter-primary-row">
+          <div className="tx-search-box">
+            <Search size={16} className="tx-search-icon" />
+            <input
+              className="input tx-search-input"
+              type="text"
+              placeholder="搜尋備註、分類、帳戶或記帳人..."
+              value={keyword}
+              onChange={e => setKeyword(e.target.value)}
+            />
+          </div>
+          <button
+            type="button"
+            id="btn-toggle-mobile-filters"
+            className={`btn ${mobileFiltersOpen || activeFilterCount > 0 ? 'btn-primary' : 'btn-secondary'} tx-mobile-filter-toggle`}
+            onClick={() => setMobileFiltersOpen(prev => !prev)}
+          >
+            <Filter size={15} />
+            <span>篩選</span>
+            {activeFilterCount > 0 && (
+              <span className="tx-filter-badge">{activeFilterCount}</span>
+            )}
+            {mobileFiltersOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+          </button>
+        </div>
+
+        {/* 進階篩選面板 (桌面常駐展開，手機預設收合) */}
+        <div className={`tx-advanced-filters ${mobileFiltersOpen ? 'open' : ''}`}>
           {/* 日期範圍 */}
           <div className="input-group">
             <label className="input-label flex items-center gap-xs">
@@ -357,7 +394,7 @@ export default function Transactions() {
           </div>
 
           {/* 帳戶篩選 */}
-          <div className="input-group">
+          <div className="input-group tx-filter-account-group">
             <label className="input-label flex items-center gap-xs">
               <CreditCard size={14} /> 帳戶
             </label>
@@ -375,39 +412,28 @@ export default function Transactions() {
               ))}
             </select>
           </div>
-
-          {/* 關鍵字搜尋 */}
-          <div className="input-group">
-            <label className="input-label flex items-center gap-xs">
-              <Search size={14} /> 搜尋備註/成員
-            </label>
-            <input
-              className="input"
-              type="text"
-              placeholder="搜尋備註或記帳人..."
-              value={keyword}
-              onChange={e => setKeyword(e.target.value)}
-            />
-          </div>
         </div>
 
         {/* 篩選結果加總橫條 */}
-        <div className="flex items-center justify-between" style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-color)', fontSize: '0.875rem', flexWrap: 'wrap', gap: 8 }}>
-          <div>
+        <div className="tx-summary-strip">
+          <div className="tx-summary-count">
             篩選筆數：<strong>{filtered.length}</strong> 筆
           </div>
-          <div className="flex gap-md">
-            <span style={{ color: 'var(--color-success)' }}>
-              總收入：<strong>+{formatCurrency(totalIncome)}</strong>
-            </span>
-            <span style={{ color: 'var(--color-danger)' }}>
-              總支出：<strong>-{formatCurrency(totalExpense)}</strong>
-            </span>
-            <span style={{ fontWeight: 600 }}>
-              淨收支：<span style={{ color: totalIncome - totalExpense >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+          <div className="tx-summary-metrics">
+            <div className="tx-summary-metric">
+              <span className="tx-summary-label">總收入</span>
+              <strong style={{ color: 'var(--color-success)' }}>+{formatCurrency(totalIncome)}</strong>
+            </div>
+            <div className="tx-summary-metric">
+              <span className="tx-summary-label">總支出</span>
+              <strong style={{ color: 'var(--color-danger)' }}>-{formatCurrency(totalExpense)}</strong>
+            </div>
+            <div className="tx-summary-metric">
+              <span className="tx-summary-label">淨收支</span>
+              <strong style={{ color: totalIncome - totalExpense >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                 {formatCurrency(totalIncome - totalExpense)}
-              </span>
-            </span>
+              </strong>
+            </div>
           </div>
         </div>
       </div>
@@ -432,7 +458,7 @@ export default function Transactions() {
             const dayExpense = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
 
             return (
-              <div key={dateStr} className="card" style={{ padding: '16px 20px' }}>
+              <div key={dateStr} className="card tx-day-card">
                 {/* 日期標題欄 */}
                 <div className="flex items-center justify-between" style={{ paddingBottom: 10, borderBottom: '1px solid var(--border-color)', marginBottom: 8 }}>
                   <div className="flex items-center gap-xs" style={{ fontWeight: 600, fontSize: '0.95rem' }}>
@@ -475,26 +501,25 @@ export default function Transactions() {
                           canModifyTx(tx) && (
                             <>
                               <button
-                                className="btn btn-ghost btn-sm"
-                                style={{ padding: 4 }}
+                                className="btn btn-ghost btn-sm tx-action-btn"
                                 onClick={() => handleOpenEdit(tx)}
                                 title="編輯"
                               >
-                                <Edit2 size={16} />
+                                <Edit2 size={15} />
                               </button>
                               <button
-                                className="btn btn-ghost btn-sm"
-                                style={{ padding: 4, color: 'var(--color-danger)' }}
+                                className="btn btn-ghost btn-sm tx-action-btn danger"
                                 onClick={() => handleDelete(tx.id)}
                                 title="刪除"
                               >
-                                <Trash2 size={16} />
+                                <Trash2 size={15} />
                               </button>
                             </>
                           )
                         )
                       }
-                    />                  ))}
+                    />
+                  ))}
                 </div>
               </div>
             )

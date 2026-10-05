@@ -230,10 +230,12 @@ export default function Family() {
           <p className="page-subtitle">與伴侶或家人共同管理即時資金、分擔開支與追蹤儲蓄進度</p>
         </div>
         {hasHousehold && (
-          <button id="btn-invite-family" className="btn btn-primary" onClick={handleGenerateInvite}>
-            <UserPlus size={18} />
-            <span>邀請新成員</span>
-          </button>
+          <div className="header-actions">
+            <button id="btn-invite-family" className="btn btn-primary" onClick={handleGenerateInvite}>
+              <UserPlus size={18} />
+              <span>邀請新成員</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -247,12 +249,12 @@ export default function Family() {
         /* 尚未建立或加入家庭群組 */
         <div className="grid grid-2" style={{ gap: 24 }}>
           {/* 建立家庭群組 */}
-          <div className="card" style={{ padding: 28 }}>
+          <div className="card" style={{ padding: 24 }}>
             <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
               <div style={{
                 width: 44, height: 44, borderRadius: 12,
                 background: 'var(--gradient-card)', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', color: '#FF6B6B'
+                alignItems: 'center', justifyContent: 'center', color: '#FF6B6B', flexShrink: 0
               }}>
                 <Home size={24} />
               </div>
@@ -267,7 +269,7 @@ export default function Family() {
                 <label className="form-label">家庭名稱</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className="input"
                   placeholder="例如：溫馨小家庭、洋蔥小窩"
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
@@ -282,12 +284,12 @@ export default function Family() {
           </div>
 
           {/* 加入已有家庭 */}
-          <div className="card" style={{ padding: 28 }}>
+          <div className="card" style={{ padding: 24 }}>
             <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
               <div style={{
                 width: 44, height: 44, borderRadius: 12,
                 background: 'var(--gradient-card-blue)', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', color: '#4A90E2'
+                alignItems: 'center', justifyContent: 'center', color: '#4A90E2', flexShrink: 0
               }}>
                 <UserPlus size={24} />
               </div>
@@ -302,7 +304,7 @@ export default function Family() {
                 <label className="form-label">家庭邀請碼</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className="input"
                   placeholder="例如：FAM-EULQ"
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value)}
@@ -322,7 +324,7 @@ export default function Family() {
         <div>
           {/* 家庭資訊橫幅 */}
           <div className="card" style={{
-            padding: 24,
+            padding: 20,
             marginBottom: 24,
             background: 'var(--gradient-card)',
             border: '1px solid rgba(255,138,138,0.2)'
@@ -330,16 +332,16 @@ export default function Family() {
             <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: 16 }}>
               <div className="flex items-center gap-4">
                 <div style={{
-                  width: 56, height: 56, borderRadius: 16,
+                  width: 52, height: 52, borderRadius: 16,
                   background: 'white', display: 'flex',
                   alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--color-primary)', boxShadow: 'var(--shadow-sm)'
+                  color: 'var(--color-primary)', boxShadow: 'var(--shadow-sm)', flexShrink: 0
                 }}>
-                  <Home size={28} />
+                  <Home size={26} />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{data.household?.name}</h2>
+                  <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+                    <h2 style={{ fontSize: '1.35rem', fontWeight: 800 }}>{data.household?.name}</h2>
                     <span className="badge badge-default" style={{ fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       {data.myRole === 'admin' ? <><Shield size={12} /> 家庭管理員</> : <><User size={12} /> 家庭群組成員</>}
                     </span>
@@ -350,7 +352,7 @@ export default function Family() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
                 {data.myRole === 'admin' && (
                   <button className="btn btn-secondary" onClick={handleGenerateInvite}>
                     <UserPlus size={16} />
@@ -367,7 +369,7 @@ export default function Family() {
 
           
           {/* 家庭公帳代墊與報銷中心 */}
-          <div className="card" style={{ padding: 24, marginBottom: 24 }}>
+          <div className="card" style={{ marginBottom: 24 }}>
             <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
               <div>
                 <h3 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -409,16 +411,16 @@ export default function Family() {
                       {/* 頂部成員代墊概覽 */}
                       <div
                         style={{
-                          padding: '16px 20px',
+                          padding: '16px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           flexWrap: 'wrap',
-                          gap: 16
+                          gap: 12
                         }}
                       >
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
                             <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{adv.user_name}</span>
                             {adv.pending_reimburse > 0 ? (
                               <span className="badge badge-danger">有待請款代墊</span>
@@ -429,7 +431,7 @@ export default function Family() {
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-secondary)', marginTop: 6 }}>
+                          <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)', marginTop: 6, flexWrap: 'wrap' }}>
                             <span>累計公帳墊付：{formatCurrency(adv.total_advanced)}</span>
                             <span>·</span>
                             <span>已獲撥款報銷：{formatCurrency(adv.total_reimbursed)}</span>
@@ -437,7 +439,7 @@ export default function Family() {
                         </div>
 
                         <div className="family-adv-actions">
-                          <div className="family-adv-amount-box" style={{ textAlign: 'right' }}>
+                          <div className="family-adv-amount-box">
                             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>待報銷總額</div>
                             <div style={{
                               fontSize: '1.35rem',
@@ -448,12 +450,12 @@ export default function Family() {
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+                          <div className="family-adv-btn-group">
                             {adv.pending_reimburse > 0 && (data.myRole === 'admin' || user?.id === adv.user_id) && (
                               <button
                                 className="btn btn-primary"
                                 onClick={() => handleOpenReimburse(adv)}
-                                style={{ padding: '7px 14px', fontSize: '0.9rem', flex: '1 1 auto', minWidth: '120px' }}
+                                style={{ padding: '7px 14px', fontSize: '0.9rem' }}
                               >
                                 <ArrowRightLeft size={15} style={{ marginRight: 4 }} />
                                 報銷沖帳
@@ -464,7 +466,7 @@ export default function Family() {
                               type="button"
                               className="btn btn-secondary"
                               onClick={() => toggleExpand(adv.user_id)}
-                              style={{ padding: '7px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, flex: '1 1 auto', minWidth: '120px' }}
+                              style={{ padding: '7px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
                             >
                               {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                               {isExpanded ? '收起明細' : '查看代墊明細'}
@@ -487,11 +489,11 @@ export default function Family() {
                         <div style={{
                           borderTop: '1px solid var(--border-color)',
                           background: 'rgba(0, 0, 0, 0.02)',
-                          padding: '16px 20px'
+                          padding: '14px 16px'
                         }}>
                           {/* 1. 代墊消費明細清單 */}
                           <div style={{ marginBottom: 20 }}>
-                            <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+                            <div className="flex items-center justify-between" style={{ marginBottom: 10, flexWrap: 'wrap', gap: 4 }}>
                               <h4 style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
                                 <Receipt size={16} color="var(--color-primary)" />
                                 個人代墊消費明細 ({advanceItems.length} 筆)
@@ -506,50 +508,22 @@ export default function Family() {
                                 尚未有任何個人代墊公帳消費紀錄。
                               </div>
                             ) : (
-                              <div style={{
-                                background: 'var(--bg-surface)',
-                                borderRadius: 8,
-                                border: '1px solid var(--border-color)',
-                                overflowX: 'auto'
-                              }}>
-                                <div style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: '100px 1fr 140px 110px',
-                                  minWidth: 440,
-                                  padding: '8px 14px',
-                                  background: 'var(--bg-surface-2)',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 600,
-                                  color: 'var(--text-secondary)',
-                                  borderBottom: '1px solid var(--border-color)'
-                                }}>
+                              <div className="family-breakdown-table">
+                                <div className="family-breakdown-header advance-cols">
                                   <div>消費日期</div>
                                   <div>類別與備註</div>
                                   <div>墊付扣款帳戶</div>
                                   <div style={{ textAlign: 'right' }}>代墊金額</div>
                                 </div>
                                 {advanceItems.map(item => (
-                                  <div
-                                    key={item.id}
-                                    style={{
-                                      display: 'grid',
-                                      gridTemplateColumns: '100px 1fr 140px 110px',
-                                      minWidth: 440,
-                                      padding: '10px 14px',
-                                      fontSize: '0.85rem',
-                                      alignItems: 'center',
-                                      borderBottom: '1px solid var(--border-color)'
-                                    }}
-                                  >
-                                    <div style={{ color: 'var(--text-secondary)' }}>{item.date}</div>
-                                    <div>
+                                  <div key={item.id} className="family-breakdown-row advance-cols">
+                                    <div className="fb-cell-date">{item.date}</div>
+                                    <div className="fb-cell-main">
                                       <span style={{ fontWeight: 600, marginRight: 6 }}>{item.category}</span>
                                       {item.note && <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.note}</span>}
                                     </div>
-                                    <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                                      {item.account_name}
-                                    </div>
-                                    <div style={{ textAlign: 'right', fontWeight: 700, color: 'var(--color-danger)' }}>
+                                    <div className="fb-cell-account">{item.account_name}</div>
+                                    <div className="fb-cell-amount" style={{ color: 'var(--color-danger)' }}>
                                       {formatCurrency(item.amount)}
                                     </div>
                                   </div>
@@ -560,7 +534,7 @@ export default function Family() {
 
                           {/* 2. 歷史撥款報銷沖帳紀錄 */}
                           <div>
-                            <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+                            <div className="flex items-center justify-between" style={{ marginBottom: 10, flexWrap: 'wrap', gap: 4 }}>
                               <h4 style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
                                 <History size={16} color="var(--color-success)" />
                                 共同基金撥款沖帳紀錄 ({reimbItems.length} 筆)
@@ -575,47 +549,23 @@ export default function Family() {
                                 尚未有自共同基金撥款報銷之歷史沖帳紀錄。
                               </div>
                             ) : (
-                              <div style={{
-                                background: 'var(--bg-surface)',
-                                borderRadius: 8,
-                                border: '1px solid var(--border-color)',
-                                overflowX: 'auto'
-                              }}>
-                                <div style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: '100px 140px 1fr 110px',
-                                  minWidth: 440,
-                                  padding: '8px 14px',
-                                  background: 'var(--bg-surface-2)',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 600,
-                                  color: 'var(--text-secondary)',
-                                  borderBottom: '1px solid var(--border-color)'
-                                }}>
+                              <div className="family-breakdown-table">
+                                <div className="family-breakdown-header reimb-cols">
                                   <div>撥款日期</div>
                                   <div>撥入收款帳戶</div>
                                   <div>說明備註</div>
                                   <div style={{ textAlign: 'right' }}>已沖銷金額</div>
                                 </div>
                                 {reimbItems.map(item => (
-                                  <div
-                                    key={item.id}
-                                    style={{
-                                      display: 'grid',
-                                      gridTemplateColumns: '100px 140px 1fr 110px',
-                                      minWidth: 440,
-                                      padding: '10px 14px',
-                                      fontSize: '0.85rem',
-                                      alignItems: 'center',
-                                      borderBottom: '1px solid var(--border-color)'
-                                    }}
-                                  >
-                                    <div style={{ color: 'var(--text-secondary)' }}>{item.date}</div>
-                                    <div className="text-xs" style={{ fontWeight: 600 }}>{item.account_name}</div>
-                                    <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                                      {item.note || '撥款報銷代墊款'}
+                                  <div key={item.id} className="family-breakdown-row reimb-cols">
+                                    <div className="fb-cell-date">{item.date}</div>
+                                    <div className="fb-cell-account" style={{ fontWeight: 600 }}>{item.account_name}</div>
+                                    <div className="fb-cell-main">
+                                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                        {item.note || '撥款報銷代墊款'}
+                                      </span>
                                     </div>
-                                    <div style={{ textAlign: 'right', fontWeight: 700, color: 'var(--color-success)' }}>
+                                    <div className="fb-cell-amount" style={{ color: 'var(--color-success)' }}>
                                       +{formatCurrency(item.amount)}
                                     </div>
                                   </div>

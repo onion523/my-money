@@ -16,7 +16,8 @@ import {
   LogOut,
   BookHeart,
   Menu,
-  X
+  X,
+  Plus
 } from 'lucide-react'
 
 const navItems = [
@@ -59,14 +60,32 @@ export default function Layout() {
     navigate('/login')
   }
 
+  const currentNavItem = navItems.find(item =>
+    item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
+  )
+
+  const handleQuickAddFab = () => {
+    const quickAddBtn = document.getElementById('btn-quick-add') as HTMLButtonElement | null
+    if (quickAddBtn) {
+      quickAddBtn.click()
+      return
+    }
+    const addTxBtn = document.getElementById('btn-add-tx') as HTMLButtonElement | null
+    if (addTxBtn) {
+      addTxBtn.click()
+      return
+    }
+    navigate('/?quickAdd=1')
+  }
+
   return (
     <div className="layout">
-      {/* 行動端頂部 Header (<= 768px 顯示) */}
+      {/* 行動端頂部 Header (<= 960px 顯示) */}
       <header className="mobile-header">
         <button
           type="button"
           className="btn btn-ghost"
-          style={{ padding: '6px 8px', minHeight: 'auto' }}
+          style={{ padding: '8px', minHeight: 40, minWidth: 40, justifyContent: 'center' }}
           onClick={() => setMobileMenuOpen(true)}
           aria-label="打開導覽選單"
         >
@@ -74,14 +93,19 @@ export default function Layout() {
         </button>
 
         <div className="mobile-header-title">
-          <BookHeart size={20} />
+          <BookHeart size={20} style={{ flexShrink: 0 }} />
           <span>我的記帳本</span>
+          {currentNavItem && currentNavItem.to !== '/' && (
+            <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              · {currentNavItem.label}
+            </span>
+          )}
         </div>
 
         <button
           type="button"
           className="btn btn-ghost"
-          style={{ padding: '6px 8px', minHeight: 'auto' }}
+          style={{ padding: '8px', minHeight: 40, minWidth: 40, justifyContent: 'center' }}
           onClick={toggleTheme}
           aria-label="切換主題"
         >
@@ -152,7 +176,19 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      {/* 行動端底部導覽列 (<= 768px 顯示) */}
+      {/* 行動端右下角懸浮快速記帳鈕 (Quick-Add FAB) */}
+      <button
+        type="button"
+        id="mobile-quick-add-fab"
+        className="mobile-quick-add-fab"
+        onClick={handleQuickAddFab}
+        aria-label="快速記帳"
+        title="隨手記一筆"
+      >
+        <Plus size={24} strokeWidth={2.5} />
+      </button>
+
+      {/* 行動端底部導覽列 (<= 960px 顯示) */}
       <nav className="mobile-bottom-nav">
         <NavLink
           to="/"
@@ -195,3 +231,4 @@ export default function Layout() {
     </div>
   )
 }
+

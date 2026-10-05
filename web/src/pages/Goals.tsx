@@ -178,10 +178,12 @@ export default function Goals() {
           </h1>
           <p className="page-subtitle">設立旅行、購屋、緊急備用金等夢想目標，按月預留並逐步實現</p>
         </div>
-        <button id="btn-add-goal" className="btn btn-primary" onClick={handleOpenAdd}>
-          <Plus size={18} />
-          <span>建立新目標</span>
-        </button>
+        <div className="header-actions">
+          <button id="btn-add-goal" className="btn btn-primary" onClick={handleOpenAdd}>
+            <Plus size={18} />
+            <span>建立新目標</span>
+          </button>
+        </div>
       </div>
 
       {/* 統計概覽 */}
@@ -465,11 +467,11 @@ function GoalCard({
         </div>
 
         <div className="flex gap-xs">
-          <button className="btn btn-ghost btn-sm" style={{ padding: 4 }} onClick={onEdit}>
-            <Edit2 size={14} />
+          <button className="btn-icon" title="編輯" onClick={onEdit}>
+            <Edit2 size={15} />
           </button>
-          <button className="btn btn-ghost btn-sm" style={{ padding: 4, color: 'var(--color-danger)' }} onClick={onDelete}>
-            <Trash2 size={14} />
+          <button className="btn-icon danger" title="刪除" onClick={onDelete}>
+            <Trash2 size={15} />
           </button>
         </div>
       </div>

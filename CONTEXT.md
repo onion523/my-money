@@ -302,3 +302,42 @@ _Avoid_: 二次骨架 (secondary skeleton)、重新載入 (reload)
 **Shimmer Effect (微光動效 / 溫暖水彩果凍玻璃)**:
 骨架屏融合 135 度櫻粉微暖雙漸層底色、毛玻璃通透感 (blur 5px) 與雙峰果凍高光波紋自左至右循環流動的 CSS 動態效果，容器本體維持絕對座標固定，適配淺色與深色主題。
 _Avoid_: 容器位移 (element translation)、生硬刷光 (hard sweep)、呼吸燈 (pulse)、跑馬燈 (marquee)、冷硬死灰 (cold dead grey)
+
+---
+
+### 行動端優先與響應式體驗 (Mobile-First RWD & UX)
+
+**Mobile Bottom Sheet (行動端底部抽屜彈窗)**:
+在行動端小螢幕（`<= 640px`）下，所有新增與編輯表單彈窗（`.modal-box`）由螢幕置中轉化為貼齊螢幕底部向上滑出之抽屜式面板（頂部大圓角、適配動態視窗高度 `dvh` 與底部安全區 `safe-area-inset-bottom`）。標題列吸頂固定並提供至少 `44x44px` 之關閉觸控熱區，表單輸入框字級不小於 `16px` 以防止 iOS Safari 強制放大畫面，並針對窄螢幕自動將易擠壓之並排欄位（如日期選擇器）調整為單欄滿寬，同時保留二選一歸屬切換鈕（如公帳／私帳）之水平雙欄並排。
+_Avoid_: 手機置中懸浮彈窗 (centered floating modal on mobile)、低於 16px 觸發強制縮放之輸入框 (sub-16px auto-zoom inputs)、誤將二元切換鈕垂直拆行 (stacked binary toggle buttons)
+
+**Collapsible Mobile Filter Bar (行動端可收合進階篩選列)**:
+在收支明細頁（Transactions）的行動端視角（`<= 640px`）下，篩選工具列預設僅常駐顯示「三態帳本視角等寬切換器」、「關鍵字搜尋框」與附帶已啟用篩選數徽章之「進階篩選收合按鈕」，將起始／結束日期、收支類型、分類、帳戶等次要篩選條件預設折疊收合（展開時日期採雙欄並排），並將篩選結果統計列之「總收入、總支出、淨收支」轉為三欄等寬網格，確保使用者進入頁面第一屏即可直接檢視收支明細。
+_Avoid_: 手機首屏全展開篩選牆 (full-screen uncollapsed filter wall)、篩選總計文字擠壓斷行 (cramped summary text wrapping)
+
+**Two-Deck Mobile Transaction Row (手機版收支明細列雙層防誤觸排版)**:
+在行動端小螢幕（`<= 640px`）下，單筆收支明細列（`TransactionRow`）將金額固定靠右上對齊，讓左側分類圖示與中間「分類・備註・徽章・帳戶」享有完整水平寬度；當該列包含操作按鈕（編輯、刪除或系統保護標籤）時，操作區自動獨立下移靠右排列並放大按鈕觸控熱區與安全間距，防止備註擠壓成細長多行及手指誤觸刪除。
+_Avoid_: 單行硬塞金額與微型編刪鈕 (single-line cramming with tiny action icons)、緊貼誤刪風險 (adjacent micro delete button)
+
+**Mobile Account Action Grid (手機版帳戶管理 2x2 快捷網格與觸控優化)**:
+在帳戶管理頁（Accounts）的行動端視角（`<= 640px`）下，頂部四項核心操作（「ATM 提款／轉帳」、「新增現金錢包」、「新增銀行存款帳戶」、「新增信用卡」）自動排列為對齊之 `2x2` 雙欄等寬網格按鈕；帳戶卡片標題列維持名稱與編輯／刪除圖示（至少 `36x36px` 觸控盒）水平兩端對齊，且信用卡「未出帳」區之「校準」與「出帳作業」按鈕提供充足觸控高度與彈性換行空間。
+_Avoid_: 頂部四鈕鋸齒狀折行堆疊 (jagged 4-button wrapping stack)、18px 微型校準按鈕 (micro 18px action buttons)
+
+**Mobile Chart & Timeline Adaptation (手機版統計圖表與預測時間軸自適應)**:
+在統計圖表頁（Analytics）與現金流預測頁（Forecast）的行動端視角（`<= 640px`）下，長條圖與折線圖之 X 軸自動啟用簡短月份／日期格式與防重疊跳格（`minTickGap`）；圓餅圖圖例於小螢幕改為單欄左右對齊列表以完整呈現分類名稱、百分比與金額；每月預算進度列與預測排程事件卡片皆轉為上下雙層結構，且預測時間軸解除固定高度內部捲軸限制，隨頁面自然滾動。
+_Avoid_: 圖表 X 軸標籤重疊黑塊 (overlapping X-axis tick labels)、圓餅圖例雙欄截斷金額 (truncated 2-column pie legend)、手機局部捲軸陷阱 (nested scroll trapping)
+
+**Mobile Advance Breakdown Card List (手機版家庭代墊與報銷雙層明細列)**:
+在家庭協同頁（Family）的行動端視角（`<= 640px`）下，「代墊與報銷明細」與「共同基金撥款紀錄」捨棄固定最小寬度（`minWidth: 440`）之四欄橫向捲動表格，轉化為免橫向滑動之上下雙層緊湊列（第一行左列類別與備註、右列金額；第二行左列日期、右列扣款或轉入帳戶），並對齊代墊成員卡片之雙欄等寬操作按鈕與標準輸入框樣式。
+_Avoid_: 手機版四欄強制橫向捲動表格 (horizontal-scroll 4-column table on mobile)、未定義之原生輸入框樣式 (un-styled raw form inputs)
+
+**Mobile Segmented Scope & Quick-Add FAB (手機版等寬三態切換與全域懸浮記帳鈕)**:
+在行動端視角（`<= 640px`）下，全站三態視角切換器（`ScopeTabBar`）自動轉為 100% 滿寬之三等分控制項（三個按鈕 `flex: 1` 置中均分，不附冗餘前綴文字）；各頁面頂部操作按鈕統一收斂於 `.header-actions` 容器以確保小螢幕滿寬對齊；同時於行動端右下角（底部導覽列上方安全區）提供水彩粉紅圓形「`+`」懸浮快速記帳按鈕（Quick-Add FAB），支援隨時一鍵喚起記帳表單。
+_Avoid_: 手機版偏左不等寬三態按鈕 (left-aligned uneven scope tabs)、裸露未對齊之頂部操作鈕 (unwrapped header action buttons)
+
+
+
+
+
+
+

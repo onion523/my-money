@@ -56,12 +56,13 @@ export default function TransactionRow({ tx, showDate = false, actions }: Transa
           )}
         </div>
       </div>
-      <div className="flex items-center gap-md" style={{ flexShrink: 0 }}>
+      <div className="tx-side">
         <div className={`tx-amount ${tx.type}`} style={{ fontSize: '1.05rem', whiteSpace: 'nowrap' }}>
           {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
         </div>
-        {actions && <div className="flex gap-xs">{actions}</div>}
+        {actions && <div className="tx-actions">{actions}</div>}
       </div>
     </div>
   );
 }
+

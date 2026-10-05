@@ -329,7 +329,7 @@ export default function BotIntegration() {
           >
             <input
               type="text"
-              className="form-input"
+              className="input"
               style={{ flex: 1 }}
               placeholder="例如：午餐 120、高鐵 1490 信用卡、餘額"
               value={simInput}
