@@ -9,6 +9,7 @@ import ScopeTabBar from '../components/ScopeTabBar'
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
 import TransactionRow from '../components/TransactionRow'
+import FormulaTooltip from '../components/FormulaTooltip'
 import {
   AlertCircle,
   Wallet,
@@ -213,7 +214,14 @@ export default function Dashboard() {
         {/* 淨可用餘額 */}
         <div className="stat-card" style={{ background: 'linear-gradient(135deg, rgba(255,138,138,0.15) 0%, rgba(255,212,160,0.15) 100%)' }}>
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-            <span className="stat-label">淨可用餘額</span>
+            <span className="stat-label">
+              <span>淨可用餘額</span>
+              <FormulaTooltip
+                label="檢視淨可用餘額計算公式"
+                formula="現金錢包總額 ＋ 銀行存款總額 － 信用卡總待繳（已出帳 ＋ 未出帳）"
+                calculation={`${formatCurrency(balance?.cashTotal ?? 0)} + ${formatCurrency(balance?.bankTotal ?? 0)} - (${formatCurrency(balance?.ccBilled ?? 0)} + ${formatCurrency(balance?.ccUnbilled ?? 0)}) = ${formatCurrency(balance?.available ?? 0)}`}
+              />
+            </span>
             <div style={{ background: 'var(--color-primary)', color: 'white', padding: 6, borderRadius: '50%' }}>
               <Wallet size={18} />
             </div>
@@ -229,7 +237,14 @@ export default function Dashboard() {
         {/* 真實可支配現金 */}
         <div className="stat-card" style={{ background: 'linear-gradient(135deg, rgba(85,197,149,0.15) 0%, rgba(168,216,234,0.15) 100%)' }}>
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-            <span className="stat-label">真實可支配現金</span>
+            <span className="stat-label">
+              <span>真實可支配現金</span>
+              <FormulaTooltip
+                label="檢視真實可支配現金計算公式"
+                formula="淨可用餘額 － 週期支出每月平均預留 － 每月儲蓄目標預留"
+                calculation={`${formatCurrency(balance?.available ?? 0)} - ${formatCurrency(balance?.monthlyFixed ?? 0)} - ${formatCurrency(balance?.monthlyGoals ?? 0)} = ${formatCurrency(balance?.disposable ?? 0)}`}
+              />
+            </span>
             <div style={{ background: 'var(--color-success)', color: 'white', padding: 6, borderRadius: '50%' }}>
               <Sparkles size={18} />
             </div>
@@ -246,7 +261,12 @@ export default function Dashboard() {
         <div className="stat-card">
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
             <span className="stat-label">
-              {viewScope === 'household' ? '當月公帳淨結算' : viewScope === 'personal' ? '當月個人私帳淨收支' : '當月淨收支'}
+              <span>{viewScope === 'household' ? '當月公帳淨結算' : viewScope === 'personal' ? '當月個人私帳淨收支' : '當月淨收支'}</span>
+              <FormulaTooltip
+                label="檢視當月淨收支計算公式"
+                formula="當月有效總收入 － 當月有效總支出（排除內部轉帳、ATM 提款、信用卡還款與代墊報銷）"
+                calculation={`${formatCurrency(monthIncome)} - ${formatCurrency(monthExpense)} = ${formatCurrency(monthIncome - monthExpense)}`}
+              />
             </span>
             <div style={{ background: 'var(--color-secondary)', color: '#7a4e00', padding: 6, borderRadius: '50%' }}>
               {monthIncome - monthExpense >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}

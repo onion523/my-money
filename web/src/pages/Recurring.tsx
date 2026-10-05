@@ -5,6 +5,7 @@ import { useStore } from '../store/useStore'
 import { formatCurrency, CYCLE_LABELS } from '../components/utils'
 import Modal from '../components/Modal'
 import ScopeTabBar from '../components/ScopeTabBar'
+import FormulaTooltip from '../components/FormulaTooltip'
 import {
   AlertCircle,
   Plus,
@@ -333,7 +334,18 @@ export default function Recurring() {
       {/* 統計卡片 */}
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
         <div className="stat-card">
-          <span className="stat-label">週期支出每月平均</span>
+          <span className="stat-label">
+            <span>週期支出每月平均</span>
+            <FormulaTooltip
+              label="檢視週期支出每月平均計算公式"
+              formula="∑（各筆週期支出金額 ÷ 週期月數：月繳÷1、雙月÷2、季繳÷3、半年÷6、年繳÷12）"
+              calculation={
+                expenseItems.length > 0
+                  ? `共 ${expenseItems.length} 筆週期支出平攤合計 = ${formatCurrency(amortize?.monthly_expense ?? 0)} / 月`
+                  : `0 筆週期支出 = ${formatCurrency(0)}`
+              }
+            />
+          </span>
           <div className="stat-value" style={{ color: 'var(--color-danger)' }}>
             {formatCurrency(amortize?.monthly_expense ?? 0)}
           </div>
@@ -341,7 +353,18 @@ export default function Recurring() {
         </div>
 
         <div className="stat-card">
-          <span className="stat-label">週期收入每月預估</span>
+          <span className="stat-label">
+            <span>週期收入每月預估</span>
+            <FormulaTooltip
+              label="檢視週期收入每月預估計算公式"
+              formula="∑（各筆週期收入金額 ÷ 週期月數：月領÷1、雙月÷2、季領÷3、半年÷6、年領÷12）"
+              calculation={
+                incomeItems.length > 0
+                  ? `共 ${incomeItems.length} 筆週期收入平攤合計 = ${formatCurrency(amortize?.monthly_income ?? 0)} / 月`
+                  : `0 筆週期收入 = ${formatCurrency(0)}`
+              }
+            />
+          </span>
           <div className="stat-value" style={{ color: 'var(--color-success)' }}>
             {formatCurrency(amortize?.monthly_income ?? 0)}
           </div>
@@ -349,7 +372,14 @@ export default function Recurring() {
         </div>
 
         <div className="stat-card" style={{ background: 'var(--bg-surface-2)' }}>
-          <span className="stat-label">每月週期淨額</span>
+          <span className="stat-label">
+            <span>每月週期淨額</span>
+            <FormulaTooltip
+              label="檢視每月週期淨額計算公式"
+              formula="週期收入每月預估 － 週期支出每月平均"
+              calculation={`${formatCurrency(amortize?.monthly_income ?? 0)} - ${formatCurrency(amortize?.monthly_expense ?? 0)} = ${formatCurrency((amortize?.monthly_income ?? 0) - (amortize?.monthly_expense ?? 0))}`}
+            />
+          </span>
           <div className="stat-value" style={{ color: (amortize?.monthly_income ?? 0) - (amortize?.monthly_expense ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
             {formatCurrency((amortize?.monthly_income ?? 0) - (amortize?.monthly_expense ?? 0))}
           </div>

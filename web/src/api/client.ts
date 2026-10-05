@@ -310,6 +310,9 @@ export interface BudgetWithSpent extends Budget {
 }
 
 export interface ForecastResult {
+  startingBalance?: number;
+  cashTotal?: number;
+  bankTotal?: number;
   dailyBalances: Array<{ date: string; balance: number; events: DayEvent[] }>;
   minBalance: number;
   minDate: string;

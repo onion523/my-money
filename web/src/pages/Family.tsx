@@ -4,6 +4,7 @@ import { useStore } from '../store/useStore'
 import { householdApi, HouseholdData, HouseholdMember, HouseholdAdvance, accountsApi, Account } from '../api/client'
 import { formatCurrency, today, formatLocalDate } from '../components/utils'
 import Modal from '../components/Modal'
+import FormulaTooltip from '../components/FormulaTooltip'
 import {
   Users,
   UserPlus,
@@ -440,7 +441,14 @@ export default function Family() {
 
                         <div className="family-adv-actions">
                           <div className="family-adv-amount-box">
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>待報銷總額</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <span>待報銷總額</span>
+                              <FormulaTooltip
+                                label={`檢視 ${adv.user_name} 待報銷總額計算公式`}
+                                formula="成員以個人私帳／私卡／現金墊付公帳累積總額 － 已由家庭共同基金撥款報銷總額"
+                                calculation={`${formatCurrency(adv.total_advanced)} - ${formatCurrency(adv.total_reimbursed)} = ${formatCurrency(adv.pending_reimburse)}`}
+                              />
+                            </div>
                             <div style={{
                               fontSize: '1.35rem',
                               fontWeight: 800,

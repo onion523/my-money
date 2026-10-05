@@ -17,6 +17,7 @@ import { CategoryIcon } from '../components/icons'
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
 import ScopeTabBar from '../components/ScopeTabBar'
+import FormulaTooltip from '../components/FormulaTooltip'
 import {
   BarChart,
   Bar,
@@ -223,8 +224,13 @@ export default function Analytics() {
               <Coins size={20} color="var(--color-success)" />
               {currentMonth} 家庭成員公帳墊付與分攤統計
             </h2>
-            <div className="text-sm">
-              當月家庭公帳總額：<strong style={{ color: 'var(--color-danger)' }}>{formatCurrency(totalSharedExpense)}</strong>
+            <div className="text-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span>當月家庭公帳總額：<strong style={{ color: 'var(--color-danger)' }}>{formatCurrency(totalSharedExpense)}</strong></span>
+              <FormulaTooltip
+                label="檢視當月家庭公帳總額與分攤計算公式"
+                formula="公帳總額 ＝ ∑ 各成員本月紀錄之公帳支出；個人佔比 ＝ 成員公帳支出 ÷ 當月家庭公帳總額 × 100%"
+                calculation={`${householdShares.map(m => `${m.user_name} ${formatCurrency(m.total)}`).join(' + ')} = ${formatCurrency(totalSharedExpense)}`}
+              />
             </div>
           </div>
 
@@ -281,10 +287,24 @@ export default function Analytics() {
       <div className="grid grid-2" style={{ marginBottom: 24 }}>
         {/* 類別佔比圓餅圖 */}
         <div className="card">
-          <h2 className="text-xl flex items-center gap-xs" style={{ marginBottom: 16 }}>
-            <PieIcon size={20} color="var(--color-primary)" />
-            {currentMonth} 支出分類佔比 ({scope === 'household' ? '公帳' : scope === 'personal' ? '私帳' : '全部'})
-          </h2>
+          <div className="flex items-center justify-between" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 6 }}>
+            <h2 className="text-xl flex items-center gap-xs">
+              <PieIcon size={20} color="var(--color-primary)" />
+              {currentMonth} 支出分類佔比 ({scope === 'household' ? '公帳' : scope === 'personal' ? '私帳' : '全部'})
+            </h2>
+            <span className="text-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)' }}>
+              <span>總支出：<strong style={{ color: 'var(--color-danger)' }}>{formatCurrency(totalExpense)}</strong></span>
+              <FormulaTooltip
+                label="檢視本月分類總支出與佔比計算公式"
+                formula="本月總支出 ＝ ∑ 各消費分類金額（排除內部轉帳、ATM 提款、信用卡還款與代墊報銷）；分類佔比 ＝ 該類金額 ÷ 本月總支出 × 100%"
+                calculation={
+                  catSummary.length > 0
+                    ? `${catSummary.map(c => `${c.category} ${formatCurrency(c.total)}`).join(' + ')} = ${formatCurrency(totalExpense)}`
+                    : `0 筆支出 = ${formatCurrency(0)}`
+                }
+              />
+            </span>
+          </div>
 
           {pieData.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 0' }}>

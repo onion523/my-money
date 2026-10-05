@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { forecastApi, ForecastResult, PurchaseCheckResult, DayEvent } from '../api/client'
 import { formatCurrency, formatDate } from '../components/utils'
 import ScopeTabBar from '../components/ScopeTabBar'
+import FormulaTooltip from '../components/FormulaTooltip'
 import {
   AreaChart,
   Area,
@@ -142,7 +143,14 @@ export default function Forecast() {
           }}
         >
           <div className="flex items-center justify-between">
-            <span className="stat-label">未來 30 天資金安全評級</span>
+            <span className="stat-label">
+              <span>未來 30 天資金安全評級</span>
+              <FormulaTooltip
+                label="檢視未來 30 天資金安全評級計算公式"
+                formula="模擬未來 30 天逐日餘額，若預測期最低餘額點 < $0 則判定為「存在透支風險」，若 >= $0 則為「現金流充裕安全」"
+                calculation={`預測期最低點 ${formatCurrency(forecast?.minBalance ?? 0)} ${forecast?.willOverdraft ? '< $0（存在透支風險）' : '>= $0（現金流充裕安全）'}`}
+              />
+            </span>
             {forecast?.willOverdraft ? (
               <AlertTriangle size={20} color="var(--color-danger)" />
             ) : (
@@ -172,7 +180,14 @@ export default function Forecast() {
         </div>
 
         <div className="stat-card">
-          <span className="stat-label">預測期最低餘額點</span>
+          <span className="stat-label">
+            <span>預測期最低餘額點</span>
+            <FormulaTooltip
+              label="檢視預測期最低餘額點計算公式"
+              formula="第 0 天起始餘額（現金＋銀行存款）逐日加減未勾選已繳之週期收支與信用卡繳款日卡費（含已出帳＋待出帳）後之 30 天最低值"
+              calculation={`起始（現金 ${formatCurrency(forecast?.cashTotal ?? 0)} + 存款 ${formatCurrency(forecast?.bankTotal ?? 0)} = ${formatCurrency(forecast?.startingBalance ?? 0)}）→ 最低點 ${formatCurrency(forecast?.minBalance ?? 0)}（${forecast?.minDate || '無變動'}）`}
+            />
+          </span>
           <div
             className="stat-value"
             style={{
@@ -187,11 +202,23 @@ export default function Forecast() {
         </div>
 
         <div className="stat-card">
-          <span className="stat-label">未來 30 天預定事件數</span>
+          <span className="stat-label">
+            <span>未來 30 天預定事件數</span>
+            <FormulaTooltip
+              label="檢視未來 30 天預定事件數計算公式"
+              formula="未來 30 天內預計發生之週期收支筆數 ＋ 信用卡繳款日扣款事件筆數（含已出帳＋待出帳）"
+              calculation={(() => {
+                const allEvs = forecast?.events || []
+                const settledCount = allEvs.filter(e => e.is_settled).length
+                const activeCount = allEvs.length - settledCount
+                return `待扣／待入帳 ${activeCount} 筆 + 已勾選已繳 ${settledCount} 筆 = 共 ${allEvs.length} 筆`
+              })()}
+            />
+          </span>
           <div className="stat-value" style={{ color: 'var(--color-primary)' }}>
             {forecast?.events.length ?? 0} 筆
           </div>
-          <div className="stat-sub">包含各項月繳、雙月繳及固定薪資</div>
+          <div className="stat-sub">包含各項週期收支與信用卡繳款日卡費</div>
         </div>
       </div>
 
@@ -204,10 +231,10 @@ export default function Forecast() {
           </h2>
           <div className="text-xs text-muted">
             {scope === 'household'
-              ? '起始餘額：公帳存款扣除未出帳款項（已出帳於繳款日扣除）'
+              ? '起始餘額：公帳現金＋銀行存款（信用卡已出帳＋待出帳於繳款日扣除）'
               : scope === 'personal'
-              ? '起始餘額：個人存款扣除未出帳款項（已出帳於繳款日扣除）'
-              : '起始餘額：全戶存款扣除未出帳款項（已出帳於繳款日扣除）'}
+              ? '起始餘額：個人現金＋銀行存款（信用卡已出帳＋待出帳於繳款日扣除）'
+              : '起始餘額：全戶現金＋銀行存款（信用卡已出帳＋待出帳於繳款日扣除）'}
           </div>
         </div>
 

@@ -1563,3 +1563,89 @@ a { text-decoration: none; color: inherit; }
 .skeleton-circle {
   border-radius: 50%;
 }
+
+/* ---- 統計公式透明化氣泡提示 (Formula Breakdown Tooltip - #96) ---- */
+.stat-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.formula-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+.formula-info-btn:hover,
+.formula-info-btn.active {
+  color: var(--color-primary);
+  background: rgba(255, 138, 138, 0.14);
+  border-color: rgba(255, 138, 138, 0.35);
+}
+
+.formula-tooltip-popover {
+  position: fixed;
+  width: min(300px, calc(100vw - 24px));
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 12px 14px;
+  z-index: 1200;
+  animation: fadeIn 0.15s ease;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.formula-tooltip-popover.place-above {
+  transform: translateY(-100%);
+}
+.formula-tooltip-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.formula-tooltip-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  letter-spacing: 0.03em;
+}
+.formula-tooltip-tag.calc {
+  color: var(--color-success);
+}
+.formula-tooltip-text {
+  color: var(--text-secondary);
+  font-weight: 500;
+  word-break: break-word;
+}
+.formula-tooltip-calc {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px dashed var(--border-color);
+  word-break: break-word;
+}
+.formula-tooltip-divider {
+  height: 1px;
+  background: var(--border-color-2);
+  margin: 8px 0;
+}
+.formula-tooltip-note {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}

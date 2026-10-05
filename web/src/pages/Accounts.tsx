@@ -6,6 +6,7 @@ import { useStore } from '../store/useStore'
 import { formatCurrency, ACCOUNT_COLORS, today } from '../components/utils'
 import Modal from '../components/Modal'
 import ScopeTabBar from '../components/ScopeTabBar'
+import FormulaTooltip from '../components/FormulaTooltip'
 import {
   Plus,
   Edit2,
@@ -458,8 +459,13 @@ export default function Accounts() {
               <Receipt size={22} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                家庭公帳待報銷代墊款：{formatCurrency(totalPendingAdvances)}
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span>家庭公帳待報銷代墊款：{formatCurrency(totalPendingAdvances)}</span>
+                <FormulaTooltip
+                  label="檢視家庭公帳待報銷代墊款計算公式"
+                  formula="全體成員以個人私帳／現金墊付公帳總額 － 已由共同基金撥款報銷總額"
+                  calculation={`各成員待報銷淨額合計 = ${formatCurrency(totalPendingAdvances)}`}
+                />
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 2 }}>
                 成員以個人私帳/現金墊付生活開銷，待家庭共同基金撥款報銷沖抵
@@ -482,7 +488,16 @@ export default function Accounts() {
         <div className="stat-card" style={{ borderLeft: '4px solid #10B981' }}>
           <span className="stat-label flex items-center gap-xs">
             <Wallet size={16} color="#10B981" />
-            現金錢包總額
+            <span>現金錢包總額</span>
+            <FormulaTooltip
+              label="檢視現金錢包總額計算公式"
+              formula="當前視角下所有「現金錢包」帳戶之即時餘額加總"
+              calculation={
+                cashAccounts.length > 0
+                  ? `${cashAccounts.map(a => `${a.name} ${formatCurrency(a.balance)}`).join(' + ')} = ${formatCurrency(balance?.cashTotal ?? 0)}`
+                  : `0 個現金錢包 = ${formatCurrency(0)}`
+              }
+            />
           </span>
           <div className="stat-value" style={{ color: '#10B981' }}>
             {formatCurrency(balance?.cashTotal ?? 0)}
@@ -493,7 +508,16 @@ export default function Accounts() {
         <div className="stat-card" style={{ borderLeft: '4px solid #3B82F6' }}>
           <span className="stat-label flex items-center gap-xs">
             <Building size={16} color="#3B82F6" />
-            銀行存款總額
+            <span>銀行存款總額</span>
+            <FormulaTooltip
+              label="檢視銀行存款總額計算公式"
+              formula="當前視角下所有「銀行存款帳戶」之活存餘額加總"
+              calculation={
+                bankAccounts.length > 0
+                  ? `${bankAccounts.map(a => `${a.name} ${formatCurrency(a.balance)}`).join(' + ')} = ${formatCurrency(balance?.bankTotal ?? 0)}`
+                  : `0 個銀行存款帳戶 = ${formatCurrency(0)}`
+              }
+            />
           </span>
           <div className="stat-value" style={{ color: 'var(--color-primary)' }}>
             {formatCurrency(balance?.bankTotal ?? 0)}
@@ -504,7 +528,16 @@ export default function Accounts() {
         <div className="stat-card" style={{ borderLeft: '4px solid var(--color-danger)' }}>
           <span className="stat-label flex items-center gap-xs">
             <CreditCard size={16} color="var(--color-danger)" />
-            信用卡總待繳
+            <span>信用卡總待繳</span>
+            <FormulaTooltip
+              label="檢視信用卡總待繳計算公式"
+              formula={
+                scope === 'household'
+                  ? '家庭共同信用卡總欠款 ＋ 成員個人私卡上之家庭公帳代墊欠款'
+                  : '當前視角下所有信用卡之「已出帳待繳款 ＋ 未出帳款」總和'
+              }
+              calculation={`已出帳 ${formatCurrency(balance?.ccBilled ?? 0)} + 未出帳 ${formatCurrency(balance?.ccUnbilled ?? 0)} = ${formatCurrency((balance?.ccBilled ?? 0) + (balance?.ccUnbilled ?? 0))}`}
+            />
           </span>
           <div className="stat-value" style={{ color: 'var(--color-danger)' }}>
             {formatCurrency((balance?.ccBilled ?? 0) + (balance?.ccUnbilled ?? 0))}
@@ -517,7 +550,12 @@ export default function Accounts() {
         <div className="stat-card" style={{ background: 'linear-gradient(135deg, rgba(255,138,138,0.12) 0%, rgba(168,216,234,0.15) 100%)', borderLeft: '4px solid var(--text-primary)' }}>
           <span className="stat-label flex items-center gap-xs">
             <ShieldCheck size={16} color="var(--color-primary)" />
-            淨可用餘額
+            <span>淨可用餘額</span>
+            <FormulaTooltip
+              label="檢視淨可用餘額計算公式"
+              formula="現金錢包總額 ＋ 銀行存款總額 － 信用卡總待繳（已出帳 ＋ 未出帳）"
+              calculation={`${formatCurrency(balance?.cashTotal ?? 0)} + ${formatCurrency(balance?.bankTotal ?? 0)} - ${formatCurrency((balance?.ccBilled ?? 0) + (balance?.ccUnbilled ?? 0))} = ${formatCurrency(balance?.available ?? 0)}`}
+            />
           </span>
           <div className="stat-value" style={{ color: (balance?.available ?? 0) >= 0 ? 'var(--text-primary)' : 'var(--color-danger)' }}>
             {formatCurrency(balance?.available ?? 0)}

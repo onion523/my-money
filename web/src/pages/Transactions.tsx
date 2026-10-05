@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, buildHistoryM
 import Modal from '../components/Modal'
 import ScopeTabBar from '../components/ScopeTabBar'
 import TransactionRow from '../components/TransactionRow'
+import FormulaTooltip from '../components/FormulaTooltip'
 import {
   Plus,
   Filter,
@@ -421,15 +422,36 @@ export default function Transactions() {
           </div>
           <div className="tx-summary-metrics">
             <div className="tx-summary-metric">
-              <span className="tx-summary-label">總收入</span>
+              <span className="tx-summary-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <span>總收入</span>
+                <FormulaTooltip
+                  label="檢視篩選結果總收入計算公式"
+                  formula="當前篩選條件下所有「一般收入」明細加總（排除內部轉帳、ATM 提款、信用卡還款與代墊報銷）"
+                  calculation={`共 ${filtered.filter(t => t.type === 'income' && (categoryFilter !== '全部' || !SYSTEM_CATEGORIES.includes(t.category))).length} 筆有效收入 = +${formatCurrency(totalIncome)}`}
+                />
+              </span>
               <strong style={{ color: 'var(--color-success)' }}>+{formatCurrency(totalIncome)}</strong>
             </div>
             <div className="tx-summary-metric">
-              <span className="tx-summary-label">總支出</span>
+              <span className="tx-summary-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <span>總支出</span>
+                <FormulaTooltip
+                  label="檢視篩選結果總支出計算公式"
+                  formula="當前篩選條件下所有「一般消費支出」明細加總（排除內部轉帳、ATM 提款、信用卡還款與代墊報銷）"
+                  calculation={`共 ${filtered.filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !SYSTEM_CATEGORIES.includes(t.category))).length} 筆有效支出 = -${formatCurrency(totalExpense)}`}
+                />
+              </span>
               <strong style={{ color: 'var(--color-danger)' }}>-{formatCurrency(totalExpense)}</strong>
             </div>
             <div className="tx-summary-metric">
-              <span className="tx-summary-label">淨收支</span>
+              <span className="tx-summary-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <span>淨收支</span>
+                <FormulaTooltip
+                  label="檢視篩選結果淨收支計算公式"
+                  formula="篩選結果總收入 － 篩選結果總支出"
+                  calculation={`${formatCurrency(totalIncome)} - ${formatCurrency(totalExpense)} = ${formatCurrency(totalIncome - totalExpense)}`}
+                />
+              </span>
               <strong style={{ color: totalIncome - totalExpense >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                 {formatCurrency(totalIncome - totalExpense)}
               </strong>

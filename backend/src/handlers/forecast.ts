@@ -180,7 +180,7 @@ async function getForecastStartingBalance(
   const cashTotal = accList.filter(a => a.type === 'cash').reduce((s, a) => s + (a.balance || 0), 0);
   const bankTotal = accList.filter(a => a.type === 'bank').reduce((s, a) => s + (a.balance || 0), 0);
 
-  // 信用卡：依視角計算「歸屬本視角之比例」，已出帳於繳款日扣除、未出帳於起始餘額預扣
+  // 信用卡：依視角計算「歸屬本視角之比例」，已出帳與待出帳（未出帳）合併於繳款日扣除（未設定繳款日者於第 0 天預扣）
   const cardRows = await db.prepare(
     `SELECT id, user_id, name, balance, unbilled, is_joint, payment_due_day FROM accounts WHERE type = 'credit_card' AND (user_id = ? OR user_id IN (${placeholders}))`
   ).bind(userId, ...memberUserIds).all();
@@ -197,8 +197,7 @@ async function getForecastStartingBalance(
     return null;
   };
 
-  let unbilledDeduct = 0;
-  let billedImmediate = 0;
+  let immediateCardDeduct = 0;
   const cardEvents: ForecastEvent[] = [];
 
   for (const card of cards) {
@@ -233,33 +232,42 @@ async function getForecastStartingBalance(
     }
 
     if (fraction <= 0) continue;
-    const billed = (card.balance || 0) * fraction;
-    unbilledDeduct += (card.unbilled || 0) * fraction;
-    if (billed <= 0) continue;
+    const billed = Math.round((card.balance || 0) * fraction * 100) / 100;
+    const unbilled = Math.round((card.unbilled || 0) * fraction * 100) / 100;
+    const totalCardDue = Math.round((billed + unbilled) * 100) / 100;
+    if (totalCardDue <= 0) continue;
 
     const dueDate = card.payment_due_day ? findDueDate(card.payment_due_day) : null;
     if (dueDate) {
       const eventKey = `card_due:${card.id}:${dueDate}`;
       const isShared = isJoint || !isOwn || scope === 'household' ? 1 : 0;
       const canSettle = isShared === 0 ? isOwn : (isOwn || myRole === 'admin');
+      let breakdownLabel = '';
+      if (billed > 0 && unbilled > 0) {
+        breakdownLabel = `（已出帳 $${Math.round(billed).toLocaleString()} + 待出帳 $${Math.round(unbilled).toLocaleString()}）`;
+      } else if (unbilled > 0) {
+        breakdownLabel = '（待出帳）';
+      } else {
+        breakdownLabel = '（已出帳）';
+      }
       cardEvents.push({
         event_key: eventKey,
         date: dueDate,
-        name: `繳卡費 · ${card.name}`,
+        name: `繳卡費 · ${card.name}${breakdownLabel}`,
         type: 'expense',
-        amount: Math.round(billed * 100) / 100,
+        amount: totalCardDue,
         is_shared: isShared,
         account_name: card.name,
         is_settled: settledKeys.has(eventKey),
         can_settle: canSettle,
       });
     } else {
-      billedImmediate += billed;
+      immediateCardDeduct += totalCardDue;
     }
   }
 
-  const available = cashTotal + bankTotal - unbilledDeduct - billedImmediate;
-  return { available, cashTotal, bankTotal, cardEvents };
+  const available = cashTotal + bankTotal - immediateCardDeduct;
+  return { available, cashTotal, bankTotal, immediateCardDeduct, cardEvents };
 }
 
 async function getSettledKeysSet(db: any): Promise<Set<string>> {
@@ -278,7 +286,7 @@ forecast.get('/', async (c) => {
   const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
 
-  const { available, cardEvents } = await getForecastStartingBalance(
+  const { available, cashTotal, bankTotal, cardEvents } = await getForecastStartingBalance(
     c.env.DB, userId, scope, memberUserIds, 30, settledKeys, myRole
   );
   let balance = available;
@@ -325,8 +333,11 @@ forecast.get('/', async (c) => {
   return c.json({
     success: true,
     data: {
+      startingBalance: Math.round(available * 100) / 100,
+      cashTotal: Math.round(cashTotal * 100) / 100,
+      bankTotal: Math.round(bankTotal * 100) / 100,
       dailyBalances,
-      minBalance,
+      minBalance: Math.round(minBalance * 100) / 100,
       minDate,
       willOverdraft: minBalance < 0,
       events

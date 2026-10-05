@@ -243,12 +243,12 @@ _Avoid_: 模除猜測 (modulo guessing)、固定雙數月 (hardcoded even months
 _Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑化 (smoothing)、攤提 (proration)
 
 **Scoped Cash Flow Forecast (三態現金流預測)**:
-支援切換「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」之未來 30 天逐日資金流模擬引擎。各視角之第 0 天起始基準餘額與帳戶管理頁之「淨可用餘額（含公帳權責代墊扣減）」100% 對齊，並依視角過濾未來 30 天預定發生之週期收支排程事件，於時間軸卡片標示 `Home` 公帳 / `Lock` 私帳向量徽章與扣款帳戶。
-_Avoid_: 單一混合預測 (unscoped mixed forecast)、起點與帳戶餘額脫鉤 (decoupled starting balance)
+支援切換「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」之未來 30 天逐日資金流模擬引擎。各視角之第 0 天起始基準餘額為該視角下之「現金錢包總額 ＋ 銀行存款總額」實際正資產餘額（未設定繳款日之信用卡欠款除外），並將信用卡之「已出帳待繳款 ＋ 未出帳款（待出帳）」統一於該卡之「繳款日（Payment Due Day）」排入時間軸扣減（避免於第 0 天重複預扣），依視角過濾未來 30 天預定發生之週期收支與繳卡費排程事件，於時間軸卡片標示 `Home` 公帳 / `Lock` 私帳向量徽章與扣款帳戶。
+_Avoid_: 單一混合預測 (unscoped mixed forecast)、第 0 天重複預扣未出帳卡費 (day-0 double deduction of unbilled debt)
 
 **Card Payment Event (繳卡費事件)**:
-現金流預測時間軸上，信用卡於繳款日產生的一筆支出事件，金額為該卡「已出帳餘額」，依視角僅計入對應之公帳代墊或個人部分。
-_Avoid_: 自動繳卡 (auto repayment)
+現金流預測時間軸上，信用卡於繳款日產生的一筆合併支出事件，金額涵蓋該卡歸屬當前視角之「已出帳待繳款 (`balance`) ＋ 未出帳款／待出帳 (`unbilled`)」總和，並於事件標題明確標註組成明細（如「繳卡費 · 卡名（已出帳 $X + 待出帳 $Y）」；若僅有單一項目則標示「（已出帳）」或「（待出帳）」），支援勾選「已繳」豁免。
+_Avoid_: 自動繳卡 (auto repayment)、漏計待出帳金額 (omitting unbilled debt in schedule)
 
 **Credit Card Recurring Cash Flow Shift (信用卡週期收支繳款日平移)**:
 在未來 30 天現金流預測中，凡設定由信用卡扣款之週期收支項目，其真實現金資產流出日不再發生於刷卡記帳日（day_of_cycle），而是依據該信用卡之結帳日與繳款日精準平移至對應之「信用卡繳款日（Payment Due Day）」，時間軸保留週期項目獨立卡片並標記卡片與繳款日扣款，真實反映流動性到期責任並支援「已繳」單筆豁免。
@@ -335,9 +335,6 @@ _Avoid_: 手機版四欄強制橫向捲動表格 (horizontal-scroll 4-column tab
 在行動端視角（`<= 640px`）下，全站三態視角切換器（`ScopeTabBar`）自動轉為 100% 滿寬之三等分控制項（三個按鈕 `flex: 1` 置中均分，不附冗餘前綴文字）；各頁面頂部操作按鈕統一收斂於 `.header-actions` 容器以確保小螢幕滿寬對齊；同時於行動端右下角（底部導覽列上方安全區）提供水彩粉紅圓形「`+`」懸浮快速記帳按鈕（Quick-Add FAB），支援隨時一鍵喚起記帳表單。
 _Avoid_: 手機版偏左不等寬三態按鈕 (left-aligned uneven scope tabs)、裸露未對齊之頂部操作鈕 (unwrapped header action buttons)
 
-
-
-
-
-
-
+**Formula Breakdown Tooltip (統計公式透明化氣泡提示)**:
+在全站所有統計數據儀表板卡片（總覽、帳戶管理、週期收支、儲蓄目標、現金流預測之 `.stat-card`）以及次要統計摘要區塊（收支明細篩選總計、統計分析消費總額與公帳分攤佔比、家庭協同代墊待報銷淨額）之指標標題旁，配置 `Info`（小 `i`）向量圖示按鈕。點擊時彈出自動防超出螢幕邊界之懸浮氣泡框（Popover Tooltip，點擊外部或再次點擊即收合，不撐開原卡片高度），框內分上下兩層同時呈現「會計計算公式定義」與「代入當前視角實際金額之驗算算式」，讓使用者能即時核對每一項統計指標的組成來源。
+_Avoid_: 僅支援滑鼠懸停而手機無法觸發之原生 title (hover-only native title tooltip)、無實際數值代入之空泛文字 (static formula without live values)、超出手機螢幕右側邊界之氣泡框 (off-screen overflowing popover)

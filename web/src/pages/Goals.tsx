@@ -4,6 +4,7 @@ import { goalsApi, Goal } from '../api/client'
 import { formatCurrency, formatDate } from '../components/utils'
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
+import FormulaTooltip from '../components/FormulaTooltip'
 import {
   Plus,
   Edit2,
@@ -189,7 +190,18 @@ export default function Goals() {
       {/* 統計概覽 */}
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
         <div className="stat-card">
-          <span className="stat-label">已存總金額</span>
+          <span className="stat-label">
+            <span>已存總金額</span>
+            <FormulaTooltip
+              label="檢視已存總金額計算公式"
+              formula="所有儲蓄目標之「累計已存入金額」加總"
+              calculation={
+                goals.length > 0
+                  ? `${goals.map(g => `${g.name} ${formatCurrency(g.saved_amount)}`).join(' + ')} = ${formatCurrency(totalSaved)}`
+                  : `0 個目標 = ${formatCurrency(0)}`
+              }
+            />
+          </span>
           <div className="stat-value" style={{ color: 'var(--color-primary)' }}>
             {formatCurrency(totalSaved)}
           </div>
@@ -197,7 +209,14 @@ export default function Goals() {
         </div>
 
         <div className="stat-card">
-          <span className="stat-label">目標總金額</span>
+          <span className="stat-label">
+            <span>目標總金額</span>
+            <FormulaTooltip
+              label="檢視目標總金額與達成率計算公式"
+              formula="目標總額 ＝ ∑ 各目標金額；整體達成率 ＝ 已存總金額 ÷ 目標總金額 × 100%"
+              calculation={`${formatCurrency(totalSaved)} ÷ ${formatCurrency(totalTarget)} = ${totalTarget > 0 ? ((totalSaved / totalTarget) * 100).toFixed(1) : 0}%（目標合計 ${formatCurrency(totalTarget)}）`}
+            />
+          </span>
           <div className="stat-value">
             {formatCurrency(totalTarget)}
           </div>
@@ -205,7 +224,18 @@ export default function Goals() {
         </div>
 
         <div className="stat-card" style={{ background: 'var(--bg-surface-2)' }}>
-          <span className="stat-label">每月儲蓄預留合計</span>
+          <span className="stat-label">
+            <span>每月儲蓄預留合計</span>
+            <FormulaTooltip
+              label="檢視每月儲蓄預留合計計算公式"
+              formula="所有儲蓄目標設定之「每月提撥預留金額」加總（自真實可支配現金中優先留存）"
+              calculation={
+                goals.length > 0
+                  ? `${goals.map(g => `${g.name} ${formatCurrency(g.monthly_reserve || 0)}`).join(' + ')} = ${formatCurrency(totalMonthlyReserve)}`
+                  : `0 個目標 = ${formatCurrency(0)}`
+              }
+            />
+          </span>
           <div className="stat-value" style={{ color: 'var(--color-success)' }}>
             {formatCurrency(totalMonthlyReserve)}
           </div>
