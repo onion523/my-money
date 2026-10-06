@@ -288,8 +288,8 @@ _Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick 
 ### 前端載入體驗與狀態 (Frontend Loading & UX State)
 
 **Skeleton Screen (骨架屏)**:
-在非同步資料載入完成前，呈現與真實頁面結構 1:1 佈局相仿的微光佔位區塊，用於防止版面跳動 (CLS) 並提供流暢的等待視覺回饋。
-_Avoid_: 載入轉圈 (spinner)、空白佔位 (blank placeholder)、假資料 (mock data)
+在非同步資料載入完成前，呈現與真實頁面結構（含行動端 RWD 斷點佈局）1:1 對齊的微光佔位區塊，用於防止版面跳動 (CLS) 並提供流暢的等待視覺回饋。所有骨架卡片統一沿用響應式標準內距（嚴禁寫死行內大內距），圓形圖示佔位固定比例不壓縮變形（`flex-shrink: 0`），文字與矩形佔位條具備彈性百分比／最大寬度防溢出保護（`max-width: 100%` 與 `min-width: 0`），並於行動端同步對齊三態等寬切換列、可收合篩選列與家庭成員名冊等真實區塊結構。
+_Avoid_: 載入轉圈 (spinner)、空白佔位 (blank placeholder)、假資料 (mock data)、寫死固定像素寬度導致手機版擠壓溢出 (hardcoded pixel widths overflowing mobile cards)、圓形骨架壓縮成橢圓 (squished oval circle skeletons)
 
 **Initial Mount Loading (初次載入狀態)**:
 使用者首次進入頁面或完全重新整理時，在所有初始資料請求完成前呈現全頁骨架屏的狀態。
