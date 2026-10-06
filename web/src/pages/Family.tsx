@@ -250,7 +250,7 @@ export default function Family() {
         /* 尚未建立或加入家庭群組 */
         <div className="grid grid-2" style={{ gap: 24 }}>
           {/* 建立家庭群組 */}
-          <div className="card" style={{ padding: 24 }}>
+          <div className="card">
             <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
               <div style={{
                 width: 44, height: 44, borderRadius: 12,
@@ -285,7 +285,7 @@ export default function Family() {
           </div>
 
           {/* 加入已有家庭 */}
-          <div className="card" style={{ padding: 24 }}>
+          <div className="card">
             <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
               <div style={{
                 width: 44, height: 44, borderRadius: 12,
@@ -325,20 +325,19 @@ export default function Family() {
         <div>
           {/* 家庭資訊橫幅 */}
           <div className="card" style={{
-            padding: 20,
             marginBottom: 24,
             background: 'var(--gradient-card)',
             border: '1px solid rgba(255,138,138,0.2)'
           }}>
             <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: 16 }}>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div style={{
-                  width: 52, height: 52, borderRadius: 16,
-                  background: 'white', display: 'flex',
+                  width: 48, height: 48, borderRadius: 14,
+                  background: 'var(--bg-surface)', display: 'flex',
                   alignItems: 'center', justifyContent: 'center',
                   color: 'var(--color-primary)', boxShadow: 'var(--shadow-sm)', flexShrink: 0
                 }}>
-                  <Home size={26} />
+                  <Home size={24} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
@@ -353,7 +352,7 @@ export default function Family() {
                 </div>
               </div>
 
-              <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+              <div className="family-banner-actions">
                 {data.myRole === 'admin' && (
                   <button className="btn btn-secondary" onClick={handleGenerateInvite}>
                     <UserPlus size={16} />
@@ -432,9 +431,9 @@ export default function Family() {
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)', marginTop: 6, flexWrap: 'wrap' }}>
+                          <div className="family-adv-submeta text-xs">
                             <span>累計公帳墊付：{formatCurrency(adv.total_advanced)}</span>
-                            <span>·</span>
+                            <span className="meta-sep">·</span>
                             <span>已獲撥款報銷：{formatCurrency(adv.total_reimbursed)}</span>
                           </div>
                         </div>
@@ -591,64 +590,59 @@ export default function Family() {
           </div>
 
           {/* 成員列表 */}
-          <div className="card" style={{ padding: 24 }}>
+          <div className="card">
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 16 }}>家庭群組成員名冊</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {data.members.map((member) => (
                 <div
                   key={member.id}
-                  className="flex items-center justify-between"
-                  style={{
-                    padding: '14px 18px',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--bg-surface-2)',
-                    border: '1px solid var(--border-color)',
-                    flexWrap: 'wrap',
-                    gap: 12
-                  }}
+                  className="family-member-card"
                 >
-                  <div className="flex items-center gap-3" style={{ minWidth: 0, flex: '1 1 200px' }}>
-                    <div style={{
-                      width: 40, height: 40, borderRadius: '50%',
-                      background: member.role === 'admin' ? '#FFD4A0' : '#A8D8EA',
-                      color: '#333', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', fontWeight: 700, fontSize: '1rem',
-                      flexShrink: 0
-                    }}>
-                      {member.name.slice(0, 1).toUpperCase()}
-                    </div>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+                  <div className="family-member-top">
+                    <div className="family-member-identity">
+                      <div
+                        className="family-member-avatar"
+                        style={{
+                          background: member.role === 'admin' ? '#FFD4A0' : '#A8D8EA',
+                        }}
+                      >
+                        {member.name.slice(0, 1).toUpperCase()}
+                      </div>
+                      <div className="flex items-center gap-2" style={{ flexWrap: 'wrap', minWidth: 0 }}>
                         <span style={{ fontWeight: 600 }}>{member.name}</span>
                         {member.role === 'admin' ? (
-                          <span className="badge badge-default" style={{ fontSize: '0.7rem', padding: '2px 6px' }}>
+                          <span className="badge badge-default" style={{ fontSize: '0.7rem', padding: '2px 7px' }}>
                             <Shield size={12} style={{ display: 'inline', marginRight: 2 }} /> 管理員
                           </span>
                         ) : (
-                          <span className="badge" style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'var(--bg-card)' }}>
+                          <span className="badge badge-default" style={{ fontSize: '0.7rem', padding: '2px 7px' }}>
                             <User size={12} style={{ display: 'inline', marginRight: 2 }} /> 成員
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)', marginTop: 2, flexWrap: 'wrap', wordBreak: 'break-all' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}><Mail size={12} style={{ flexShrink: 0 }} />{member.email}</span>
-                        <span>•</span>
-                        <span>加入時間：{formatLocalDate(member.joined_at)}</span>
-                      </div>
                     </div>
+
+                    {data.myRole === 'admin' && member.role !== 'admin' && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: 'var(--color-danger)', flexShrink: 0 }}
+                        onClick={() => handleRemoveMember(member)}
+                        title="移出家庭群組"
+                      >
+                        <Trash2 size={16} />
+                        <span className="text-xs">移除</span>
+                      </button>
+                    )}
                   </div>
 
-                  {data.myRole === 'admin' && member.role !== 'admin' && (
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ color: 'var(--color-danger)', flexShrink: 0 }}
-                      onClick={() => handleRemoveMember(member)}
-                      title="移出家庭群組"
-                    >
-                      <Trash2 size={16} />
-                      <span className="text-xs">移除</span>
-                    </button>
-                  )}
+                  <div className="family-member-meta text-xs">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                      <Mail size={12} style={{ flexShrink: 0 }} />
+                      <span>{member.email}</span>
+                    </span>
+                    <span className="meta-sep">•</span>
+                    <span>加入時間：{formatLocalDate(member.joined_at)}</span>
+                  </div>
                 </div>
               ))}
             </div>

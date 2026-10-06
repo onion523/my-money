@@ -328,8 +328,12 @@ _Avoid_: 頂部四鈕鋸齒狀折行堆疊 (jagged 4-button wrapping stack)、18
 _Avoid_: 圖表 X 軸標籤重疊黑塊 (overlapping X-axis tick labels)、圓餅圖例雙欄截斷金額 (truncated 2-column pie legend)、手機局部捲軸陷阱 (nested scroll trapping)
 
 **Mobile Advance Breakdown Card List (手機版家庭代墊與報銷雙層明細列)**:
-在家庭協同頁（Family）的行動端視角（`<= 640px`）下，「代墊與報銷明細」與「共同基金撥款紀錄」捨棄固定最小寬度（`minWidth: 440`）之四欄橫向捲動表格，轉化為免橫向滑動之上下雙層緊湊列（第一行左列類別與備註、右列金額；第二行左列日期、右列扣款或轉入帳戶），並對齊代墊成員卡片之雙欄等寬操作按鈕與標準輸入框樣式。
-_Avoid_: 手機版四欄強制橫向捲動表格 (horizontal-scroll 4-column table on mobile)、未定義之原生輸入框樣式 (un-styled raw form inputs)
+在家庭協同頁（Family）的行動端視角（`<= 640px`）下，「代墊與報銷明細」與「共同基金撥款紀錄」捨棄固定最小寬度之四欄橫向捲動表格，轉化為免橫向滑動之上下雙層緊湊列（第一行左列類別與備註、右列金額；第二行左列日期、右列扣款或轉入帳戶）；代墊成員概覽之「累計公帳墊付」與「已獲撥款報銷」於窄螢幕自動上下分行並隱藏行間分隔圓點，操作按鈕採雙欄等寬並排。
+_Avoid_: 手機版四欄強制橫向捲動表格 (horizontal-scroll 4-column table on mobile)、換行尾端殘留分隔圓點 (dangling separator dot on wrap)
+
+**Mobile Household Roster & Anti-Cramming Layout (手機版家庭成員名冊與卡片防擠壓排版)**:
+在行動端小螢幕（`<= 640px`）下，全站卡片統一遵循行動端緊湊內距（嚴禁以行內固定大內距覆蓋導致內容可用寬度受壓縮），並維持完整之間距與膠囊徽章色彩體系。家庭群組成員名冊單筆卡片採上下結構：頂部列由左側「圓形頭像＋姓名＋角色膠囊徽章」與右側「移除」操作鈕同行兩端對齊；底部資訊區之「電子信箱」與「加入時間」於手機版自動轉為上下獨立分行並隱藏中間分隔圓點；家庭頂部橫幅操作鈕則於手機版滿寬等寬並排。
+_Avoid_: 頭像與文字零間距緊貼 (zero-gap avatar/text collision)、移除按鈕掉至左下角孤行 (orphaned bottom-left remove button)、行內固定大內距擠壓窄螢幕 (hardcoded inline padding squeezing mobile width)
 
 **Mobile Segmented Scope & Quick-Add FAB (手機版等寬三態切換與全域懸浮記帳鈕)**:
 在行動端視角（`<= 640px`）下，全站三態視角切換器（`ScopeTabBar`）自動轉為 100% 滿寬之三等分控制項（三個按鈕 `flex: 1` 置中均分，不附冗餘前綴文字）；各頁面頂部操作按鈕統一收斂於 `.header-actions` 容器以確保小螢幕滿寬對齊；同時於行動端右下角（底部導覽列上方安全區）提供水彩粉紅圓形「`+`」懸浮快速記帳按鈕（Quick-Add FAB），支援隨時一鍵喚起記帳表單。

@@ -151,12 +151,12 @@ export default function BotIntegration() {
 
       <div className="grid grid-2" style={{ gap: 24, marginBottom: 24 }}>
         {/* 左側：綁定中心 */}
-        <div className="card" style={{ padding: 24 }}>
+        <div className="card">
           <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
             <div style={{
               width: 44, height: 44, borderRadius: 12,
               background: 'var(--gradient-card)', display: 'flex',
-              alignItems: 'center', justifyContent: 'center', color: '#FF6B6B'
+              alignItems: 'center', justifyContent: 'center', color: '#FF6B6B', flexShrink: 0
             }}>
               <Key size={22} />
             </div>
@@ -253,8 +253,8 @@ export default function BotIntegration() {
         </div>
 
         {/* 右側：線上模擬測試小工具 */}
-        <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column' }}>
-          <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <div className="flex items-center gap-2">
               <MessageSquare size={18} style={{ color: 'var(--color-primary-dark)' }} />
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>網頁即時對話測試機</h3>
@@ -344,7 +344,7 @@ export default function BotIntegration() {
       </div>
 
       {/* 下方：平台 Webhook 設定說明 */}
-      <div className="card" style={{ padding: 24 }}>
+      <div className="card">
         <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 16 }}>
           雙平台 Webhook 設定教學
         </h3>

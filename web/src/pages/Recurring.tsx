@@ -496,7 +496,7 @@ export default function Recurring() {
         </h2>
 
         {incomeItems.length === 0 ? (
-          <div className="card empty-state" style={{ padding: 24 }}>
+          <div className="card empty-state">
             <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>尚未設定週期收入（如每月薪資、租金收益）</p>
           </div>
         ) : (
