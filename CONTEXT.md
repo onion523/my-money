@@ -288,7 +288,13 @@ _Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick 
 
 ---
 
-### 前端載入體驗與狀態 (Frontend Loading & UX State)
+### 前端視覺主題與載入體驗 (Frontend Theme & Loading UX)
+
+**Dual-Theme Color System (雙主題視覺色票系統：柔和水彩淺色 ＆ 月影鈦銀灰深色)**:
+全站支援透過單一「淺色 ☀️ / 深色 🌙」切換鈕即時切換雙主題：
+1. **淺色模式（`:root` — Soft Watercolor 柔和水彩日系）**：以溫暖櫻花粉白（`--bg-page: #FFF5F5`）、純白卡片（`--bg-surface: #FFFFFF`）、柔霧次表面（`--bg-surface-2: #FFF8F8`）與櫻花粉邊框（`--border-color: #FFDEDE`）為基底，搭配珊瑚粉主色（`--color-primary: #FF8A8A`）與水彩藍點綴（`--color-accent: #A8D8EA`）。
+2. **深色模式（`[data-theme="dark"]` — Moonlit Titanium Dimmed 月影鈦銀灰）**：採用柔霧中明度鈦銀藍灰三階表面（`--bg-page: #181B20`、`--bg-surface: #22272E`、`--bg-surface-2: #2D333B`），不走死黑高反差以消除夜間文字光暈（Halation），並統一收斂單一中性石板邊框（`--border-color: #373E47`、`--border-color-2: #2D333B`，徹底移除重複覆寫之半透明粉紅邊框）、高辨識度文字階層（`--text-primary: #ECF2F8`、`--text-secondary: #9EA7B3`、`--text-muted: #6E7785`）、溫潤櫻花粉主色（`--color-primary: #FF9494`、`--color-primary-light: #FFB8B8`、`--color-primary-dark: #E67A7A`）以及深色語意收支色（`--color-success: #56D39A`、`--color-danger: #FF7B7B`、`--color-warning: #F7B955`），使日夜主題切換兼具空氣感與高對比易讀性。
+_Avoid_: 高彩度刺眼藍紫深色底 (`#1A1A2E` / `#252540`)、純黑高反差眩光 (`#000000`)、深色模式下重複定義覆寫之粉紅邊框 (`rgba(255, 158, 158, 0.15)`)
 
 **Skeleton Screen (骨架屏)**:
 在非同步資料載入完成前，呈現與真實頁面結構（含行動端 RWD 斷點佈局）1:1 對齊的微光佔位區塊，用於防止版面跳動 (CLS) 並提供流暢的等待視覺回饋。所有骨架卡片統一沿用響應式標準內距（嚴禁寫死行內大內距），圓形圖示佔位固定比例不壓縮變形（`flex-shrink: 0`），文字與矩形佔位條具備彈性百分比／最大寬度防溢出保護（`max-width: 100%` 與 `min-width: 0`），並於行動端同步對齊三態等寬切換列、可收合篩選列與家庭成員名冊等真實區塊結構。
@@ -303,7 +309,7 @@ _Avoid_: 全頁轉圈 (page loading)、冷啟動 (cold start)
 _Avoid_: 二次骨架 (secondary skeleton)、重新載入 (reload)
 
 **Shimmer Effect (微光動效 / 溫暖水彩果凍玻璃)**:
-骨架屏融合 135 度櫻粉微暖雙漸層底色、毛玻璃通透感 (blur 5px) 與雙峰果凍高光波紋自左至右循環流動的 CSS 動態效果，容器本體維持絕對座標固定，適配淺色與深色主題。
+骨架屏融合 135 度櫻粉微暖雙漸層底色、毛玻璃通透感 (blur 5px) 與雙峰果凍高光波紋自左至右循環流動的 CSS 動態效果，容器本體維持絕對座標固定，並於深色模式下對齊「月影鈦銀灰」基底與微光邊框。
 _Avoid_: 容器位移 (element translation)、生硬刷光 (hard sweep)、呼吸燈 (pulse)、跑馬燈 (marquee)、冷硬死灰 (cold dead grey)
 
 ---
