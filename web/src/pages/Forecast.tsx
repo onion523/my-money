@@ -126,7 +126,7 @@ export default function Forecast() {
           <span>現金流預測 & 購買力試算</span>
           <TrendingUp size={24} style={{ color: 'var(--color-primary)' }} />
         </h1>
-        <p className="page-subtitle">模擬未來 30 天資金流向，精確防範透支風險，並提供智慧購物決策支援</p>
+        <p className="page-subtitle">模擬未來 60 天資金流向，精確防範透支風險，並提供智慧購物決策支援</p>
       </div>
 
       {/* 帳本視角切換器 */}
@@ -134,7 +134,7 @@ export default function Forecast() {
         <ScopeTabBar scope={scope} onChange={setScope} />
       </div>
 
-      {/* 30 天安全指標卡片 */}
+      {/* 60 天安全指標卡片 */}
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
         <div
           className="stat-card"
@@ -144,10 +144,10 @@ export default function Forecast() {
         >
           <div className="flex items-center justify-between">
             <span className="stat-label">
-              <span>未來 30 天資金安全評級</span>
+              <span>未來 60 天資金安全評級</span>
               <FormulaTooltip
-                label="檢視未來 30 天資金安全評級計算公式"
-                formula="模擬未來 30 天逐日餘額，若預測期最低餘額點 < $0 則判定為「存在透支風險」，若 >= $0 則為「現金流充裕安全」"
+                label="檢視未來 60 天資金安全評級計算公式"
+                formula="模擬未來 60 天逐日餘額，若預測期最低餘額點 < $0 則判定為「存在透支風險」，若 >= $0 則為「現金流充裕安全」"
                 calculation={`預測期最低點 ${formatCurrency(forecast?.minBalance ?? 0)} ${forecast?.willOverdraft ? '< $0（存在透支風險）' : '>= $0（現金流充裕安全）'}`}
               />
             </span>
@@ -184,7 +184,7 @@ export default function Forecast() {
             <span>預測期最低餘額點</span>
             <FormulaTooltip
               label="檢視預測期最低餘額點計算公式"
-              formula="第 0 天起始餘額（現金＋銀行存款）逐日加減未勾選已繳之週期收支與信用卡繳款日卡費（含已出帳＋待出帳）後之 30 天最低值"
+              formula="第 0 天起始餘額（現金＋銀行存款）逐日加減未勾選已繳之週期收支、已出帳卡費（扣繳日扣除）與未出帳卡費（出帳後扣繳日扣除）後之 60 天最低值"
               calculation={`起始（現金 ${formatCurrency(forecast?.cashTotal ?? 0)} + 存款 ${formatCurrency(forecast?.bankTotal ?? 0)} = ${formatCurrency(forecast?.startingBalance ?? 0)}）→ 最低點 ${formatCurrency(forecast?.minBalance ?? 0)}（${forecast?.minDate || '無變動'}）`}
             />
           </span>
@@ -203,10 +203,10 @@ export default function Forecast() {
 
         <div className="stat-card">
           <span className="stat-label">
-            <span>未來 30 天預定事件數</span>
+            <span>未來 60 天預定事件數</span>
             <FormulaTooltip
-              label="檢視未來 30 天預定事件數計算公式"
-              formula="未來 30 天內預計發生之週期收支筆數 ＋ 信用卡繳款日扣款事件筆數（含已出帳＋待出帳）"
+              label="檢視未來 60 天預定事件數計算公式"
+              formula="未來 60 天內預計發生之週期收支筆數 ＋ 信用卡已出帳扣繳事件 ＋ 信用卡未出帳（出帳後扣繳）事件筆數"
               calculation={(() => {
                 const allEvs = forecast?.events || []
                 const settledCount = allEvs.filter(e => e.is_settled).length
@@ -218,23 +218,23 @@ export default function Forecast() {
           <div className="stat-value" style={{ color: 'var(--color-primary)' }}>
             {forecast?.events.length ?? 0} 筆
           </div>
-          <div className="stat-sub">包含各項週期收支與信用卡繳款日卡費</div>
+          <div className="stat-sub">包含各項週期收支與各期信用卡扣繳卡費</div>
         </div>
       </div>
 
-      {/* 30 天逐日餘額模擬折線圖 */}
+      {/* 60 天逐日餘額模擬折線圖 */}
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 6 }}>
           <h2 className="text-xl flex items-center gap-xs">
             <TrendingUp size={20} color="var(--color-primary)" />
-            未來 30 天逐日現金流模擬趨勢
+            未來 60 天逐日現金流模擬趨勢
           </h2>
           <div className="text-xs text-muted">
             {scope === 'household'
-              ? '起始餘額：公帳現金＋銀行存款（信用卡已出帳＋待出帳於繳款日扣除）'
+              ? '起始餘額：公帳現金＋銀行存款（信用卡已出帳於扣繳日、未出帳於出帳後扣繳日扣除）'
               : scope === 'personal'
-              ? '起始餘額：個人現金＋銀行存款（信用卡已出帳＋待出帳於繳款日扣除）'
-              : '起始餘額：全戶現金＋銀行存款（信用卡已出帳＋待出帳於繳款日扣除）'}
+              ? '起始餘額：個人現金＋銀行存款（信用卡已出帳於扣繳日、未出帳於出帳後扣繳日扣除）'
+              : '起始餘額：全戶現金＋銀行存款（信用卡已出帳於扣繳日、未出帳於出帳後扣繳日扣除）'}
           </div>
         </div>
 
@@ -277,7 +277,7 @@ export default function Forecast() {
         )}
       </div>
 
-      {/* 下方兩欄：左側 購買力檢查工具 + 右側 未來 30 天事件時間軸 */}
+      {/* 下方兩欄：左側 購買力檢查工具 + 右側 未來 60 天事件時間軸 */}
       <div className="grid-forecast-main">
         {/* 模組 9：購買力檢查 */}
         <div className="card">
@@ -286,7 +286,7 @@ export default function Forecast() {
             <h2 className="text-xl">智慧購買力試算 (Can I Buy It?)</h2>
           </div>
           <p className="text-xs text-muted" style={{ marginBottom: 18 }}>
-            打算入手心儀物品或進行大額消費？輸入金額，系統將綜合未出帳信用卡、週期支出與儲蓄目標，為您評估可行性！
+            打算入手心儀物品或進行大額消費？輸入金額，系統將綜合未來 60 天信用卡扣繳、週期支出與儲蓄目標，為您評估可行性！
           </p>
 
           <form onSubmit={handlePurchaseCheck} style={{ marginBottom: 20 }}>
@@ -362,7 +362,7 @@ export default function Forecast() {
               <div style={{ fontSize: '0.875rem', lineHeight: 1.7, color: 'var(--text-secondary)' }}>
                 {checkResult.verdict === 'safe' && (
                   <p>
-                    消費 <strong>{formatCurrency(checkResult.amount)}</strong> 後，未來 30 天內現金流依舊充裕（最低點仍有 <strong>{formatCurrency(checkResult.minBalance)}</strong>）{scope === 'household' ? '。' : '，且完全不影響現有儲蓄目標進度。'}
+                    消費 <strong>{formatCurrency(checkResult.amount)}</strong> 後，未來 60 天內現金流依舊充裕（最低點仍有 <strong>{formatCurrency(checkResult.minBalance)}</strong>）{scope === 'household' ? '。' : '，且完全不影響現有儲蓄目標進度。'}
                   </p>
                 )}
                 {checkResult.verdict === 'caution' && (
@@ -372,7 +372,7 @@ export default function Forecast() {
                 )}
                 {checkResult.verdict === 'danger' && (
                   <p style={{ color: 'var(--color-danger)' }}>
-                    注意！若執行此筆 <strong>{formatCurrency(checkResult.amount)}</strong> 消費，未來 30 天內現金流將會透支跌至 <strong>{formatCurrency(checkResult.minBalance)}</strong>！請勿在此時進行此大額開支。
+                    注意！若執行此筆 <strong>{formatCurrency(checkResult.amount)}</strong> 消費，未來 60 天內現金流將會透支跌至 <strong>{formatCurrency(checkResult.minBalance)}</strong>！請勿在此時進行此大額開支。
                   </p>
                 )}
               </div>
@@ -380,19 +380,19 @@ export default function Forecast() {
           )}
         </div>
 
-        {/* 右側：未來 30 天排定事件 */}
+        {/* 右側：未來 60 天排定事件 */}
         <div className="card">
           <div className="flex items-center justify-between" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div className="flex items-center gap-xs">
               <Calendar size={20} color="var(--color-primary)" />
-              <h2 className="text-xl">未來 30 天收支排程</h2>
+              <h2 className="text-xl">未來 60 天收支排程</h2>
             </div>
             <span className="text-xs text-muted">勾選「已繳」可排除已入卡帳／已消費項目，避免重複計算</span>
           </div>
 
           {!forecast?.events || forecast.events.length === 0 ? (
             <div className="empty-state" style={{ padding: '24px 0' }}>
-              <p style={{ fontSize: '0.85rem' }}>未來 30 天無週期收支排程</p>
+              <p style={{ fontSize: '0.85rem' }}>未來 60 天無週期收支排程</p>
             </div>
           ) : (
             <div className="forecast-timeline-list">

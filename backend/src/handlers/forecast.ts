@@ -82,9 +82,11 @@ export function calculateCreditCardDueDate(
   return { year: dueYear, month: dueMonth, day: actualDueDay, dateStr };
 }
 
+const FORECAST_DAYS = 60;
+
 function getDaysInForecast(
   items: ForecastRecurringItem[],
-  days = 30,
+  days = FORECAST_DAYS,
   settledKeys: Set<string> = new Set(),
   userId = '',
   myRole: string | null = 'member'
@@ -153,13 +155,13 @@ function getDaysInForecast(
   return events;
 }
 
-// 試算第 0 天起始基準可用餘額與信用卡繳卡費事件 (ADR 0015 權責會計 + ADR 0017 繳卡費事件 + ADR 0018 單筆已繳豁免)
+// 試算第 0 天起始基準可用餘額與信用卡繳卡費事件 (60 天期程：已出帳排入最近扣繳日，未出帳排入下次結帳日出帳後之扣繳日)
 async function getForecastStartingBalance(
   db: any,
   userId: string,
   scope: string,
   memberUserIds: string[],
-  days = 30,
+  days = FORECAST_DAYS,
   settledKeys: Set<string> = new Set(),
   myRole: string | null = 'member'
 ) {
@@ -180,19 +182,86 @@ async function getForecastStartingBalance(
   const cashTotal = accList.filter(a => a.type === 'cash').reduce((s, a) => s + (a.balance || 0), 0);
   const bankTotal = accList.filter(a => a.type === 'bank').reduce((s, a) => s + (a.balance || 0), 0);
 
-  // 信用卡：依視角計算「歸屬本視角之比例」，已出帳與待出帳（未出帳）合併於繳款日扣除（未設定繳款日者於第 0 天預扣）
+  // 信用卡：依視角計算歸屬本視角之「已出帳 (balance)」與「未出帳 (unbilled)」
   const cardRows = await db.prepare(
-    `SELECT id, user_id, name, balance, unbilled, is_joint, payment_due_day FROM accounts WHERE type = 'credit_card' AND (user_id = ? OR user_id IN (${placeholders}))`
+    `SELECT id, user_id, name, balance, unbilled, is_joint, statement_day, payment_due_day FROM accounts WHERE type = 'credit_card' AND (user_id = ? OR user_id IN (${placeholders}))`
   ).bind(userId, ...memberUserIds).all();
   const cards = (cardRows.results || []) as Array<{
-    id: string; user_id: string; name: string; balance: number; unbilled: number; is_joint: number; payment_due_day: number | null;
+    id: string;
+    user_id: string;
+    name: string;
+    balance: number;
+    unbilled: number;
+    is_joint: number;
+    statement_day: number | null;
+    payment_due_day: number | null;
   }>;
 
   const forecastDays = getTaipeiForecastDays(days);
-  const findDueDate = (dueDay: number): string | null => {
+  const minDateStr = forecastDays[0].dateStr;
+  const maxDateStr = forecastDays[forecastDays.length - 1].dateStr;
+
+  // 尋找自今日起最近一次即將到來的扣繳日（供已出帳 balance 使用）
+  const findFirstDueDate = (dueDay: number): string | null => {
     for (const d of forecastDays) {
       const maxDays = new Date(d.year, d.month, 0).getDate();
       if (d.day === Math.min(dueDay, maxDays)) return d.dateStr;
+    }
+    return null;
+  };
+
+  // 尋找下一次結帳日出帳後的第一個扣繳日（供未出帳 unbilled 使用）
+  const findUnbilledDueDate = (
+    statementDay: number | null,
+    paymentDueDay: number,
+    hasBilledBalance: boolean,
+    billedDueDate: string | null
+  ): string | null => {
+    const todayObj = forecastDays[0];
+    const stmtDay = statementDay || 20;
+    const maxDaysInTodayMonth = new Date(todayObj.year, todayObj.month, 0).getDate();
+    const clampedTodayStmtDay = Math.min(stmtDay, maxDaysInTodayMonth);
+
+    let stmtYear = todayObj.year;
+    let stmtMonth = todayObj.month;
+
+    // 若今日已過本月結帳日，或當期已有已出帳待繳餘額（代表本期已出帳），則未出帳歸屬於下月結帳日
+    if (todayObj.day > clampedTodayStmtDay || hasBilledBalance) {
+      stmtMonth += 1;
+      if (stmtMonth > 12) {
+        stmtYear += 1;
+        stmtMonth -= 12;
+      }
+    }
+
+    const maxDaysInStmtMonth = new Date(stmtYear, stmtMonth, 0).getDate();
+    let due = calculateCreditCardDueDate(
+      stmtYear,
+      stmtMonth,
+      Math.min(stmtDay, maxDaysInStmtMonth),
+      stmtDay,
+      paymentDueDay
+    );
+
+    // 防重疊保護：若該卡有已出帳排程且推算出的未出帳扣繳日未晚於已出帳扣繳日，自動推進至下一期結帳週期
+    if (billedDueDate && due.dateStr <= billedDueDate) {
+      stmtMonth += 1;
+      if (stmtMonth > 12) {
+        stmtYear += 1;
+        stmtMonth -= 12;
+      }
+      const nextMaxDays = new Date(stmtYear, stmtMonth, 0).getDate();
+      due = calculateCreditCardDueDate(
+        stmtYear,
+        stmtMonth,
+        Math.min(stmtDay, nextMaxDays),
+        stmtDay,
+        paymentDueDay
+      );
+    }
+
+    if (due.dateStr >= minDateStr && due.dateStr <= maxDateStr) {
+      return due.dateStr;
     }
     return null;
   };
@@ -203,66 +272,109 @@ async function getForecastStartingBalance(
   for (const card of cards) {
     const isOwn = card.user_id === userId;
     const isJoint = card.is_joint === 1;
-    const totalDue = (card.balance || 0) + (card.unbilled || 0);
-    let fraction = 1;
+    const rawBilled = Math.max(0, card.balance || 0);
+    const rawUnbilled = Math.max(0, card.unbilled || 0);
+    const totalDue = rawBilled + rawUnbilled;
+    if (totalDue <= 0) continue;
+
+    let billed = 0;
+    let unbilled = 0;
 
     if (isJoint) {
-      fraction = scope === 'personal' ? 0 : 1;
-    } else if (scope === 'all' && isOwn) {
-      fraction = 1;
-    } else if (scope === 'personal' && !isOwn) {
-      fraction = 0;
-    } else if (totalDue <= 0) {
-      fraction = 0;
-    } else {
-      // 私卡公私拆分：沿用帳戶管理 shared_debt 分配法（最近 50 筆支出）
-      const txs = await db.prepare(
-        "SELECT amount, is_shared FROM transactions WHERE account_id = ? AND type = 'expense' ORDER BY date DESC, created_at DESC LIMIT 50"
-      ).bind(card.id).all();
-      let remaining = totalDue;
-      let shared = 0;
-      for (const tx of ((txs.results || []) as Array<{ amount: number; is_shared: number }>)) {
-        if (remaining <= 0) break;
-        const take = Math.min(remaining, tx.amount);
-        if (tx.is_shared === 1) shared += take;
-        remaining -= take;
+      if (scope !== 'personal') {
+        billed = rawBilled;
+        unbilled = rawUnbilled;
       }
-      const ratio = shared / totalDue;
-      fraction = scope === 'personal' ? 1 - ratio : ratio;
+    } else if (scope === 'all' && isOwn) {
+      billed = rawBilled;
+      unbilled = rawUnbilled;
+    } else if (scope === 'personal' && !isOwn) {
+      billed = 0;
+      unbilled = 0;
+    } else {
+      // 私卡於公帳或個人私帳視角：依交易之 is_billed 與 is_shared 精確拆分已出帳與未出帳歸屬
+      const txs = await db.prepare(
+        "SELECT amount, is_shared, COALESCE(is_billed, 0) as is_billed FROM transactions WHERE account_id = ? AND type = 'expense' ORDER BY date DESC, created_at DESC LIMIT 50"
+      ).bind(card.id).all();
+      const txList = (txs.results || []) as Array<{ amount: number; is_shared: number; is_billed: number }>;
+
+      let remUnbilled = rawUnbilled;
+      let sharedUnbilled = 0;
+      for (const tx of txList.filter(t => t.is_billed === 0)) {
+        if (remUnbilled <= 0) break;
+        const take = Math.min(remUnbilled, tx.amount);
+        if (tx.is_shared === 1) sharedUnbilled += take;
+        remUnbilled -= take;
+      }
+
+      let remBilled = rawBilled;
+      let sharedBilled = 0;
+      for (const tx of txList.filter(t => t.is_billed === 1)) {
+        if (remBilled <= 0) break;
+        const take = Math.min(remBilled, tx.amount);
+        if (tx.is_shared === 1) sharedBilled += take;
+        remBilled -= take;
+      }
+
+      billed = scope === 'household' ? sharedBilled : Math.max(0, rawBilled - sharedBilled);
+      unbilled = scope === 'household' ? sharedUnbilled : Math.max(0, rawUnbilled - sharedUnbilled);
     }
 
-    if (fraction <= 0) continue;
-    const billed = Math.round((card.balance || 0) * fraction * 100) / 100;
-    const unbilled = Math.round((card.unbilled || 0) * fraction * 100) / 100;
-    const totalCardDue = Math.round((billed + unbilled) * 100) / 100;
-    if (totalCardDue <= 0) continue;
+    billed = Math.round(billed * 100) / 100;
+    unbilled = Math.round(unbilled * 100) / 100;
+    if (billed <= 0 && unbilled <= 0) continue;
 
-    const dueDate = card.payment_due_day ? findDueDate(card.payment_due_day) : null;
-    if (dueDate) {
-      const eventKey = `card_due:${card.id}:${dueDate}`;
-      const isShared = isJoint || !isOwn || scope === 'household' ? 1 : 0;
-      const canSettle = isShared === 0 ? isOwn : (isOwn || myRole === 'admin');
-      let breakdownLabel = '';
-      if (billed > 0 && unbilled > 0) {
-        breakdownLabel = `（已出帳 $${Math.round(billed).toLocaleString()} + 待出帳 $${Math.round(unbilled).toLocaleString()}）`;
-      } else if (unbilled > 0) {
-        breakdownLabel = '（待出帳）';
-      } else {
-        breakdownLabel = '（已出帳）';
+    const isShared = isJoint || !isOwn || scope === 'household' ? 1 : 0;
+    const canSettle = isShared === 0 ? isOwn : (isOwn || myRole === 'admin');
+
+    if (card.payment_due_day) {
+      let dueDateBilled: string | null = null;
+      if (billed > 0) {
+        dueDateBilled = findFirstDueDate(card.payment_due_day);
+        if (dueDateBilled) {
+          const eventKey = `card_due:${card.id}:${dueDateBilled}`;
+          cardEvents.push({
+            event_key: eventKey,
+            date: dueDateBilled,
+            name: `繳卡費 · ${card.name}（已出帳）`,
+            type: 'expense',
+            amount: billed,
+            is_shared: isShared,
+            account_name: card.name,
+            is_settled: settledKeys.has(eventKey),
+            can_settle: canSettle,
+          });
+        } else {
+          immediateCardDeduct += billed;
+        }
       }
-      cardEvents.push({
-        event_key: eventKey,
-        date: dueDate,
-        name: `繳卡費 · ${card.name}${breakdownLabel}`,
-        type: 'expense',
-        amount: totalCardDue,
-        is_shared: isShared,
-        account_name: card.name,
-        is_settled: settledKeys.has(eventKey),
-        can_settle: canSettle,
-      });
+
+      if (unbilled > 0) {
+        const dueDateUnbilled = findUnbilledDueDate(
+          card.statement_day,
+          card.payment_due_day,
+          rawBilled > 0,
+          dueDateBilled
+        );
+        if (dueDateUnbilled) {
+          const eventKey = `card_due:${card.id}:${dueDateUnbilled}:unbilled`;
+          cardEvents.push({
+            event_key: eventKey,
+            date: dueDateUnbilled,
+            name: `繳卡費 · ${card.name}（未出帳）`,
+            type: 'expense',
+            amount: unbilled,
+            is_shared: isShared,
+            account_name: card.name,
+            is_settled: settledKeys.has(eventKey),
+            can_settle: canSettle,
+          });
+        } else {
+          immediateCardDeduct += unbilled;
+        }
+      }
     } else {
-      immediateCardDeduct += totalCardDue;
+      immediateCardDeduct += billed + unbilled;
     }
   }
 
@@ -287,7 +399,7 @@ forecast.get('/', async (c) => {
   const placeholders = memberUserIds.map(() => '?').join(',');
 
   const { available, cashTotal, bankTotal, cardEvents } = await getForecastStartingBalance(
-    c.env.DB, userId, scope, memberUserIds, 30, settledKeys, myRole
+    c.env.DB, userId, scope, memberUserIds, FORECAST_DAYS, settledKeys, myRole
   );
   let balance = available;
 
@@ -310,15 +422,15 @@ forecast.get('/', async (c) => {
   `).bind(...recParams).all();
 
   const items = recRows.results as unknown as ForecastRecurringItem[];
-  const events = [...getDaysInForecast(items, 30, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
+  const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
 
   // 逐日模擬（ADR 0018：已勾選 is_settled 之事件不列入餘額加減）
-  const forecastDays = getTaipeiForecastDays(30);
+  const forecastDays = getTaipeiForecastDays(FORECAST_DAYS);
   const dailyBalances: Array<{ date: string; balance: number; events: ForecastEvent[] }> = [];
   let minBalance = balance;
   let minDate = forecastDays[0]?.dateStr || '';
 
-  for (let d = 0; d < 30; d++) {
+  for (let d = 0; d < FORECAST_DAYS; d++) {
     const dateStr = forecastDays[d].dateStr;
     const dayEvents = events.filter(e => e.date === dateStr);
     dayEvents.forEach(e => {
@@ -357,7 +469,7 @@ forecast.post('/purchase-check', async (c) => {
   const placeholders = memberUserIds.map(() => '?').join(',');
 
   const { available, cardEvents } = await getForecastStartingBalance(
-    c.env.DB, userId, scope, memberUserIds, 30, settledKeys, myRole
+    c.env.DB, userId, scope, memberUserIds, FORECAST_DAYS, settledKeys, myRole
   );
   let balance = available - amount;
 
@@ -373,7 +485,7 @@ forecast.post('/purchase-check', async (c) => {
     affectsSavings = affectedGoals.length > 0 && balance < totalReserve;
   }
 
-  // 30天現金流（ADR 0018：跳過已勾選 is_settled 之事件）
+  // 60天現金流（ADR 0018：跳過已勾選 is_settled 之事件）
   let recCondition = `((r.user_id = ? AND r.is_shared = 0) OR (r.user_id IN (${placeholders}) AND r.is_shared = 1))`;
   let recParams: any[] = [userId, ...memberUserIds];
   if (scope === 'household') {
@@ -393,7 +505,7 @@ forecast.post('/purchase-check', async (c) => {
   `).bind(...recParams).all();
 
   const items = recRows.results as unknown as ForecastRecurringItem[];
-  const events = [...getDaysInForecast(items, 30, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
+  const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
   let minBalance = balance;
   events.forEach(e => {
     if (!e.is_settled) {
