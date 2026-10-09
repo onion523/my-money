@@ -76,11 +76,15 @@ _Avoid_: 關帳日 (closing date)、截帳日 (cut-off date)、計費週期 (bil
 _Avoid_: 到期日 (due date)、繳納日 (payment date)、截止日 (deadline)
 
 **Credit Card Repayment (信用卡扣款還款)**:
-從指定銀行存款扣款以償還信用卡欠款的沖銷程序（系統同時建立一筆銀行帳戶端之 `expense`「信用卡還款」與一筆信用卡端之 `income`「信用卡還款」沖銷流水）。在「收支明細頁（上方篩選摘要之總收入／總支出／淨收支、以及每日分組卡片右上角小計）」與「儀表板（本月總收入／總支出／淨收支）」中：
-1. **總支出（與當日支出小計）**：納入銀行帳戶端扣繳之「信用卡還款（`type = 'expense'`）」，並排除內部轉帳、ATM 提款與公帳代墊報銷，使「淨收支（總收入 － 總支出）」真實扣除帳戶扣繳信用卡費之支出。
-2. **總收入（與當日收入小計）**：嚴格排除信用卡端之「信用卡還款（`type = 'income'`）」沖銷紀錄（以及內部轉帳、ATM 提款、公帳代墊報銷），防止信用卡額度沖銷紀錄虛胖總收入或抵銷繳卡費支出。
-3. **統計分析消費分類圓餅圖（Category Breakdown）**：維持僅統計日常消費分類，不將「信用卡還款」混入日常消費類別佔比。
-_Avoid_: 將銀行扣繳信用卡費從收支明細總支出與淨收支中漏扣 (omitting bank credit card repayment from total expense and net cashflow)、將信用卡端還款沖銷誤計入總收入 (counting credit card repayment offset as income)
+從指定銀行存款扣款以償還信用卡欠款的沖銷程序（系統同時建立一筆銀行帳戶端之 `expense`「信用卡還款」與一筆信用卡端之 `income`「信用卡還款」沖銷流水）。統計分析消費分類圓餅圖（Category Breakdown）維持僅統計日常消費分類，不將「信用卡還款」混入日常消費類別佔比。
+_Avoid_: 將信用卡還款混入日常消費圓餅圖分類佔比 (mixing credit card repayment into category pie chart breakdown)
+
+**Direct Ledger Sign Aggregation (收支正負號全量直觀加總)**:
+在「收支明細頁（上方篩選摘要之總收入／總支出／淨收支、以及每日分組卡片右上角小計）」與「儀表板（當月收入／支出／當月淨收支，`GET /transactions/summary/monthly`）」中，針對當前篩選條件與視角下之**所有相關收支紀錄全部納入計算**，不做任何隱藏分類剔除：
+1. **總收入（與當日 `+` 收入小計）**：凡明細為正項（`type = 'income'`，畫面顯示 `+`）一律列入收入加總。
+2. **總支出（與當日 `-` 支出小計）**：凡明細為負項（`type = 'expense'`，畫面顯示 `-`）一律列入支出加總。
+3. **淨收支**：`總收入 － 總支出`，確保畫面列表上每一筆看得到的 `+` 與 `-` 明細加總結果 100% 與上方「總收入、總支出、淨收支」及每日小計完全吻合。
+_Avoid_: 隱藏排除特定分類導致畫面明細與上方總計數字兜不攏 (silently excluding categories so visible rows do not sum to totals)
 
 **Statement Rollover (結帳日出帳作業)**:
 結帳日到達後，在持卡人尚未手動點擊「出帳作業」確認前，當期刷卡消費（含結帳日當天及該結帳週期內明細）一律維持為未出帳（`is_billed = 0`）並保留於「未出帳款（`unbilled`）」顯示，嚴禁於結帳日當天自動將未出帳歸零或未經出帳作業即覆寫為 `is_billed = 1`。唯有當使用者主動執行「出帳作業」時，系統才將指定結帳週期內之有效消費淨額（消費支出總額扣除刷退退款，排除延至下期者）一次性移轉合併至已出帳待繳款（`balance`），並將參與出帳之明細標記為已出帳（`is_billed = 1`）。

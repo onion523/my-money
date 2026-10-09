@@ -253,16 +253,12 @@ export default function Transactions() {
   })
   const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a))
 
-  // 計算篩選後收支總額：
-  // 1. 總收入排除「信用卡還款（信用卡端沖銷收入）」、「內部轉帳」、「ATM提款」、「公帳代墊報銷」
-  // 2. 總支出納入銀行帳戶扣繳之「信用卡還款（支出）」，僅排除「內部轉帳」、「ATM提款」、「公帳代墊報銷」
-  const EXCLUDED_INCOME_CATEGORIES = ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'];
-  const EXCLUDED_EXPENSE_CATEGORIES = ['內部轉帳', 'ATM提款', '公帳代墊報銷'];
+  // 計算篩選後收支總額（Direct Ledger Sign Aggregation：所有相關紀錄全部加入計算，正的列入收入、負的列入支出）
   const totalIncome = filtered
-    .filter(t => t.type === 'income' && (categoryFilter !== '全部' || !EXCLUDED_INCOME_CATEGORIES.includes(t.category)))
+    .filter(t => t.type === 'income')
     .reduce((s, t) => s + t.amount, 0);
   const totalExpense = filtered
-    .filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !EXCLUDED_EXPENSE_CATEGORIES.includes(t.category)))
+    .filter(t => t.type === 'expense')
     .reduce((s, t) => s + t.amount, 0);
 
   const activeFilterCount =
@@ -428,8 +424,8 @@ export default function Transactions() {
                 <span>總收入</span>
                 <FormulaTooltip
                   label="檢視篩選結果總收入計算公式"
-                  formula="當前篩選條件下所有「一般收入」明細加總（排除信用卡端還款沖銷、內部轉帳、ATM 提款與代墊報銷）"
-                  calculation={`共 ${filtered.filter(t => t.type === 'income' && (categoryFilter !== '全部' || !EXCLUDED_INCOME_CATEGORIES.includes(t.category))).length} 筆有效收入 = +${formatCurrency(totalIncome)}`}
+                  formula="當前篩選條件下所有正項（+ 收入）紀錄全部加總"
+                  calculation={`共 ${filtered.filter(t => t.type === 'income').length} 筆收入 = +${formatCurrency(totalIncome)}`}
                 />
               </span>
               <strong style={{ color: 'var(--color-success)' }}>+{formatCurrency(totalIncome)}</strong>
@@ -439,8 +435,8 @@ export default function Transactions() {
                 <span>總支出</span>
                 <FormulaTooltip
                   label="檢視篩選結果總支出計算公式"
-                  formula="當前篩選條件下所有「一般消費支出」＋「帳戶扣繳信用卡費（信用卡還款支出）」加總（排除內部轉帳、ATM 提款與代墊報銷）"
-                  calculation={`共 ${filtered.filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !EXCLUDED_EXPENSE_CATEGORIES.includes(t.category))).length} 筆有效支出 = -${formatCurrency(totalExpense)}`}
+                  formula="當前篩選條件下所有負項（- 支出）紀錄全部加總"
+                  calculation={`共 ${filtered.filter(t => t.type === 'expense').length} 筆支出 = -${formatCurrency(totalExpense)}`}
                 />
               </span>
               <strong style={{ color: 'var(--color-danger)' }}>-{formatCurrency(totalExpense)}</strong>
@@ -450,7 +446,7 @@ export default function Transactions() {
                 <span>淨收支</span>
                 <FormulaTooltip
                   label="檢視篩選結果淨收支計算公式"
-                  formula="篩選結果總收入 － 篩選結果總支出（已扣除帳戶扣繳信用卡費）"
+                  formula="篩選結果總收入（所有 + 項）－ 篩選結果總支出（所有 - 項）"
                   calculation={`${formatCurrency(totalIncome)} - ${formatCurrency(totalExpense)} = ${formatCurrency(totalIncome - totalExpense)}`}
                 />
               </span>
@@ -479,10 +475,10 @@ export default function Transactions() {
           {sortedDates.map(dateStr => {
             const dayTxs = groupedByDate[dateStr]
             const dayIncome = dayTxs
-              .filter(t => t.type === 'income' && (categoryFilter !== '全部' || !EXCLUDED_INCOME_CATEGORIES.includes(t.category)))
+              .filter(t => t.type === 'income')
               .reduce((s, t) => s + t.amount, 0)
             const dayExpense = dayTxs
-              .filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !EXCLUDED_EXPENSE_CATEGORIES.includes(t.category)))
+              .filter(t => t.type === 'expense')
               .reduce((s, t) => s + t.amount, 0)
 
             return (
