@@ -253,14 +253,16 @@ export default function Transactions() {
   })
   const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a))
 
-  // 計算篩選之收支加總
-  // 計算篩選後收支總額 (預設排除內部轉帳等非實質收支；若使用者主動篩選該分類則統計該分類)
-  const SYSTEM_CATEGORIES = ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'];
+  // 計算篩選後收支總額：
+  // 1. 總收入排除「信用卡還款（信用卡端沖銷收入）」、「內部轉帳」、「ATM提款」、「公帳代墊報銷」
+  // 2. 總支出納入銀行帳戶扣繳之「信用卡還款（支出）」，僅排除「內部轉帳」、「ATM提款」、「公帳代墊報銷」
+  const EXCLUDED_INCOME_CATEGORIES = ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'];
+  const EXCLUDED_EXPENSE_CATEGORIES = ['內部轉帳', 'ATM提款', '公帳代墊報銷'];
   const totalIncome = filtered
-    .filter(t => t.type === 'income' && (categoryFilter !== '全部' || !SYSTEM_CATEGORIES.includes(t.category)))
+    .filter(t => t.type === 'income' && (categoryFilter !== '全部' || !EXCLUDED_INCOME_CATEGORIES.includes(t.category)))
     .reduce((s, t) => s + t.amount, 0);
   const totalExpense = filtered
-    .filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !SYSTEM_CATEGORIES.includes(t.category)))
+    .filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !EXCLUDED_EXPENSE_CATEGORIES.includes(t.category)))
     .reduce((s, t) => s + t.amount, 0);
 
   const activeFilterCount =
@@ -426,8 +428,8 @@ export default function Transactions() {
                 <span>總收入</span>
                 <FormulaTooltip
                   label="檢視篩選結果總收入計算公式"
-                  formula="當前篩選條件下所有「一般收入」明細加總（排除內部轉帳、ATM 提款、信用卡還款與代墊報銷）"
-                  calculation={`共 ${filtered.filter(t => t.type === 'income' && (categoryFilter !== '全部' || !SYSTEM_CATEGORIES.includes(t.category))).length} 筆有效收入 = +${formatCurrency(totalIncome)}`}
+                  formula="當前篩選條件下所有「一般收入」明細加總（排除信用卡端還款沖銷、內部轉帳、ATM 提款與代墊報銷）"
+                  calculation={`共 ${filtered.filter(t => t.type === 'income' && (categoryFilter !== '全部' || !EXCLUDED_INCOME_CATEGORIES.includes(t.category))).length} 筆有效收入 = +${formatCurrency(totalIncome)}`}
                 />
               </span>
               <strong style={{ color: 'var(--color-success)' }}>+{formatCurrency(totalIncome)}</strong>
@@ -437,8 +439,8 @@ export default function Transactions() {
                 <span>總支出</span>
                 <FormulaTooltip
                   label="檢視篩選結果總支出計算公式"
-                  formula="當前篩選條件下所有「一般消費支出」明細加總（排除內部轉帳、ATM 提款、信用卡還款與代墊報銷）"
-                  calculation={`共 ${filtered.filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !SYSTEM_CATEGORIES.includes(t.category))).length} 筆有效支出 = -${formatCurrency(totalExpense)}`}
+                  formula="當前篩選條件下所有「一般消費支出」＋「帳戶扣繳信用卡費（信用卡還款支出）」加總（排除內部轉帳、ATM 提款與代墊報銷）"
+                  calculation={`共 ${filtered.filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !EXCLUDED_EXPENSE_CATEGORIES.includes(t.category))).length} 筆有效支出 = -${formatCurrency(totalExpense)}`}
                 />
               </span>
               <strong style={{ color: 'var(--color-danger)' }}>-{formatCurrency(totalExpense)}</strong>
@@ -448,7 +450,7 @@ export default function Transactions() {
                 <span>淨收支</span>
                 <FormulaTooltip
                   label="檢視篩選結果淨收支計算公式"
-                  formula="篩選結果總收入 － 篩選結果總支出"
+                  formula="篩選結果總收入 － 篩選結果總支出（已扣除帳戶扣繳信用卡費）"
                   calculation={`${formatCurrency(totalIncome)} - ${formatCurrency(totalExpense)} = ${formatCurrency(totalIncome - totalExpense)}`}
                 />
               </span>
@@ -460,7 +462,7 @@ export default function Transactions() {
         </div>
       </div>
 
-      {/* 交易清單 (依日期分組) */}
+      {/* 收支清單 (依日期分組) */}
       {loading && transactions.length === 0 ? (
         <TransactionsSkeleton />
       ) : sortedDates.length === 0 ? (
@@ -476,8 +478,12 @@ export default function Transactions() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {sortedDates.map(dateStr => {
             const dayTxs = groupedByDate[dateStr]
-            const dayIncome = dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-            const dayExpense = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+            const dayIncome = dayTxs
+              .filter(t => t.type === 'income' && (categoryFilter !== '全部' || !EXCLUDED_INCOME_CATEGORIES.includes(t.category)))
+              .reduce((s, t) => s + t.amount, 0)
+            const dayExpense = dayTxs
+              .filter(t => t.type === 'expense' && (categoryFilter !== '全部' || !EXCLUDED_EXPENSE_CATEGORIES.includes(t.category)))
+              .reduce((s, t) => s + t.amount, 0)
 
             return (
               <div key={dateStr} className="card tx-day-card">

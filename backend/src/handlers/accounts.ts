@@ -87,6 +87,16 @@ accounts.get('/', async (c) => {
   `).bind(...sqlParams).all();
   const results = await Promise.all((rows.results as any[]).map(async (acc) => {
     if (acc.type !== 'credit_card') return acc;
+    const reconciled = await reconcileCreditCardUnbilled(c.env.DB, acc.id);
+    if (reconciled) {
+      return {
+        ...acc,
+        balance: reconciled.balance,
+        unbilled: reconciled.unbilled,
+        shared_debt: reconciled.shared_debt,
+        personal_debt: reconciled.personal_debt,
+      };
+    }
     const totalDue = (acc.balance || 0) + (acc.unbilled || 0);
     if (totalDue <= 0) {
       return { ...acc, shared_debt: 0, personal_debt: 0 };
@@ -464,8 +474,8 @@ accounts.post('/:id/rollover-statement', async (c) => {
 export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string) {
   await ensureAccountsSchema(db);
   const card = await db.prepare(
-    `SELECT id, name, balance, unbilled, statement_day, is_joint, user_id FROM accounts WHERE id = ? AND type = 'credit_card'`
-  ).bind(cardId).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; is_joint: number; user_id: string }>();
+    `SELECT id, name, balance, unbilled, statement_day, last_rollover_at, is_joint, user_id FROM accounts WHERE id = ? AND type = 'credit_card'`
+  ).bind(cardId).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; last_rollover_at?: string | null; is_joint: number; user_id: string }>();
 
   if (!card) return null;
 
@@ -486,6 +496,31 @@ export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string
         cutoffYear -= 1;
       }
     }
+
+    // 檢查本期結帳日 (cutoffYear-cutoffMonth-statement_day) 是否已經由使用者手動執行過「出帳作業」(last_rollover_at >= S_cutoff)
+    // 若今天已到達或超過結帳日，但尚未手動點擊「出帳作業」，則本期刷卡明細必須維持在「未出帳」，故將有效已出帳基準日退回上一個結帳日！
+    const tentativeLastDay = new Date(cutoffYear, cutoffMonth, 0).getDate();
+    const tentativeDay = Math.min(card.statement_day, tentativeLastDay);
+    const tentativeCutoff = `${cutoffYear}-${String(cutoffMonth).padStart(2, '0')}-${String(tentativeDay).padStart(2, '0')}`;
+
+    let lastRolloverDateStr = '';
+    if (card.last_rollover_at) {
+      const raw = String(card.last_rollover_at).trim();
+      const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z';
+      const d = new Date(iso);
+      if (!isNaN(d.getTime())) {
+        lastRolloverDateStr = getTaipeiDateString(d);
+      }
+    }
+
+    if (currDay >= card.statement_day && (!lastRolloverDateStr || lastRolloverDateStr < tentativeCutoff)) {
+      cutoffMonth -= 1;
+      if (cutoffMonth === 0) {
+        cutoffMonth = 12;
+        cutoffYear -= 1;
+      }
+    }
+
     const lastDayOfMonth = new Date(cutoffYear, cutoffMonth, 0).getDate();
     const day = Math.min(card.statement_day, lastDayOfMonth);
     cutoffStatementDate = `${cutoffYear}-${String(cutoffMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -662,7 +697,16 @@ accounts.get('/balance', async (c) => {
   }
 
   const allAccounts = await c.env.DB.prepare(`SELECT * FROM accounts WHERE ${sqlCondition}`).bind(...sqlParams).all();
-  const accs = allAccounts.results as Array<{ type: string; balance: number; unbilled: number }>;
+  const accs = allAccounts.results as Array<{ id: string; type: string; balance: number; unbilled: number }>;
+  for (const acc of accs) {
+    if (acc.type === 'credit_card') {
+      const reconciled = await reconcileCreditCardUnbilled(c.env.DB, acc.id);
+      if (reconciled) {
+        acc.balance = reconciled.balance;
+        acc.unbilled = reconciled.unbilled;
+      }
+    }
+  }
   const cashTotal = accs.filter(a => a.type === 'cash').reduce((s, a) => s + (a.balance || 0), 0);
   const bankTotal = accs.filter(a => a.type === 'bank').reduce((s, a) => s + (a.balance || 0), 0);
   const ccBilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.balance || 0), 0);
@@ -675,6 +719,11 @@ accounts.get('/balance', async (c) => {
     ).bind(...memberUserIds).all<{ id: string; balance: number; unbilled: number }>();
 
     for (const card of personalCards.results) {
+      const reconciled = await reconcileCreditCardUnbilled(c.env.DB, card.id);
+      if (reconciled) {
+        ccUnbilled += reconciled.shared_debt || 0;
+        continue;
+      }
       const totalDue = (card.balance || 0) + (card.unbilled || 0);
       if (totalDue <= 0) continue;
       const txs = await c.env.DB.prepare(

@@ -264,7 +264,7 @@ export default function Dashboard() {
               <span>{viewScope === 'household' ? '當月公帳淨結算' : viewScope === 'personal' ? '當月個人私帳淨收支' : '當月淨收支'}</span>
               <FormulaTooltip
                 label="檢視當月淨收支計算公式"
-                formula="當月有效總收入 － 當月有效總支出（排除內部轉帳、ATM 提款、信用卡還款與代墊報銷）"
+                formula="當月有效總收入 － 當月有效總支出（含一般消費支出與帳戶扣繳信用卡費；排除內部轉帳、ATM 提款、信用卡端沖銷與代墊報銷）"
                 calculation={`${formatCurrency(monthIncome)} - ${formatCurrency(monthExpense)} = ${formatCurrency(monthIncome - monthExpense)}`}
               />
             </span>

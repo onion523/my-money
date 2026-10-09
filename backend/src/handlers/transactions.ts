@@ -321,7 +321,12 @@ transactions.get('/summary/monthly', async (c) => {
   const rows = await c.env.DB.prepare(`
     SELECT strftime('%Y-%m', date) as month, type, SUM(amount) as total
     FROM transactions t
-    WHERE ${condition} AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷') AND t.date LIKE ?
+    WHERE ${condition}
+      AND (
+        (t.type = 'income' AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'))
+        OR (t.type = 'expense' AND t.category NOT IN ('內部轉帳', 'ATM提款', '公帳代墊報銷'))
+      )
+      AND t.date LIKE ?
     GROUP BY month, type ORDER BY month ASC
   `).bind(...params, `${year}%`).all();
   return c.json({ success: true, data: rows.results });

@@ -76,30 +76,33 @@ _Avoid_: 關帳日 (closing date)、截帳日 (cut-off date)、計費週期 (bil
 _Avoid_: 到期日 (due date)、繳納日 (payment date)、截止日 (deadline)
 
 **Credit Card Repayment (信用卡扣款還款)**:
-從指定銀行存款扣款以償還信用卡欠款的內部轉帳程序，不會被重複計入生活消費支出。
-_Avoid_: 繳卡費 (card payment)、清償 (debt clearance)、轉帳支出 (transfer expense)
+從指定銀行存款扣款以償還信用卡欠款的沖銷程序（系統同時建立一筆銀行帳戶端之 `expense`「信用卡還款」與一筆信用卡端之 `income`「信用卡還款」沖銷流水）。在「收支明細頁（上方篩選摘要之總收入／總支出／淨收支、以及每日分組卡片右上角小計）」與「儀表板（本月總收入／總支出／淨收支）」中：
+1. **總支出（與當日支出小計）**：納入銀行帳戶端扣繳之「信用卡還款（`type = 'expense'`）」，並排除內部轉帳、ATM 提款與公帳代墊報銷，使「淨收支（總收入 － 總支出）」真實扣除帳戶扣繳信用卡費之支出。
+2. **總收入（與當日收入小計）**：嚴格排除信用卡端之「信用卡還款（`type = 'income'`）」沖銷紀錄（以及內部轉帳、ATM 提款、公帳代墊報銷），防止信用卡額度沖銷紀錄虛胖總收入或抵銷繳卡費支出。
+3. **統計分析消費分類圓餅圖（Category Breakdown）**：維持僅統計日常消費分類，不將「信用卡還款」混入日常消費類別佔比。
+_Avoid_: 將銀行扣繳信用卡費從收支明細總支出與淨收支中漏扣 (omitting bank credit card repayment from total expense and net cashflow)、將信用卡端還款沖銷誤計入總收入 (counting credit card repayment offset as income)
 
 **Statement Rollover (結帳日出帳作業)**:
-結帳日到達後，使用者確認並將指定結帳週期內之有效消費淨額（消費支出總額扣除刷退退款，排除延至下期者）一次性移轉合併至已出帳待繳款的結算程序，參與出帳之明細標記為已出帳（Billed），未符合條件之交易保留為未出帳（Unbilled）。
-_Avoid_: 帳單重算 (recalculation)、全額滾入 (blanket carryover)、手動對帳 (manual reconciliation)、結轉 (rollover)
+結帳日到達後，在持卡人尚未手動點擊「出帳作業」確認前，當期刷卡消費（含結帳日當天及該結帳週期內明細）一律維持為未出帳（`is_billed = 0`）並保留於「未出帳款（`unbilled`）」顯示，嚴禁於結帳日當天自動將未出帳歸零或未經出帳作業即覆寫為 `is_billed = 1`。唯有當使用者主動執行「出帳作業」時，系統才將指定結帳週期內之有效消費淨額（消費支出總額扣除刷退退款，排除延至下期者）一次性移轉合併至已出帳待繳款（`balance`），並將參與出帳之明細標記為已出帳（`is_billed = 1`）。
+_Avoid_: 結帳日未經手動出帳即自動歸零未出帳 (auto-zeroing unbilled on statement day before manual rollover)、帳單重算 (recalculation)、全額滾入 (blanket carryover)
 
 **Deferred Statement Billing (延至下期帳單)**:
-在記錄或編輯信用卡消費或刷退時，手動標記該筆收支交易延至下個結帳週期再行出帳與沖抵的屬性（defer_to_next_statement），適用於商家延遲請款、跨結帳日刷卡或跨期退款。在當期出帳作業時自動保留於未出帳，於下一期出帳作業時自動納入結算。當使用者在收支明細中編輯交易並勾選「延至下期帳單」（或將交易日期改至最近結帳日之後）時，系統立即將該筆交易之出帳狀態重置為未出帳（`is_billed = 0`），並自動同步重算該信用卡之未出帳金額（`unbilled`）。
+在記錄或編輯信用卡消費或刷退時，手動標記該筆收支延至下個結帳週期再行出帳與沖抵的屬性（defer_to_next_statement），適用於商家延遲請款、跨結帳日刷卡或跨期退款。在當期出帳作業時自動保留於未出帳，於下一期出帳作業時自動納入結算。當使用者在收支明細中編輯收支並勾選「延至下期帳單」（或將收支日期改至最近結帳日之後）時，系統立即將該筆收支之出帳狀態重置為未出帳（`is_billed = 0`），並自動同步重算該信用卡之未出帳金額（`unbilled`）。
 _Avoid_: 延遲繳款 (delayed payment)、跨期借貸 (cross-period loan)、下期消費 (next cycle expense)
 
 **Billed Status (出帳狀態)**:
-每筆信用卡交易之結算狀態標記（is_billed），明確劃分「未出帳 (0)」與「已出帳 (1)」，作為帳單出帳作業、收支明細徽章顯示與未出帳自動校準之絕對準則。嚴禁於系統啟動遷移時以 `created_at <= last_rollover_at` 時間戳覆寫 `is_billed`。
-_Avoid_: 帳單狀態 (bill status)、結案標記 (settled flag)、啟動時間戳強制覆寫 (cold-start timestamp overwrite)
+每筆信用卡收支之結算狀態標記（is_billed），明確劃分「未出帳 (0)」與「已出帳 (1)」，作為帳單出帳作業、收支明細徽章顯示與未出帳自動校準之絕對準則。`is_billed = 1` 僅能由使用者手動執行「出帳作業（Statement Rollover）」寫入；嚴禁於系統啟動遷移或一般校準時，將尚未執行出帳作業之當期交易強制覆寫為 `is_billed = 1`。
+_Avoid_: 帳單狀態 (bill status)、結案標記 (settled flag)、未經出帳作業強制覆寫為已出帳 (prematurely overwriting unbilled transactions to is_billed = 1 on statement day)
 
 **Two-Tier Debt Rollback (雙層負債回退)**:
-當編輯或刪除歷史刷卡消費交易時，負債回退程序優先扣減未出帳款（Unbilled Debt）；若未出帳款已不足扣（款項已於結帳日出帳作業中結轉至已出帳或已被還款沖銷），剩餘回退差額自動溢出扣減已出帳待繳款（Billed Debt），確保欠款全額精準返還。若為同帳戶編輯，應先計算新舊交易之單一淨差額（Single Net Delta）再行回退或認列，嚴禁分步覆蓋。
+當編輯或刪除歷史刷卡消費收支時，負債回退程序優先扣減未出帳款（Unbilled Debt）；若未出帳款已不足扣（款項已於結帳日出帳作業中結轉至已出帳或已被還款沖銷），剩餘回退差額自動溢出扣減已出帳待繳款（Billed Debt），確保欠款全額精準返還。若為同帳戶編輯，應先計算新舊收支之單一淨差額（Single Net Delta）再行回退或認列，嚴禁分步覆蓋。
 _Avoid_: 雙步覆蓋 (two-step overwrite)、夾零截斷 (zero clamping)、已出帳凍結 (billed freeze)
 
 **Credit Card Balance Reconciliation (信用卡未出帳自動校準)**:
-針對信用卡帳戶，使用者點擊「校準」或於編輯信用卡交易儲存時，系統依據當前掛在該卡底下、以「最近一次已發生之結帳日（$S_{\text{cutoff}}$，當前日未達結帳日時為上月結帳日，已達結帳日時為當月結帳日）」與「上一個結帳日（$S_{\text{prev}}$）」為界限執行**狀態自癒與淨額校準**：
-1. **出帳狀態自癒修復（Self-Healing Billed State）**：凡屬當期未出帳區間之交易——即 `date > S_cutoff` 之所有交易，以及 `S_prev < date <= S_cutoff AND defer_to_next_statement = 1` 之延至本期交易——強制同步修復為 `is_billed = 0`（未出帳）；其餘歷史週期交易則對齊為 `is_billed = 1`。
-2. **純粹未出帳淨額加總**：精準加總當期未出帳區間內之「有效消費支出總額 - 刷退退款總額」（$$\max(0, \sum \text{未出帳消費} - \sum \text{未出帳刷退})$$），完全不扣減 `unbilled_offset` 還款紀錄以免溢扣上期繳卡費，並即刻復原公私帳刷卡分流（`shared_debt` 與 `personal_debt`）。
-_Avoid_: 全額還款扣減 (full repayment deduction)、溢繳還款誤扣 (unbilled_offset deduction)、暴力重算 (hard reset)、人工對帳 (manual audit)、依時間戳校準 (timestamp reconciliation)、無界限全量舊帳加總 (unbounded historical aggregation)
+針對信用卡帳戶，使用者點擊「校準」、載入帳戶列表或新增／編輯信用卡收支時，系統依據該卡之結帳日與實際最近一次手動出帳紀錄（`last_rollover_at`）執行**狀態自癒與未出帳淨額校準**：
+1. **未經手動出帳之當期交易保護與自癒復原**：若當前日期已達或超過本期結帳日（$S_{\text{cutoff}}$），但該卡於本期結帳日當天或之後尚未執行過手動「出帳作業」（即 `last_rollover_at` 為空或早於 $S_{\text{cutoff}}$），則本期結帳週期（`date > S_prev`）仍屬於「待手動出帳之未出帳區間」，系統自動將該區間內曾被誤標為 `is_billed = 1` 之交易修復還原為 `is_billed = 0`（未出帳），絕不提前將 `date <= S_cutoff` 強制改為 `is_billed = 1`。
+2. **純粹未出帳淨額加總**：精準加總所有 `is_billed = 0` 之未出帳區間內「有效消費支出總額 － 刷退退款總額」（$$\max(0, \sum \text{未出帳消費} - \sum \text{未出帳刷退})$$），完全不扣減 `unbilled_offset` 還款紀錄以免溢扣上期繳卡費，並即刻復原公私帳刷卡分流（`shared_debt` 與 `personal_debt`）。
+_Avoid_: 結帳日當天未按出帳作業卻把未出帳強制歸零 (zeroing unbilled on statement day before manual rollover)、全額還款扣減 (full repayment deduction)、溢繳還款誤扣 (unbilled_offset deduction)
 
 ---
 
