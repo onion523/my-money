@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { accountsApi, txApi, recurringApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
-import { formatCurrency, formatDate, today, thisMonth, getGreeting, CATEGORIES, buildHistoryMemo, recommendCategory } from '../components/utils'
+import { formatCurrency, formatDate, today, thisMonth, getGreeting, CATEGORIES, buildHistoryMemo, recommendCategory, compareTransactionsNewestFirst } from '../components/utils'
 import { GoalIcon } from '../components/icons'
 import ScopeTabBar from '../components/ScopeTabBar'
 import Modal from '../components/Modal'
@@ -445,7 +445,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="tx-list">
-                {transactions.slice(0, 6).map(tx => (
+                {[...transactions].sort(compareTransactionsNewestFirst).slice(0, 6).map(tx => (
                   <TransactionRow key={tx.id} tx={tx} showDate={true} />
                 ))}
               </div>
@@ -630,9 +630,9 @@ export default function Dashboard() {
               </select>
             </div>
 
-            {/* 日期 */}
+            {/* 收支日期 */}
             <div className="input-group">
-              <label className="input-label">日期</label>
+              <label className="input-label">收支日期</label>
               <input
                 id="quick-date"
                 className="input"

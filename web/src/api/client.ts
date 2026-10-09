@@ -368,6 +368,7 @@ export interface HouseholdData {
 export interface HouseholdAdvanceItem {
   id: string;
   date: string;
+  created_at?: string;
   category: string;
   note: string;
   amount: number;
@@ -378,6 +379,7 @@ export interface HouseholdAdvanceItem {
 export interface HouseholdReimbursementItem {
   id: string;
   date: string;
+  created_at?: string;
   amount: number;
   note: string;
   account_name: string;

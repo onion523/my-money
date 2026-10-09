@@ -372,7 +372,7 @@ export default function Accounts() {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`確定要刪除「${name}」嗎？其關聯的交易記錄亦會一併移除！`)) return
+    if (!window.confirm(`確定要刪除「${name}」嗎？其關聯的收支紀錄亦會一併移除！`)) return
     try {
       await accountsApi.remove(id)
       loadData()

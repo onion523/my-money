@@ -49,3 +49,26 @@ export function getTaipeiForecastDays(days = 30): Array<{ dateStr: string; year:
   }
   return result;
 }
+
+/**
+ * 將資料庫 UTC 時間字串 (例如 'YYYY-MM-DD HH:mm:ss' 或 ISO 字串) 轉換為 Asia/Taipei (UTC+8) 之 HH:mm 字串
+ */
+export function formatTaipeiTime(utcDateStr?: string | null): string {
+  if (!utcDateStr) return '';
+  const trimmed = utcDateStr.trim();
+  if (/^\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+
+  let iso = trimmed;
+  if (!iso.includes('T') && !iso.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(iso)) {
+    iso = iso.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+
+  // Asia/Taipei 固定為 UTC+8 (無夏令時間)
+  const taipeiDate = new Date(d.getTime() + 8 * 3600 * 1000);
+  const hh = String(taipeiDate.getUTCHours()).padStart(2, '0');
+  const mm = String(taipeiDate.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Home, Lock, FileText, CalendarClock, User } from 'lucide-react';
 import { Transaction } from '../api/client';
-import { formatCurrency, formatDate } from './utils';
+import { formatCurrency, formatDate, formatTxTime } from './utils';
 import { CategoryIcon } from './icons';
 
 interface TransactionRowProps {
@@ -11,6 +11,11 @@ interface TransactionRowProps {
 }
 
 export default function TransactionRow({ tx, showDate = false, actions }: TransactionRowProps) {
+  const timeStr = formatTxTime(tx.created_at);
+  const timePrefix = showDate
+    ? `${formatDate(tx.date)}${timeStr ? ` ${timeStr}` : ''} · `
+    : `${timeStr ? `${timeStr} · ` : ''}`;
+
   return (
     <div className="tx-item">
       <div className={`tx-icon ${tx.type}`}>
@@ -46,7 +51,7 @@ export default function TransactionRow({ tx, showDate = false, actions }: Transa
         </div>
         <div className="tx-meta" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 3 }}>
           <span>
-            {showDate ? `${formatDate(tx.date)} · ` : ''}帳戶：{tx.account_name || '預設帳戶'}
+            {timePrefix}帳戶：{tx.account_name || '預設帳戶'}
           </span>
           {tx.user_name && (
             <span className="badge badge-safe" style={{ fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>

@@ -6,16 +6,25 @@
 
 ### 核心帳簿與總覽 (Core Ledger & Accounts)
 
-**Transaction (收支明細)**:
-帳簿中記載特定日期的資金流入、流出或審計轉帳紀錄。全站原「交易記錄」、「交易明細」全面收斂正名為「收支明細」。
-_Avoid_: 交易記錄 (transaction records)、記帳紀錄 (entry)、流水帳 (log)、紀錄 (record)
+**Transaction (收支明細 / 收支紀錄)**:
+帳簿中記載特定日期與時間的資金流入、流出或審計轉帳紀錄。全站介面、彈窗標題、表單欄位、確認提示與後端錯誤訊息之原「交易」、「交易記錄」、「交易明細」、「交易日期」全面收斂正名為「收支」、「收支明細」、「收支紀錄」、「收支日期」，嚴禁殘留任何「交易」字眼。
+_Avoid_: 交易 (transaction)、交易記錄 (transaction records)、交易日期 (transaction date)、新增交易記錄 (add transaction)、編輯交易記錄 (edit transaction)、記帳紀錄 (entry)、流水帳 (log)
+
+**Automatic Taipei Time Recording & Newest-First Sorting (收支時間自動記錄與最新時間優先排序)**:
+所有收支紀錄（涵蓋收支明細頁新增、儀表板快速記帳、帳戶管理之 ATM 提款／轉帳與信用卡還款、家庭協同代墊報銷，以及 LINE / Telegram 機器人記帳）在建立時，表單維持僅讓使用者選取「收支日期 (`YYYY-MM-DD`)」，系統於背景自動擷取建立當下之台灣時區時間（`Asia/Taipei` UTC+8 之 `HH:mm` 時分，不可手動修改；編輯收支時保留原建立時間）。既有歷史資料若未帶時分，自動由資料庫 `created_at` 轉換為台灣時間（UTC+8）補齊 `HH:mm`。
+- **各頁面時間顯示格式**：
+  1. **收支明細頁 (`Transactions`)**：維持「按日分組卡片 (`MM/DD`)」，單筆明細列第二行顯示 `HH:mm · 帳戶：名稱`。
+  2. **儀表板最近收支明細 (`Dashboard`)**：單筆明細列第二行顯示 `MM/DD HH:mm · 帳戶：名稱`。
+  3. **家庭代墊與報銷明細 (`Family`) 及 CSV 匯出 (`Export`)**：完整顯示 `YYYY-MM-DD HH:mm`。
+- **預設排序準則**：全站收支清單預設先依「收支日期 (`date DESC`)」由新到舊分組，同日內依「實際記錄時間 (`created_at DESC` / `HH:mm` DESC)」由最新排在最上方。
+_Avoid_: 僅記錄日期無時間 (date-only without time)、手動修改時分選擇器 (manual time picker in form)、同日收支順序混亂或舊帳在上方 (oldest-first or arbitrary same-day ordering)
 
 **Recent Transactions (最近收支明細)**:
-總覽頁顯示最近 6 筆收支明細的區塊（原「最近交易記錄」），單筆格式與收支明細頁共用同一元件：第一行「分類 · 備註」與公私帳、已出帳／延至下期徽章，第二行「日期 · 帳戶：名稱」與記帳人徽章；不含編輯／刪除。所有收支明細列表遇長備註或多徽章一律自動換行完整顯示，不得截斷為單行省略。
+總覽頁顯示最近 6 筆收支明細的區塊（原「最近交易記錄」），單筆格式與收支明細頁共用同一元件：第一行「分類 · 備註」與公私帳、已出帳／延至下期徽章，第二行「MM/DD HH:mm · 帳戶：名稱」與記帳人徽章；不含編輯／刪除。所有收支明細列表遇長備註或多徽章一律自動換行完整顯示，不得截斷為單行省略。
 _Avoid_: 最近交易記錄 (recent transaction records)、單行省略 (single-line ellipsis)
 
-**Transaction Balance Synchronization (交易餘額雙向連動)**:
-在建立、編輯 (PUT) 或刪除 (DELETE) 交易時，系統必須嚴格維持交易金額與所屬資產帳戶餘額／信用卡未出帳金額的雙向即時同步。若交易編輯時變更所屬帳戶，舊帳戶必須全額回滾原交易金額，新帳戶則扣抵／認列新交易金額；若僅變更金額，則按差額補退；刪除交易時則全額回滾該帳戶之餘額或未出帳負債。
+**Transaction Balance Synchronization (收支餘額雙向連動)**:
+在建立、編輯 (PUT) 或刪除 (DELETE) 收支時，系統必須嚴格維持收支金額與所屬資產帳戶餘額／信用卡未出帳金額的雙向即時同步。若編輯收支時變更所屬帳戶，舊帳戶必須全額回滾原收支金額，新帳戶則扣抵／認列新收支金額；若僅變更金額，則按差額補退；刪除收支時則全額回滾該帳戶之餘額或未出帳負債。
 _Avoid_: 單向更新 (unilateral update)、非連動記帳 (detached logging)
 
 **Account (資產帳戶)**:

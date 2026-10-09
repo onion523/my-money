@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Env } from '../types';
 import { authMiddleware } from '../middleware/jwt';
+import { formatTaipeiTime } from '../utils/date';
 
 type Vars = { userId: string; userEmail: string; userName: string };
 const exportRouter = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -10,19 +11,21 @@ exportRouter.use('*', authMiddleware);
 exportRouter.get('/csv', async (c) => {
   const userId = c.get('userId');
   const { from, to } = c.req.query();
-  let sql = 'SELECT t.date, t.type, t.category, t.amount, t.note, a.name as account FROM transactions t LEFT JOIN accounts a ON t.account_id = a.id WHERE t.user_id = ?';
+  let sql = 'SELECT t.date, t.created_at, t.type, t.category, t.amount, t.note, a.name as account FROM transactions t LEFT JOIN accounts a ON t.account_id = a.id WHERE t.user_id = ?';
   const params: (string | number)[] = [userId];
   if (from) { sql += ' AND t.date >= ?'; params.push(from); }
   if (to) { sql += ' AND t.date <= ?'; params.push(to); }
-  sql += ' ORDER BY t.date DESC';
+  sql += ' ORDER BY t.date DESC, t.created_at DESC, t.rowid DESC';
   const rows = await c.env.DB.prepare(sql).bind(...params).all();
-  const items = rows.results as Array<{ date: string; type: string; category: string; amount: number; note: string; account: string }>;
+  const items = rows.results as Array<{ date: string; created_at?: string; type: string; category: string; amount: number; note: string; account: string }>;
   
   const BOM = '\uFEFF';
   const header = '日期,類型,分類,金額,備註,帳戶\n';
-  const body = items.map(r =>
-    `${r.date},${r.type === 'income' ? '收入' : '支出'},"${(r.category || '').replace(/"/g, '""')}",${r.amount},"${(r.note || '').replace(/"/g, '""')}","${(r.account || '').replace(/"/g, '""')}"`
-  ).join('\n');
+  const body = items.map(r => {
+    const timeStr = formatTaipeiTime(r.created_at);
+    const dateTimeStr = timeStr ? `${r.date} ${timeStr}` : r.date;
+    return `${dateTimeStr},${r.type === 'income' ? '收入' : '支出'},"${(r.category || '').replace(/"/g, '""')}",${r.amount},"${(r.note || '').replace(/"/g, '""')}","${(r.account || '').replace(/"/g, '""')}"`;
+  }).join('\n');
   const csv = BOM + header + body;
   
   return new Response(csv, {

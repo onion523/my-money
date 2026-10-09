@@ -36,7 +36,7 @@ transactions.get('/', async (c) => {
   if (account_id) { sql += ' AND t.account_id = ?'; params.push(account_id); }
   if (from) { sql += ' AND t.date >= ?'; params.push(from); }
   if (to) { sql += ' AND t.date <= ?'; params.push(to); }
-  sql += ' ORDER BY t.date DESC, t.created_at DESC LIMIT ? OFFSET ?';
+  sql += ' ORDER BY t.date DESC, t.created_at DESC, t.rowid DESC LIMIT ? OFFSET ?';
   params.push(parseInt(limit), parseInt(offset));
 
   const rows = await c.env.DB.prepare(sql).bind(...params).all();
@@ -155,16 +155,16 @@ transactions.put('/:id', async (c) => {
     `SELECT * FROM transactions WHERE id = ? AND user_id IN (${placeholders})`
   ).bind(id, ...memberUserIds).first<any>();
 
-  if (!existing) return c.json({ success: false, error: '交易記錄不存在' }, 404);
+  if (!existing) return c.json({ success: false, error: '收支紀錄不存在' }, 404);
 
   // 權限檢查：
-  // 1. 個人私帳交易 (is_shared = 0)：嚴格僅限記錄者本人修改
+  // 1. 個人私帳收支 (is_shared = 0)：嚴格僅限記錄者本人修改
   if (existing.is_shared === 0 && existing.user_id !== userId) {
-    return c.json({ success: false, error: '權限不足：個人私帳交易僅限記錄者本人修改' }, 403);
+    return c.json({ success: false, error: '權限不足：個人私帳收支僅限記錄者本人修改' }, 403);
   }
-  // 2. 家庭公帳交易 (is_shared = 1)：採「記錄者本人」或「家庭管理員」共治
+  // 2. 家庭公帳收支 (is_shared = 1)：採「記錄者本人」或「家庭管理員」共治
   if (existing.is_shared === 1 && existing.user_id !== userId && myRole !== 'admin') {
-    return c.json({ success: false, error: '權限不足：他人記錄之家庭公帳交易僅限該記錄者或家庭管理員修改' }, 403);
+    return c.json({ success: false, error: '權限不足：他人記錄之家庭公帳收支僅限該記錄者或家庭管理員修改' }, 403);
   }
 
   // Q5: 信用卡還款紀錄受保護
@@ -255,7 +255,7 @@ transactions.delete('/:id', async (c) => {
     `SELECT * FROM transactions WHERE id = ? AND user_id IN (${placeholders})`
   ).bind(id, ...memberUserIds).first<any>();
 
-  if (!existing) return c.json({ success: false, error: '交易記錄不存在' }, 404);
+  if (!existing) return c.json({ success: false, error: '收支紀錄不存在' }, 404);
 
   // Q5: 信用卡還款紀錄受保護
   const protectedCategories = ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'];
@@ -267,13 +267,13 @@ transactions.delete('/:id', async (c) => {
   }
 
   // 權限檢查：
-  // 1. 個人私帳交易 (is_shared = 0)：嚴格僅限記錄者本人刪除
+  // 1. 個人私帳收支 (is_shared = 0)：嚴格僅限記錄者本人刪除
   if (existing.is_shared === 0 && existing.user_id !== userId) {
-    return c.json({ success: false, error: '權限不足：個人私帳交易僅限記錄者本人刪除' }, 403);
+    return c.json({ success: false, error: '權限不足：個人私帳收支僅限記錄者本人刪除' }, 403);
   }
-  // 2. 家庭公帳交易 (is_shared = 1)：採「記錄者本人」或「家庭管理員」共治
+  // 2. 家庭公帳收支 (is_shared = 1)：採「記錄者本人」或「家庭管理員」共治
   if (existing.is_shared === 1 && existing.user_id !== userId && myRole !== 'admin') {
-    return c.json({ success: false, error: '權限不足：他人記錄之家庭公帳交易僅限該記錄者或家庭管理員刪除' }, 403);
+    return c.json({ success: false, error: '權限不足：他人記錄之家庭公帳收支僅限該記錄者或家庭管理員刪除' }, 403);
   }
 
   const acc = await c.env.DB.prepare('SELECT id, type, balance, unbilled FROM accounts WHERE id = ?')

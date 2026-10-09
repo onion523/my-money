@@ -310,7 +310,7 @@ export default function Analytics() {
             <div className="empty-state" style={{ padding: '40px 0' }}>
               <div className="emoji"><PieIcon size={40} /></div>
               <h3>此範疇本月尚無支出紀錄</h3>
-              <p style={{ fontSize: '0.85rem' }}>記錄交易後，這裡將為您分析各分類消費佔比</p>
+              <p style={{ fontSize: '0.85rem' }}>記錄收支後，這裡將為您分析各分類消費佔比</p>
             </div>
           ) : (
             <div style={{ height: 260, width: '100%' }}>

@@ -228,7 +228,7 @@ households.get('/advances', async (c) => {
 
     // 代墊消費明細清單
     const advanceItemsResult = await c.env.DB.prepare(`
-      SELECT t.id, t.date, t.category, t.note, t.amount, COALESCE(a.name, '個人帳戶') as account_name, COALESCE(a.type, 'other') as account_type
+      SELECT t.id, t.date, t.created_at, t.category, t.note, t.amount, COALESCE(a.name, '個人帳戶') as account_name, COALESCE(a.type, 'other') as account_type
       FROM transactions t
       LEFT JOIN accounts a ON t.account_id = a.id
       WHERE t.user_id = ? 
@@ -236,7 +236,7 @@ households.get('/advances', async (c) => {
         AND t.type = 'expense'
         AND (a.is_joint = 0 OR a.is_joint IS NULL)
         AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-      ORDER BY t.date DESC, t.created_at DESC
+      ORDER BY t.date DESC, t.created_at DESC, t.rowid DESC
     `).bind(m.user_id).all();
 
     // 個人已收到之公帳代墊報銷款
@@ -248,11 +248,11 @@ households.get('/advances', async (c) => {
 
     // 歷史報銷撥款紀錄
     const reimbItemsResult = await c.env.DB.prepare(`
-      SELECT t.id, t.date, t.amount, t.note, COALESCE(a.name, '收款帳戶') as account_name
+      SELECT t.id, t.date, t.created_at, t.amount, t.note, COALESCE(a.name, '收款帳戶') as account_name
       FROM transactions t
       LEFT JOIN accounts a ON t.account_id = a.id
       WHERE t.user_id = ? AND t.category = '公帳代墊報銷' AND t.type = 'income'
-      ORDER BY t.date DESC, t.created_at DESC
+      ORDER BY t.date DESC, t.created_at DESC, t.rowid DESC
     `).bind(m.user_id).all();
 
     const totalAdvanced = advRow?.total || 0;

@@ -92,6 +92,45 @@ export function formatLocalDate(utcDateStr?: string): string {
   return d.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
+/**
+ * 將資料庫 UTC 時間字串 (例如 'YYYY-MM-DD HH:mm:ss' 或 ISO 字串) 轉換為 Asia/Taipei (UTC+8) 之 HH:mm 字串
+ */
+export function formatTxTime(utcDateStr?: string): string {
+  if (!utcDateStr) return '';
+  const trimmed = utcDateStr.trim();
+  if (/^\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+
+  let iso = trimmed;
+  if (!iso.includes('T') && !iso.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(iso)) {
+    iso = iso.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+
+  const taipeiDate = new Date(d.getTime() + 8 * 3600 * 1000);
+  const hh = String(taipeiDate.getUTCHours()).padStart(2, '0');
+  const mm = String(taipeiDate.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+/**
+ * 組合收支日期 (YYYY-MM-DD) 與台北時間 (HH:mm) 為完整 YYYY-MM-DD HH:mm 字串
+ */
+export function formatTxDateTime(dateStr?: string, utcDateStr?: string): string {
+  if (!dateStr) return '';
+  const timeStr = formatTxTime(utcDateStr);
+  return timeStr ? `${dateStr} ${timeStr}` : dateStr;
+}
+
+/**
+ * 收支紀錄預設排序：以收支日期 (date DESC) 優先，同日內依實際記錄時間 (created_at DESC) 最新在最上方
+ */
+export function compareTransactionsNewestFirst<T extends { date: string; created_at?: string }>(a: T, b: T): number {
+  const dateDiff = (b.date || '').localeCompare(a.date || '');
+  if (dateDiff !== 0) return dateDiff;
+  return (b.created_at || '').localeCompare(a.created_at || '');
+}
+
 // ==========================================
 // 雙層智慧分類推薦引擎 (Two-Tier Recommendation)
 // ==========================================

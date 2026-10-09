@@ -2,7 +2,7 @@ import { TransactionsSkeleton } from '../components/Skeleton'
 import { useState, useEffect, useMemo } from 'react'
 import { txApi, accountsApi, exportApi, householdApi, Transaction, Account } from '../api/client'
 import { useStore } from '../store/useStore'
-import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, buildHistoryMemo, recommendCategory } from '../components/utils'
+import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, buildHistoryMemo, recommendCategory, compareTransactionsNewestFirst } from '../components/utils'
 import Modal from '../components/Modal'
 import ScopeTabBar from '../components/ScopeTabBar'
 import TransactionRow from '../components/TransactionRow'
@@ -214,9 +214,9 @@ export default function Transactions() {
     }
   }
 
-  // 刪除交易
+  // 刪除收支
   const handleDelete = async (id: string) => {
-    if (!window.confirm('確定要刪除這筆交易記錄嗎？')) return
+    if (!window.confirm('確定要刪除這筆收支紀錄嗎？')) return
     try {
       await txApi.remove(id)
       loadData()
@@ -230,8 +230,8 @@ export default function Transactions() {
     exportApi.csv(startDate, endDate)
   }
 
-  // 本地篩選
-  const filtered = transactions.filter(t => {
+  // 本地篩選並以最新時間優先排序 (date DESC, created_at DESC)
+  const filtered = [...transactions].filter(t => {
     if (accountFilter !== 'all' && t.account_id !== accountFilter) return false
     if (typeFilter !== 'all' && t.type !== typeFilter) return false
     if (categoryFilter !== '全部' && t.category !== categoryFilter) return false
@@ -243,9 +243,9 @@ export default function Transactions() {
       if (!matchNote && !matchCat && !matchAcc && !matchUser) return false
     }
     return true
-  })
+  }).sort(compareTransactionsNewestFirst)
 
-  // 按日期分組
+  // 按日期分組 (每日群組內維持最新記錄時間在最上方)
   const groupedByDate: Record<string, Transaction[]> = {}
   filtered.forEach(tx => {
     if (!groupedByDate[tx.date]) groupedByDate[tx.date] = []
@@ -552,7 +552,7 @@ export default function Transactions() {
       {/* 新增/編輯 Modal */}
       {showModal && (
         <Modal
-          title={editingTx ? '編輯交易記錄' : '新增交易記錄'}
+          title={editingTx ? '編輯收支紀錄' : '新增收支紀錄'}
           onClose={() => setShowModal(false)}
         >
           {errorMsg && (
@@ -714,9 +714,9 @@ export default function Transactions() {
               )
             })()}
 
-            {/* 日期 */}
+            {/* 收支日期 */}
             <div className="input-group">
-              <label className="input-label">交易日期</label>
+              <label className="input-label">收支日期</label>
               <input
                 className="input"
                 type="date"

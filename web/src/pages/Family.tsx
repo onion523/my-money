@@ -2,7 +2,7 @@ import { FamilySkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
 import { householdApi, HouseholdData, HouseholdMember, HouseholdAdvance, accountsApi, Account } from '../api/client'
-import { formatCurrency, today, formatLocalDate } from '../components/utils'
+import { formatCurrency, today, formatLocalDate, formatTxDateTime } from '../components/utils'
 import Modal from '../components/Modal'
 import FormulaTooltip from '../components/FormulaTooltip'
 import {
@@ -524,7 +524,7 @@ export default function Family() {
                                 </div>
                                 {advanceItems.map(item => (
                                   <div key={item.id} className="family-breakdown-row advance-cols">
-                                    <div className="fb-cell-date">{item.date}</div>
+                                    <div className="fb-cell-date">{formatTxDateTime(item.date, item.created_at)}</div>
                                     <div className="fb-cell-main">
                                       <span style={{ fontWeight: 600, marginRight: 6 }}>{item.category}</span>
                                       {item.note && <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.note}</span>}
@@ -565,7 +565,7 @@ export default function Family() {
                                 </div>
                                 {reimbItems.map(item => (
                                   <div key={item.id} className="family-breakdown-row reimb-cols">
-                                    <div className="fb-cell-date">{item.date}</div>
+                                    <div className="fb-cell-date">{formatTxDateTime(item.date, item.created_at)}</div>
                                     <div className="fb-cell-account" style={{ fontWeight: 600 }}>{item.account_name}</div>
                                     <div className="fb-cell-main">
                                       <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
