@@ -27,7 +27,8 @@ import {
   ChevronUp,
   Receipt,
   History,
-  Lightbulb
+  Lightbulb,
+  CreditCard
 } from 'lucide-react'
 
 export default function Family() {
@@ -159,6 +160,34 @@ export default function Family() {
       const newAmt = items.reduce((s: number, it: any) => s + it.amount, 0)
       setReimburseForm(p => ({ ...p, amount: newAmt.toString() }))
     }
+  }
+
+  const toggleSelectAccount = (accName: string) => {
+    if (!reimburseModalTarget) return
+    const items = reimburseModalTarget.advance_items || []
+    const accItems = items.filter((it: any) => (it.account_name || '個人帳戶') === accName)
+    const accIds = accItems.map((it: any) => it.id)
+    const isAllAccSelected = accIds.length > 0 && accIds.every((id: string) => selectedAdvanceIds.includes(id))
+
+    let nextIds: string[]
+    if (isAllAccSelected) {
+      nextIds = selectedAdvanceIds.filter((id: string) => !accIds.includes(id))
+    } else {
+      nextIds = Array.from(new Set([...selectedAdvanceIds, ...accIds]))
+    }
+    setSelectedAdvanceIds(nextIds)
+    const newAmt = items.filter((it: any) => nextIds.includes(it.id)).reduce((s: number, it: any) => s + it.amount, 0)
+    setReimburseForm(p => ({ ...p, amount: newAmt.toString() }))
+  }
+
+  const selectOnlyAccount = (accName: string) => {
+    if (!reimburseModalTarget) return
+    const items = reimburseModalTarget.advance_items || []
+    const accItems = items.filter((it: any) => (it.account_name || '個人帳戶') === accName)
+    const accIds = accItems.map((it: any) => it.id)
+    setSelectedAdvanceIds(accIds)
+    const newAmt = accItems.reduce((s: number, it: any) => s + it.amount, 0)
+    setReimburseForm(p => ({ ...p, amount: newAmt.toString() }))
   }
 
   const handleReimburseSubmit = async (e: React.FormEvent) => {
@@ -738,7 +767,7 @@ export default function Family() {
               勾選本次要報銷沖帳的代墊項目，系統將自動加總金額並從家庭共同基金撥入個人帳戶，結清之項目將從待報銷清單中移出！
             </div>
 
-            {/* 待報銷代墊明細勾選清單 */}
+            {/* 待報銷代墊明細勾選清單（依墊付帳戶分組、支援單筆與整戶勾選） */}
             <div className="form-group" style={{ marginBottom: 18 }}>
               <div className="flex items-center justify-between" style={{ marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
                 <label className="form-label" style={{ margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -761,59 +790,154 @@ export default function Family() {
                 <div className="text-xs text-secondary" style={{ padding: '10px 12px', background: 'var(--bg-surface-2)', borderRadius: 8 }}>
                   查無待報銷之代墊明細
                 </div>
-              ) : (
-                <div style={{
-                  maxHeight: '190px',
-                  overflowY: 'auto',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 8,
-                  background: 'var(--bg-surface-2)',
-                  padding: '6px'
-                }}>
-                  {(reimburseModalTarget.advance_items || []).map((it: any) => {
-                    const isChecked = selectedAdvanceIds.includes(it.id);
-                    return (
-                      <div
-                        key={it.id}
-                        onClick={() => toggleSelectAdvance(it.id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '8px 10px',
-                          borderRadius: 6,
-                          cursor: 'pointer',
-                          marginBottom: 4,
-                          background: isChecked ? 'rgba(85, 197, 149, 0.12)' : 'transparent',
-                          border: isChecked ? '1px solid rgba(85, 197, 149, 0.4)' : '1px solid transparent',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {}}
-                            style={{ cursor: 'pointer', accentColor: 'var(--color-success)', flexShrink: 0 }}
-                          />
-                          <div style={{ fontSize: '0.82rem', minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                              <span>{it.category}</span>
-                              {it.note && <span className="text-muted" style={{ fontWeight: 400 }}>· {it.note}</span>}
+              ) : (() => {
+                const groupedAdvances = (reimburseModalTarget.advance_items || []).reduce((acc: Record<string, { account_type: string; items: any[] }>, it: any) => {
+                  const accName = it.account_name || '個人帳戶';
+                  if (!acc[accName]) {
+                    acc[accName] = { account_type: it.account_type || 'other', items: [] };
+                  }
+                  acc[accName].items.push(it);
+                  return acc;
+                }, {} as Record<string, { account_type: string; items: any[] }>);
+
+                const accNames = Object.keys(groupedAdvances);
+
+                return (
+                  <div style={{
+                    maxHeight: 'min(320px, 42vh)',
+                    overflowY: 'auto',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 8,
+                    background: 'var(--bg-surface-2)',
+                    padding: '8px'
+                  }}>
+                    {accNames.map(accName => {
+                      const group = groupedAdvances[accName];
+                      const groupIds = group.items.map((it: any) => it.id);
+                      const isAllGroupSelected = groupIds.length > 0 && groupIds.every((id: string) => selectedAdvanceIds.includes(id));
+                      const isSomeGroupSelected = groupIds.some((id: string) => selectedAdvanceIds.includes(id));
+                      const groupSubtotal = group.items.reduce((s: number, it: any) => s + it.amount, 0);
+
+                      return (
+                        <div
+                          key={accName}
+                          style={{
+                            marginBottom: 10,
+                            border: '1px solid var(--border-color)',
+                            borderRadius: 8,
+                            background: 'var(--bg-surface)',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          {/* 帳戶分組標題列 */}
+                          <div
+                            style={{
+                              padding: '8px 10px',
+                              background: 'var(--bg-surface-2)',
+                              borderBottom: '1px solid var(--border-color)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 8,
+                              flexWrap: 'wrap'
+                            }}
+                          >
+                            <div
+                              onClick={() => toggleSelectAccount(accName)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                cursor: 'pointer',
+                                userSelect: 'none'
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isAllGroupSelected}
+                                ref={el => {
+                                  if (el) el.indeterminate = isSomeGroupSelected && !isAllGroupSelected;
+                                }}
+                                onChange={() => {}}
+                                style={{ cursor: 'pointer', accentColor: 'var(--color-success)', flexShrink: 0 }}
+                              />
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                {group.account_type === 'credit_card' ? (
+                                  <CreditCard size={15} color="var(--color-primary)" />
+                                ) : (
+                                  <Wallet size={15} color="var(--color-primary)" />
+                                )}
+                                <strong style={{ fontSize: '0.88rem' }}>{accName}</strong>
+                              </span>
+                              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                ({group.items.length} 筆 · 小計 {formatCurrency(groupSubtotal)})
+                              </span>
                             </div>
-                            <div className="text-xs text-secondary" style={{ marginTop: 2 }}>
-                              {it.date} · 墊付帳戶：{it.account_name}
-                            </div>
+
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: '2px 8px', fontSize: '0.75rem', height: '24px' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selectOnlyAccount(accName);
+                              }}
+                            >
+                              僅選此帳戶
+                            </button>
+                          </div>
+
+                          {/* 帳戶內明細清單 */}
+                          <div style={{ padding: '4px 6px' }}>
+                            {group.items.map((it: any) => {
+                              const isChecked = selectedAdvanceIds.includes(it.id);
+                              return (
+                                <div
+                                  key={it.id}
+                                  onClick={() => toggleSelectAdvance(it.id)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '7px 10px',
+                                    borderRadius: 6,
+                                    cursor: 'pointer',
+                                    marginBottom: 2,
+                                    background: isChecked ? 'rgba(85, 197, 149, 0.12)' : 'transparent',
+                                    border: isChecked ? '1px solid rgba(85, 197, 149, 0.4)' : '1px solid transparent',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {}}
+                                      style={{ cursor: 'pointer', accentColor: 'var(--color-success)', flexShrink: 0 }}
+                                    />
+                                    <div style={{ fontSize: '0.82rem', minWidth: 0 }}>
+                                      <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                        <span>{it.category}</span>
+                                        {it.note && <span className="text-muted" style={{ fontWeight: 400 }}>· {it.note}</span>}
+                                      </div>
+                                      <div className="text-xs text-secondary" style={{ marginTop: 2 }}>
+                                        {it.date}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-danger)', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                                    {formatCurrency(it.amount)}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-danger)', whiteSpace: 'nowrap', marginLeft: 8 }}>
-                          {formatCurrency(it.amount)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
               <div className="text-xs flex items-center justify-between" style={{ marginTop: 6, color: 'var(--text-secondary)' }}>
                 <span>已勾選：<strong>{selectedAdvanceIds.length}</strong> 筆</span>
                 <span>勾選項目合計：<strong style={{ color: 'var(--color-success)', fontSize: '0.95rem' }}>{formatCurrency(parseFloat(reimburseForm.amount) || 0)}</strong></span>
