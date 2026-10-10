@@ -12,18 +12,26 @@ forecast.use('*', authMiddleware);
 const CYCLE_MONTHS: Record<string, number> = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
 
 let forecastSchemaMigrated = false;
+let forecastMigratePromise: Promise<void> | null = null;
 export async function ensureForecastSchema(db: any) {
   if (forecastSchemaMigrated) return;
-  try {
-    await db.prepare(`
-      CREATE TABLE IF NOT EXISTS forecast_settled_events (
-        event_key TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `).run();
-  } catch (_) {}
-  forecastSchemaMigrated = true;
+  if (!forecastMigratePromise) {
+    forecastMigratePromise = (async () => {
+      try {
+        await db.prepare(`
+          CREATE TABLE IF NOT EXISTS forecast_settled_events (
+            event_key TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
+      } catch (_) {}
+      forecastSchemaMigrated = true;
+    })().finally(() => {
+      forecastMigratePromise = null;
+    });
+  }
+  await forecastMigratePromise;
 }
 
 export interface ForecastEvent {
@@ -269,6 +277,31 @@ async function getForecastStartingBalance(
   let immediateCardDeduct = 0;
   const cardEvents: ForecastEvent[] = [];
 
+  const cardsNeedingSplit = cards.filter(c => {
+    const totalDue = Math.max(0, c.balance || 0) + Math.max(0, c.unbilled || 0);
+    if (totalDue <= 0) return false;
+    if (c.is_joint === 1) return false;
+    if (scope === 'all' && c.user_id === userId) return false;
+    if (scope === 'personal' && c.user_id !== userId) return false;
+    return true;
+  });
+
+  const txsByCard = new Map<string, Array<{ amount: number; is_shared: number; is_billed: number }>>();
+  if (cardsNeedingSplit.length > 0) {
+    const cardPlaceholders = cardsNeedingSplit.map(() => '?').join(',');
+    const batchTxs = await db.prepare(
+      `SELECT account_id, amount, is_shared, COALESCE(is_billed, 0) as is_billed FROM transactions WHERE account_id IN (${cardPlaceholders}) AND type = 'expense' ORDER BY date DESC, created_at DESC`
+    ).bind(...cardsNeedingSplit.map(c => c.id)).all();
+    for (const row of ((batchTxs.results || []) as Array<{ account_id: string; amount: number; is_shared: number; is_billed: number }>)) {
+      let list = txsByCard.get(row.account_id);
+      if (!list) {
+        list = [];
+        txsByCard.set(row.account_id, list);
+      }
+      if (list.length < 50) list.push(row);
+    }
+  }
+
   for (const card of cards) {
     const isOwn = card.user_id === userId;
     const isJoint = card.is_joint === 1;
@@ -293,10 +326,7 @@ async function getForecastStartingBalance(
       unbilled = 0;
     } else {
       // 私卡於公帳或個人私帳視角：依交易之 is_billed 與 is_shared 精確拆分已出帳與未出帳歸屬
-      const txs = await db.prepare(
-        "SELECT amount, is_shared, COALESCE(is_billed, 0) as is_billed FROM transactions WHERE account_id = ? AND type = 'expense' ORDER BY date DESC, created_at DESC LIMIT 50"
-      ).bind(card.id).all();
-      const txList = (txs.results || []) as Array<{ amount: number; is_shared: number; is_billed: number }>;
+      const txList = txsByCard.get(card.id) || [];
 
       let remUnbilled = rawUnbilled;
       let sharedUnbilled = 0;

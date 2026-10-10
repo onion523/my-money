@@ -10,21 +10,29 @@ recurring.use('*', authMiddleware);
 const CYCLE_MONTHS: Record<string, number> = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
 
 let recurringMigrated = false;
+let recurringMigratePromise: Promise<void> | null = null;
 export async function ensureRecurringSchema(db: any) {
   if (recurringMigrated) return;
-  try {
-    await db.prepare('ALTER TABLE recurring_items ADD COLUMN month_of_cycle INTEGER NOT NULL DEFAULT 1').run();
-  } catch (_) {}
-  try {
-    await db.prepare('ALTER TABLE recurring_items ADD COLUMN is_shared INTEGER NOT NULL DEFAULT 0').run();
-    // 自動平滑升級：若先前已綁定家庭共同帳戶 (is_joint = 1)，自動升級為公帳 (is_shared = 1)
-    await db.prepare(`
-      UPDATE recurring_items
-      SET is_shared = 1
-      WHERE account_id IN (SELECT id FROM accounts WHERE is_joint = 1)
-    `).run();
-  } catch (_) {}
-  recurringMigrated = true;
+  if (!recurringMigratePromise) {
+    recurringMigratePromise = (async () => {
+      try {
+        await db.prepare('ALTER TABLE recurring_items ADD COLUMN month_of_cycle INTEGER NOT NULL DEFAULT 1').run();
+      } catch (_) {}
+      try {
+        await db.prepare('ALTER TABLE recurring_items ADD COLUMN is_shared INTEGER NOT NULL DEFAULT 0').run();
+        // 自動平滑升級：若先前已綁定家庭共同帳戶 (is_joint = 1)，自動升級為公帳 (is_shared = 1)
+        await db.prepare(`
+          UPDATE recurring_items
+          SET is_shared = 1
+          WHERE account_id IN (SELECT id FROM accounts WHERE is_joint = 1)
+        `).run();
+      } catch (_) {}
+      recurringMigrated = true;
+    })().finally(() => {
+      recurringMigratePromise = null;
+    });
+  }
+  await recurringMigratePromise;
 }
 
 // GET /recurring (支援 scope = all | household | personal)

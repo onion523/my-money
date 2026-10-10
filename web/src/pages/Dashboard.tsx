@@ -1,8 +1,8 @@
 import { DashboardSkeleton } from '../components/Skeleton'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
-import { accountsApi, txApi, recurringApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
+import { accountsApi, txApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
 import { formatCurrency, formatDate, today, thisMonth, getGreeting, CATEGORIES, buildHistoryMemo, recommendCategory, compareTransactionsNewestFirst } from '../components/utils'
 import { GoalIcon } from '../components/icons'
 import ScopeTabBar from '../components/ScopeTabBar'
@@ -35,10 +35,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [budgets, setBudgets] = useState<any[]>([])
-  const [recurringList, setRecurringList] = useState<any[]>([])
   const [goalsList, setGoalsList] = useState<any[]>([])
   const [monthlyStats, setMonthlyStats] = useState<any[]>([])
   const [viewScope, setViewScope] = useState<'all' | 'household' | 'personal'>('all')
+  const hasLoadedStaticRef = useRef(false)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -68,28 +68,29 @@ export default function Dashboard() {
 
   const historyMemo = useMemo(() => buildHistoryMemo(transactions), [transactions])
 
-  const loadData = async (scope = viewScope) => {
+  const loadData = async (scope = viewScope, forceStatic = false) => {
     try {
       setLoading(true)
       setLoadError(null)
-      const currentYear = thisMonth().slice(0, 4);
-      const [bal, accs, txs, buds, rec, g, monthlyStats] = await Promise.all([
+      const currentYear = thisMonth().slice(0, 4)
+      const shouldFetchStatic = forceStatic || !hasLoadedStaticRef.current
+
+      const [bal, accs, txs, monthlyData, buds, g] = await Promise.all([
         accountsApi.balance(scope),
         accountsApi.list(scope),
         txApi.list({ limit: '10', scope }),
-        budgetsApi.list(),
-        recurringApi.list(),
-        goalsApi.list(),
         txApi.monthly(currentYear, scope),
+        shouldFetchStatic ? budgetsApi.list() : Promise.resolve(null),
+        shouldFetchStatic ? goalsApi.list() : Promise.resolve(null),
       ])
 
       if (bal) setBalance(bal)
       setAccounts(accs)
       setTransactions(txs)
-      setBudgets(buds)
-      setRecurringList(rec)
-      setGoalsList(g)
-      setMonthlyStats(monthlyStats)
+      setMonthlyStats(monthlyData)
+      if (buds !== null) setBudgets(buds)
+      if (g !== null) setGoalsList(g)
+      if (shouldFetchStatic) hasLoadedStaticRef.current = true
     } catch (e: any) {
       console.error('Failed to load dashboard data:', e)
       setLoadError(e.message || '資料載入失敗，請檢查網路連線或伺服器狀態')
@@ -128,7 +129,7 @@ export default function Dashboard() {
       })
       setShowAddModal(false)
       setForm(p => ({ ...p, amount: '', note: '', date: today() }))
-      loadData(viewScope)
+      loadData(viewScope, true)
     } catch (err: any) {
       setSubmitError(err.message || '記帳失敗')
     } finally {

@@ -103,10 +103,10 @@ _Avoid_: 帳單狀態 (bill status)、結案標記 (settled flag)、未經出帳
 _Avoid_: 雙步覆蓋 (two-step overwrite)、夾零截斷 (zero clamping)、已出帳凍結 (billed freeze)
 
 **Credit Card Balance Reconciliation (信用卡未出帳自動校準)**:
-針對信用卡帳戶，使用者點擊「校準」、載入帳戶列表或新增／編輯信用卡收支時，系統依據該卡之結帳日與實際最近一次手動出帳紀錄（`last_rollover_at`）執行**狀態自癒與未出帳淨額校準**：
-1. **未經手動出帳之當期交易保護與自癒復原**：若當前日期已達或超過本期結帳日（$S_{\text{cutoff}}$），但該卡於本期結帳日當天或之後尚未執行過手動「出帳作業」（即 `last_rollover_at` 為空或早於 $S_{\text{cutoff}}$），則本期結帳週期（`date > S_prev`）仍屬於「待手動出帳之未出帳區間」，系統自動將該區間內曾被誤標為 `is_billed = 1` 之交易修復還原為 `is_billed = 0`（未出帳），絕不提前將 `date <= S_cutoff` 強制改為 `is_billed = 1`。
-2. **純粹未出帳淨額加總**：精準加總所有 `is_billed = 0` 之未出帳區間內「有效消費支出總額 － 刷退退款總額」（$$\max(0, \sum \text{未出帳消費} - \sum \text{未出帳刷退})$$），完全不扣減 `unbilled_offset` 還款紀錄以免溢扣上期繳卡費，並即刻復原公私帳刷卡分流（`shared_debt` 與 `personal_debt`）。
-_Avoid_: 結帳日當天未按出帳作業卻把未出帳強制歸零 (zeroing unbilled on statement day before manual rollover)、全額還款扣減 (full repayment deduction)、溢繳還款誤扣 (unbilled_offset deduction)
+針對信用卡帳戶，採行**讀寫分離與批次聚合原則**：僅於使用者手動點擊「校準」或發生信用卡收支／帳務異動（新增、編輯、刪除信用卡收支、機器人記帳、出帳作業）時，系統依據該卡之結帳日與實際最近一次手動出帳紀錄（`last_rollover_at`）執行**狀態自癒與未出帳淨額寫入校準**；而載入帳戶列表與查詢淨可用餘額時則維持**純唯讀批次聚合計算**（零資料庫寫入、無逐卡 N+1 迴圈）：
+1. **未經手動出帳之當期交易保護與自癒復原**：若當前日期已達或超過本期結帳日（$S_{\text{cutoff}}$），但該卡於本期結帳日當天或之後尚未執行過手動「出帳作業」（即 `last_rollover_at` 為空或早於 $S_{\text{cutoff}}$），則本期結帳週期（`date > S_prev`）仍屬於「待手動出帳之未出帳區間」，系統於校準時自動將該區間內曾被誤標為 `is_billed = 1` 之交易修復還原為 `is_billed = 0`（未出帳），絕不提前將 `date <= S_cutoff` 強制改為 `is_billed = 1`。
+2. **純粹未出帳淨額加總**：精準加總所有 `is_billed = 0` 之未出帳區間內「有效消費支出總額 － 刷退退款總額」（$$\max(0, \sum \text{未出帳消費} - \sum \text{未出帳刷退})$$），完全不扣減 `unbilled_offset` 還款紀錄以免溢扣上期繳卡費，並透過批次聚合即刻計算公私帳刷卡分流（`shared_debt` 與 `personal_debt`）。
+_Avoid_: 讀取帳戶列表或餘額時夾帶資料庫寫入與逐卡 N+1 迴圈 (side-effect DB writes or N+1 per-card queries during read requests)、結帳日當天未按出帳作業卻把未出帳強制歸零 (zeroing unbilled on statement day before manual rollover)、全額還款扣減 (full repayment deduction)、溢繳還款誤扣 (unbilled_offset deduction)
 
 ---
 
@@ -332,8 +332,8 @@ _Avoid_: 載入轉圈 (spinner)、空白佔位 (blank placeholder)、假資料 (
 _Avoid_: 全頁轉圈 (page loading)、冷啟動 (cold start)
 
 **Inline Refetch Transition (二度篩選過渡狀態)**:
-頁面已完成初次載入後，使用者在同頁面進行篩選條件（如公私帳切換、月份切換）變更時，保留當前視圖並以輕量局部過渡（或半透明微光）更新資料的狀態，避免全頁閃爍。
-_Avoid_: 二次骨架 (secondary skeleton)、重新載入 (reload)
+頁面已完成初次載入後，使用者在同頁面進行篩選條件（如公私帳視角切換、月份或日期區間切換、指定帳戶過濾）變更時，保留當前視圖並以輕量局部過渡更新資料的狀態，且**僅精準請求隨該篩選條件變動之資料端點**（不隨當前篩選條件變動之基礎資料如全量帳戶選單、家庭角色、儲蓄目標或跨視角預算，僅於初次掛載或資料異動時請求），避免全頁閃爍與冗餘網路往返。
+_Avoid_: 二次骨架 (secondary skeleton)、重新載入 (reload)、切換篩選時無差別重抓不隨條件變動之靜態資源 (refetching filter-invariant endpoints on scope or date change)
 
 **Shimmer Effect (微光動效 / 溫暖水彩果凍玻璃)**:
 骨架屏融合 135 度櫻粉微暖雙漸層底色、毛玻璃通透感 (blur 5px) 與雙峰果凍高光波紋自左至右循環流動的 CSS 動態效果，容器本體維持絕對座標固定，並於深色模式下對齊「月影鈦銀灰」基底與微光邊框。

@@ -9,26 +9,46 @@ const households = new Hono<{ Bindings: Env; Variables: Vars }>();
 households.use('*', authMiddleware);
 
 export async function getUserHousehold(db: D1Database, userId: string): Promise<{ household: Household | null; memberUserIds: string[]; myRole: 'admin' | 'member' | null }> {
-  const member = await db.prepare(
-    'SELECT household_id, role FROM household_members WHERE user_id = ?'
-  ).bind(userId).first<{ household_id: string; role: 'admin' | 'member' }>();
+  const rows = await db.prepare(`
+    SELECT
+      hm.user_id,
+      hm.role,
+      h.id as h_id,
+      h.name as h_name,
+      h.created_by as h_created_by,
+      h.created_at as h_created_at
+    FROM household_members hm
+    LEFT JOIN households h ON hm.household_id = h.id
+    WHERE hm.household_id = (SELECT household_id FROM household_members WHERE user_id = ? LIMIT 1)
+  `).bind(userId).all<{
+    user_id: string;
+    role: 'admin' | 'member';
+    h_id: string | null;
+    h_name: string | null;
+    h_created_by: string | null;
+    h_created_at: string | null;
+  }>();
 
-  if (!member) {
+  const list = rows.results || [];
+  if (list.length === 0) {
     return { household: null, memberUserIds: [userId], myRole: null };
   }
 
-  const household = await db.prepare(
-    'SELECT * FROM households WHERE id = ?'
-  ).bind(member.household_id).first<Household>();
-
-  const members = await db.prepare(
-    'SELECT user_id FROM household_members WHERE household_id = ?'
-  ).bind(member.household_id).all<{ user_id: string }>();
-
-  const memberUserIds = members.results.map(m => m.user_id);
+  const memberUserIds = list.map(m => m.user_id);
   if (!memberUserIds.includes(userId)) memberUserIds.push(userId);
 
-  return { household: household || null, memberUserIds, myRole: member.role || 'member' };
+  const myRow = list.find(m => m.user_id === userId);
+  const first = list[0];
+  const household: Household | null = first.h_id
+    ? {
+        id: first.h_id,
+        name: first.h_name || '',
+        created_by: first.h_created_by || '',
+        created_at: first.h_created_at || '',
+      }
+    : null;
+
+  return { household, memberUserIds, myRole: myRow?.role || 'member' };
 }
 
 // GET /households/current
@@ -201,76 +221,81 @@ households.delete('/members/:targetUserId', async (c) => {
 });
 
 
-// GET /households/advances (家庭代墊款待報銷統計與明細)
+// GET /households/advances (家庭代墊款待報銷統計與明細 — 批次查詢聚合)
 households.get('/advances', async (c) => {
   await ensureAccountsSchema(c.env.DB);
   const userId = c.get('userId');
   const { household, memberUserIds } = await getUserHousehold(c.env.DB, userId);
   if (!household) return c.json({ success: true, data: [] });
 
-  const membersResult = await c.env.DB.prepare(`
-    SELECT hm.user_id, u.name, u.email
-    FROM household_members hm
-    JOIN users u ON hm.user_id = u.id
-    WHERE hm.household_id = ?
-  `).bind(household.id).all();
+  const placeholders = memberUserIds.map(() => '?').join(',');
 
-  const advances = await Promise.all((membersResult.results as any[]).map(async (m) => {
-    // 個人為家庭公帳墊付支出總額 (僅限個人帳戶/私卡 is_joint = 0，排除共同基金帳戶與轉帳、還款、報銷)
-    const advRow = await c.env.DB.prepare(`
-      SELECT COALESCE(SUM(t.amount), 0) as total
+  const [membersResult, allSharedPersonalExpenses, allReimbIncomes, allReceivingAccounts] = await c.env.DB.batch([
+    c.env.DB.prepare(`
+      SELECT hm.user_id, u.name, u.email
+      FROM household_members hm
+      JOIN users u ON hm.user_id = u.id
+      WHERE hm.household_id = ?
+    `).bind(household.id),
+    c.env.DB.prepare(`
+      SELECT t.id, t.user_id, t.date, t.created_at, t.category, t.note, t.amount, t.reimbursement_id,
+             COALESCE(a.name, '個人帳戶') as account_name, COALESCE(a.type, 'other') as account_type
       FROM transactions t
       LEFT JOIN accounts a ON t.account_id = a.id
-      WHERE t.user_id = ? 
-        AND t.is_shared = 1 
+      WHERE t.user_id IN (${placeholders})
+        AND t.is_shared = 1
         AND t.type = 'expense'
         AND (a.is_joint = 0 OR a.is_joint IS NULL)
         AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-    `).bind(m.user_id).first<{ total: number }>();
-
-    // 個人已收到之公帳代墊報銷款
-    const reimbRow = await c.env.DB.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total
-      FROM transactions
-      WHERE user_id = ? AND category = '公帳代墊報銷' AND type = 'income'
-    `).bind(m.user_id).first<{ total: number }>();
-
-    const totalAdvanced = advRow?.total || 0;
-    const totalReimbursed = reimbRow?.total || 0;
-
-    // 自動自癒歷史既有報銷款（若總報銷款 > 已標記結清之代墊款，將最早之未標記代墊對齊為已報銷）
-    const linkedRow = await c.env.DB.prepare(`
-      SELECT COALESCE(SUM(t.amount), 0) as total
+      ORDER BY t.date DESC, t.created_at DESC, t.rowid DESC
+    `).bind(...memberUserIds),
+    c.env.DB.prepare(`
+      SELECT t.id, t.user_id, t.date, t.created_at, t.amount, t.note, COALESCE(a.name, '收款帳戶') as account_name
       FROM transactions t
       LEFT JOIN accounts a ON t.account_id = a.id
-      WHERE t.user_id = ? 
-        AND t.is_shared = 1 
-        AND t.type = 'expense'
-        AND (a.is_joint = 0 OR a.is_joint IS NULL)
-        AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-        AND t.reimbursement_id IS NOT NULL AND t.reimbursement_id != ''
-    `).bind(m.user_id).first<{ total: number }>();
+      WHERE t.user_id IN (${placeholders}) AND t.category = '公帳代墊報銷' AND t.type = 'income'
+      ORDER BY t.date DESC, t.created_at DESC, t.rowid DESC
+    `).bind(...memberUserIds),
+    c.env.DB.prepare(`
+      SELECT id, user_id, name, type
+      FROM accounts
+      WHERE user_id IN (${placeholders}) AND is_joint = 0 AND type IN ('bank', 'cash')
+      ORDER BY created_at ASC
+    `).bind(...memberUserIds),
+  ]);
 
-    const linkedTotal = linkedRow?.total || 0;
+  const members = (membersResult.results as any[]) || [];
+  const expenseRows = (allSharedPersonalExpenses.results as any[]) || [];
+  const reimbRows = (allReimbIncomes.results as any[]) || [];
+  const recvAccRows = (allReceivingAccounts.results as any[]) || [];
+
+  const healBatchStmts: any[] = [];
+
+  const advances = members.map((m) => {
+    const myExpenses = expenseRows.filter(r => r.user_id === m.user_id);
+    const myReimbs = reimbRows.filter(r => r.user_id === m.user_id);
+    const myRecvAccs = recvAccRows
+      .filter(r => r.user_id === m.user_id)
+      .map(({ id, name, type }) => ({ id, name, type }));
+
+    const totalAdvanced = myExpenses.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const totalReimbursed = myReimbs.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const linkedTotal = myExpenses
+      .filter(r => r.reimbursement_id && String(r.reimbursement_id).trim() !== '')
+      .reduce((s, r) => s + Number(r.amount || 0), 0);
+
+    // 若有舊版未關聯之歷史報銷差額，收集至單一批次自癒並同步反映於記憶體清單
     if (totalReimbursed > linkedTotal) {
       let toLink = totalReimbursed - linkedTotal;
-      const unlinkedRows = await c.env.DB.prepare(`
-        SELECT t.id, t.amount
-        FROM transactions t
-        LEFT JOIN accounts a ON t.account_id = a.id
-        WHERE t.user_id = ? 
-          AND t.is_shared = 1 
-          AND t.type = 'expense'
-          AND (a.is_joint = 0 OR a.is_joint IS NULL)
-          AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-          AND (t.reimbursement_id IS NULL OR t.reimbursement_id = '')
-        ORDER BY t.date ASC, t.created_at ASC, t.rowid ASC
-      `).bind(m.user_id).all();
-
-      for (const it of (unlinkedRows.results as any[])) {
+      const unlinkedOldestFirst = [...myExpenses]
+        .filter(r => !r.reimbursement_id || String(r.reimbursement_id).trim() === '')
+        .reverse();
+      for (const it of unlinkedOldestFirst) {
         if (it.amount <= toLink) {
-          await c.env.DB.prepare("UPDATE transactions SET reimbursement_id = 'historical_reimbursement' WHERE id = ?")
-            .bind(it.id).run();
+          it.reimbursement_id = 'historical_reimbursement';
+          healBatchStmts.push(
+            c.env.DB.prepare("UPDATE transactions SET reimbursement_id = 'historical_reimbursement' WHERE id = ?").bind(it.id)
+          );
           toLink -= it.amount;
         } else {
           break;
@@ -278,39 +303,17 @@ households.get('/advances', async (c) => {
       }
     }
 
-    // 待報銷消費明細清單（僅列出尚未結清之代墊明細）
-    const advanceItemsResult = await c.env.DB.prepare(`
-      SELECT t.id, t.date, t.created_at, t.category, t.note, t.amount, COALESCE(a.name, '個人帳戶') as account_name, COALESCE(a.type, 'other') as account_type
-      FROM transactions t
-      LEFT JOIN accounts a ON t.account_id = a.id
-      WHERE t.user_id = ? 
-        AND t.is_shared = 1 
-        AND t.type = 'expense'
-        AND (a.is_joint = 0 OR a.is_joint IS NULL)
-        AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-        AND (t.reimbursement_id IS NULL OR t.reimbursement_id = '')
-      ORDER BY t.date DESC, t.created_at DESC, t.rowid DESC
-    `).bind(m.user_id).all();
+    const advanceItems = myExpenses
+      .filter(r => !r.reimbursement_id || String(r.reimbursement_id).trim() === '')
+      .map(({ id, date, created_at, category, note, amount, account_name, account_type }) => ({
+        id, date, created_at, category, note, amount, account_name, account_type
+      }));
 
-    // 歷史報銷撥款紀錄
-    const reimbItemsResult = await c.env.DB.prepare(`
-      SELECT t.id, t.date, t.created_at, t.amount, t.note, COALESCE(a.name, '收款帳戶') as account_name
-      FROM transactions t
-      LEFT JOIN accounts a ON t.account_id = a.id
-      WHERE t.user_id = ? AND t.category = '公帳代墊報銷' AND t.type = 'income'
-      ORDER BY t.date DESC, t.created_at DESC, t.rowid DESC
-    `).bind(m.user_id).all();
+    const reimbursementItems = myReimbs.map(({ id, date, created_at, amount, note, account_name }) => ({
+      id, date, created_at, amount, note, account_name
+    }));
 
-    const advanceItems = (advanceItemsResult.results as any[]) || [];
-    const pendingReimburse = advanceItems.reduce((s, it) => s + it.amount, 0);
-
-    // 該成員可用於收款之個人正資產私帳（脫敏處理，僅揭示 id, name, type，嚴格隱藏 balance 等金額）
-    const receivingAccountsResult = await c.env.DB.prepare(`
-      SELECT id, name, type
-      FROM accounts
-      WHERE user_id = ? AND is_joint = 0 AND type IN ('bank', 'cash')
-      ORDER BY created_at ASC
-    `).bind(m.user_id).all();
+    const pendingReimburse = advanceItems.reduce((s, it) => s + Number(it.amount || 0), 0);
 
     return {
       user_id: m.user_id,
@@ -320,10 +323,14 @@ households.get('/advances', async (c) => {
       total_reimbursed: totalReimbursed,
       pending_reimburse: pendingReimburse,
       advance_items: advanceItems,
-      reimbursement_items: reimbItemsResult.results || [],
-      receiving_accounts: receivingAccountsResult.results || []
+      reimbursement_items: reimbursementItems,
+      receiving_accounts: myRecvAccs
     };
-  }));
+  });
+
+  if (healBatchStmts.length > 0) {
+    await c.env.DB.batch(healBatchStmts);
+  }
 
   return c.json({ success: true, data: advances });
 });
@@ -374,29 +381,28 @@ households.post('/reimburse', async (c) => {
   const targetUser = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(target_user_id).first<{ name: string }>();
   const targetName = targetUser?.name || '成員';
 
-  await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE accounts SET balance = balance - ? WHERE id = ?').bind(amt, from_account_id),
-    c.env.DB.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(amt, to_account_id),
-  ]);
-
   const outTxId = generateId();
   const inTxId = generateId();
 
-  await c.env.DB.batch([
+  const writeStmts: any[] = [
+    c.env.DB.prepare('UPDATE accounts SET balance = balance - ? WHERE id = ?').bind(amt, from_account_id),
+    c.env.DB.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(amt, to_account_id),
     c.env.DB.prepare(
       'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(outTxId, userId, from_account_id, 'expense', '公帳代墊報銷', amt, note ? `${note} (撥款至 ${targetName} ${toAcc.name})` : `撥款報銷代墊款給 ${targetName} (${toAcc.name})`, date, 1),
     c.env.DB.prepare(
       'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(inTxId, target_user_id, to_account_id, 'income', '公帳代墊報銷', amt, note ? `${note} (來自家庭基金 ${fromAcc.name})` : `收到公帳代墊報銷款 (來自 ${fromAcc.name})`, date, 0)
-  ]);
+    ).bind(inTxId, target_user_id, to_account_id, 'income', '公帳代墊報銷', amt, note ? `${note} (來自家庭基金 ${fromAcc.name})` : `收到公帳代墊報銷款 (來自 ${fromAcc.name})`, date, 0),
+  ];
 
   // 關聯結清選定之代墊明細
   if (Array.isArray(advance_ids) && advance_ids.length > 0) {
     for (const advId of advance_ids) {
-      await c.env.DB.prepare(
-        'UPDATE transactions SET reimbursement_id = ? WHERE id = ? AND user_id = ?'
-      ).bind(inTxId, advId, target_user_id).run();
+      writeStmts.push(
+        c.env.DB.prepare(
+          'UPDATE transactions SET reimbursement_id = ? WHERE id = ? AND user_id = ?'
+        ).bind(inTxId, advId, target_user_id)
+      );
     }
   } else {
     // 容錯 fallback：依時間順序將未結清代墊對齊至該報銷款
@@ -415,12 +421,16 @@ households.post('/reimburse', async (c) => {
     `).bind(target_user_id).all();
     for (const it of (unlinked.results as any[])) {
       if (it.amount <= remainingAmt) {
-        await c.env.DB.prepare('UPDATE transactions SET reimbursement_id = ? WHERE id = ? AND user_id = ?')
-          .bind(inTxId, it.id, target_user_id).run();
+        writeStmts.push(
+          c.env.DB.prepare('UPDATE transactions SET reimbursement_id = ? WHERE id = ? AND user_id = ?')
+            .bind(inTxId, it.id, target_user_id)
+        );
         remainingAmt -= it.amount;
       }
     }
   }
+
+  await c.env.DB.batch(writeStmts);
 
   return c.json({
     success: true,

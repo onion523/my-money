@@ -1,5 +1,5 @@
 import { AccountsSkeleton } from '../components/Skeleton'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { accountsApi, Account, BalanceSummary, householdApi } from '../api/client'
 import { useStore } from '../store/useStore'
@@ -44,6 +44,7 @@ export default function Accounts() {
   const [totalPendingAdvances, setTotalPendingAdvances] = useState(0)
   const [loading, setLoading] = useState(true)
   const [scope, setScope] = useState<'all' | 'household' | 'personal'>('all')
+  const hasLoadedRoleRef = useRef(false)
 
   // 新增 / 編輯帳戶 Modal
   const [showModal, setShowModal] = useState(false)
@@ -89,15 +90,19 @@ export default function Accounts() {
   const loadData = async (currentScope: 'all' | 'household' | 'personal' = scope) => {
     try {
       setLoading(true)
+      const isInitial = !hasLoadedRoleRef.current
       const [accs, bal, householdData, advancesData] = await Promise.all([
         accountsApi.list(currentScope),
         accountsApi.balance(currentScope).catch(() => null),
-        householdApi.current().catch(() => null),
+        isInitial ? householdApi.current().catch(() => null) : Promise.resolve(undefined),
         currentScope === 'household' ? householdApi.advances().catch(() => []) : Promise.resolve([]),
       ])
       setAccounts(accs)
       if (bal) setBalance(bal)
-      if (householdData?.myRole) setMyRole(householdData.myRole)
+      if (householdData !== undefined) {
+        setMyRole(householdData?.myRole || null)
+        hasLoadedRoleRef.current = true
+      }
       if (currentScope === 'household' && Array.isArray(advancesData)) {
         const sumPending = advancesData.reduce((sum: number, a) => sum + (Number(a.pending_reimburse) || 0), 0)
         setTotalPendingAdvances(sumPending)

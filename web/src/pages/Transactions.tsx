@@ -1,5 +1,5 @@
 import { TransactionsSkeleton } from '../components/Skeleton'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { txApi, accountsApi, exportApi, householdApi, Transaction, Account } from '../api/client'
 import { useStore } from '../store/useStore'
 import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, buildHistoryMemo, recommendCategory, compareTransactionsNewestFirst } from '../components/utils'
@@ -33,6 +33,7 @@ export default function Transactions() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [myRole, setMyRole] = useState<'admin' | 'member' | null>(null)
   const [loading, setLoading] = useState(true)
+  const hasLoadedContextRef = useRef(false)
 
   // 篩選狀態
   const [categoryFilter, setCategoryFilter] = useState('全部')
@@ -83,8 +84,8 @@ export default function Transactions() {
     }
   }, [scopeFilter, scopedAccounts])
 
-  // 載入資料
-  const loadData = async () => {
+  // 載入資料（篩選器變更時僅請求 txApi.list；初次掛載或收支異動後才更新 accounts）
+  const loadData = async (refreshAccounts = false) => {
     try {
       setLoading(true)
       const params: Record<string, string> = {
@@ -96,18 +97,20 @@ export default function Transactions() {
       if (accountFilter !== 'all') {
         params.account_id = accountFilter
       }
+      const isInitialMount = !hasLoadedContextRef.current
+      const shouldFetchAccounts = isInitialMount || refreshAccounts
+
       const [txs, accs, householdData] = await Promise.all([
         txApi.list(params),
-        accountsApi.list(),
-        householdApi.current().catch(() => null),
+        shouldFetchAccounts ? accountsApi.list() : Promise.resolve(null),
+        isInitialMount ? householdApi.current().catch(() => null) : Promise.resolve(undefined),
       ])
       setTransactions(txs)
-      setAccounts(accs)
-      if (householdData?.myRole) {
-        setMyRole(householdData.myRole)
-      } else {
-        setMyRole(null)
+      if (accs !== null) setAccounts(accs)
+      if (householdData !== undefined) {
+        setMyRole(householdData?.myRole || null)
       }
+      if (isInitialMount) hasLoadedContextRef.current = true
     } catch (err) {
       console.error(err)
     } finally {
@@ -125,7 +128,7 @@ export default function Transactions() {
   }
 
   useEffect(() => {
-    loadData()
+    loadData(false)
   }, [startDate, endDate, scopeFilter, accountFilter])
 
   // 開啟新增 Modal
@@ -206,7 +209,7 @@ export default function Transactions() {
         })
       }
       setShowModal(false)
-      loadData()
+      loadData(true)
     } catch (err: any) {
       setErrorMsg(err.message || '操作失敗')
     } finally {
@@ -219,7 +222,7 @@ export default function Transactions() {
     if (!window.confirm('確定要刪除這筆收支紀錄嗎？')) return
     try {
       await txApi.remove(id)
-      loadData()
+      loadData(true)
     } catch (err: any) {
       alert(err.message || '刪除失敗')
     }

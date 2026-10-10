@@ -1,56 +1,71 @@
 import { getTaipeiDateString } from '../utils/date';
 
 let accountsMigrated = false;
+let accountsMigratePromise: Promise<void> | null = null;
 export async function ensureAccountsSchema(db: any) {
   if (accountsMigrated) return;
-  try {
-    await db.prepare('ALTER TABLE accounts ADD COLUMN is_joint INTEGER DEFAULT 0').run();
-  } catch (_) {}
-  try {
-    await db.prepare('ALTER TABLE accounts ADD COLUMN last_rollover_at DATETIME').run();
-  } catch (_) {}
-  try {
-    await db.prepare('ALTER TABLE transactions ADD COLUMN unbilled_offset REAL DEFAULT 0').run();
-  } catch (_) {}
-  try {
-    await db.prepare('ALTER TABLE transactions ADD COLUMN is_billed INTEGER NOT NULL DEFAULT 0').run();
-  } catch (_) {}
-  try {
-    await db.prepare('ALTER TABLE transactions ADD COLUMN defer_to_next_statement INTEGER NOT NULL DEFAULT 0').run();
-  } catch (_) {}
-  try {
-    await db.prepare('ALTER TABLE transactions ADD COLUMN reimbursement_id TEXT').run();
-  } catch (_) {}
-  try {
-    const tableInfo = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'").first();
-    if (tableInfo && tableInfo.sql && !tableInfo.sql.includes("'cash'")) {
-      await db.prepare("PRAGMA foreign_keys = OFF").run();
-      await db.prepare(`CREATE TABLE IF NOT EXISTS accounts_new (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK(type IN ('bank', 'credit_card', 'cash')),
-        balance REAL NOT NULL DEFAULT 0,
-        credit_limit REAL,
-        statement_day INTEGER,
-        payment_due_day INTEGER,
-        unbilled REAL NOT NULL DEFAULT 0,
-        color TEXT NOT NULL DEFAULT '#FF8A8A',
-        is_joint INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`).run();
-      await db.prepare(`INSERT OR IGNORE INTO accounts_new (id, user_id, name, type, balance, credit_limit, statement_day, payment_due_day, unbilled, color, is_joint, created_at)
-        SELECT id, user_id, name, type, balance, credit_limit, statement_day, payment_due_day, unbilled, color, COALESCE(is_joint, 0), created_at FROM accounts`).run();
-      await db.prepare(`DROP TABLE accounts`).run();
-      await db.prepare(`ALTER TABLE accounts_new RENAME TO accounts`).run();
-      await db.prepare(`CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id)`).run();
-      await db.prepare("PRAGMA foreign_keys = ON").run();
-    }
-  } catch (err) {
-    console.error('Migration accounts check constraint error:', err);
+  if (!accountsMigratePromise) {
+    accountsMigratePromise = (async () => {
+      try {
+        await db.prepare('ALTER TABLE accounts ADD COLUMN is_joint INTEGER DEFAULT 0').run();
+      } catch (_) {}
+      try {
+        await db.prepare('ALTER TABLE accounts ADD COLUMN last_rollover_at DATETIME').run();
+      } catch (_) {}
+      try {
+        await db.prepare('ALTER TABLE transactions ADD COLUMN unbilled_offset REAL DEFAULT 0').run();
+      } catch (_) {}
+      try {
+        await db.prepare('ALTER TABLE transactions ADD COLUMN is_billed INTEGER NOT NULL DEFAULT 0').run();
+      } catch (_) {}
+      try {
+        await db.prepare('ALTER TABLE transactions ADD COLUMN defer_to_next_statement INTEGER NOT NULL DEFAULT 0').run();
+      } catch (_) {}
+      try {
+        await db.prepare('ALTER TABLE transactions ADD COLUMN reimbursement_id TEXT').run();
+      } catch (_) {}
+      try {
+        const tableInfo = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'").first();
+        if (tableInfo && tableInfo.sql && !tableInfo.sql.includes("'cash'")) {
+          await db.prepare("PRAGMA foreign_keys = OFF").run();
+          await db.prepare(`CREATE TABLE IF NOT EXISTS accounts_new (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('bank', 'credit_card', 'cash')),
+            balance REAL NOT NULL DEFAULT 0,
+            credit_limit REAL,
+            statement_day INTEGER,
+            payment_due_day INTEGER,
+            unbilled REAL NOT NULL DEFAULT 0,
+            color TEXT NOT NULL DEFAULT '#FF8A8A',
+            is_joint INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )`).run();
+          await db.prepare(`INSERT OR IGNORE INTO accounts_new (id, user_id, name, type, balance, credit_limit, statement_day, payment_due_day, unbilled, color, is_joint, created_at)
+            SELECT id, user_id, name, type, balance, credit_limit, statement_day, payment_due_day, unbilled, color, COALESCE(is_joint, 0), created_at FROM accounts`).run();
+          await db.prepare(`DROP TABLE accounts`).run();
+          await db.prepare(`ALTER TABLE accounts_new RENAME TO accounts`).run();
+          await db.prepare(`CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id)`).run();
+          await db.prepare("PRAGMA foreign_keys = ON").run();
+        }
+      } catch (err) {
+        console.error('Migration accounts check constraint error:', err);
+      }
+      try {
+        await db.batch([
+          db.prepare('CREATE INDEX IF NOT EXISTS idx_tx_account_type_billed_date ON transactions(account_id, type, is_billed, date)'),
+          db.prepare('CREATE INDEX IF NOT EXISTS idx_tx_user_shared_date ON transactions(user_id, is_shared, date)'),
+        ]);
+      } catch (_) {}
+      accountsMigrated = true;
+    })().finally(() => {
+      accountsMigratePromise = null;
+    });
   }
-  accountsMigrated = true;
+  await accountsMigratePromise;
 }
+
 import { Hono } from 'hono';
 import { Env } from '../types';
 import { authMiddleware, generateId } from '../middleware/jwt';
@@ -61,7 +76,7 @@ type Vars = { userId: string; userEmail: string; userName: string };
 const accounts = new Hono<{ Bindings: Env; Variables: Vars }>();
 accounts.use('*', authMiddleware);
 
-// GET /accounts
+// GET /accounts (純唯讀批次聚合，零資料庫寫入，ADR-0023)
 accounts.get('/', async (c) => {
   await ensureAccountsSchema(c.env.DB);
   const userId = c.get('userId');
@@ -88,38 +103,23 @@ accounts.get('/', async (c) => {
     WHERE ${sqlCondition}
     ORDER BY a.created_at ASC
   `).bind(...sqlParams).all();
-  const results = await Promise.all((rows.results as any[]).map(async (acc) => {
+
+  const accRows = (rows.results as any[]) || [];
+  const creditCards = accRows.filter(acc => acc.type === 'credit_card');
+  const metricsMap = await computeCreditCardsReadOnlyMetrics(c.env.DB, creditCards);
+
+  const results = accRows.map(acc => {
     if (acc.type !== 'credit_card') return acc;
-    const reconciled = await reconcileCreditCardUnbilled(c.env.DB, acc.id);
-    if (reconciled) {
-      return {
-        ...acc,
-        balance: reconciled.balance,
-        unbilled: reconciled.unbilled,
-        shared_debt: reconciled.shared_debt,
-        personal_debt: reconciled.personal_debt,
-      };
-    }
-    const totalDue = (acc.balance || 0) + (acc.unbilled || 0);
-    if (totalDue <= 0) {
-      return { ...acc, shared_debt: 0, personal_debt: 0 };
-    }
-    const txs = await c.env.DB.prepare(
-      "SELECT amount, is_shared FROM transactions WHERE account_id = ? AND type = 'expense' ORDER BY date DESC, created_at DESC LIMIT 50"
-    ).bind(acc.id).all();
-    let remaining = totalDue;
-    let shared = 0;
-    let personal = 0;
-    for (const tx of (txs.results as Array<{ amount: number; is_shared: number }>)) {
-      if (remaining <= 0) break;
-      const take = Math.min(remaining, tx.amount);
-      if (tx.is_shared === 1) shared += take;
-      else personal += take;
-      remaining -= take;
-    }
-    if (remaining > 0) personal += remaining;
-    return { ...acc, shared_debt: shared, personal_debt: personal };
-  }));
+    const m = metricsMap.get(acc.id);
+    if (!m) return { ...acc, shared_debt: 0, personal_debt: 0 };
+    return {
+      ...acc,
+      balance: m.balance,
+      unbilled: m.unbilled,
+      shared_debt: m.shared_debt,
+      personal_debt: m.personal_debt,
+    };
+  });
 
   // 過濾與脫敏處理 (ADR 0015)：
   // 在公帳視角下，若為個人私卡 (is_joint = 0)，必須滿足 shared_debt > 0 才納入展示；
@@ -474,25 +474,17 @@ accounts.post('/:id/rollover-statement', async (c) => {
   });
 });
 
-export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string) {
-  await ensureAccountsSchema(db);
-  const card = await db.prepare(
-    `SELECT id, name, balance, unbilled, statement_day, last_rollover_at, is_joint, user_id FROM accounts WHERE id = ? AND type = 'credit_card'`
-  ).bind(cardId).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; last_rollover_at?: string | null; is_joint: number; user_id: string }>();
-
-  if (!card) return null;
-
-  // 計算最近一次已發生之基準結帳日 (cutoffStatementDate, S_cutoff) 與上一個結帳日 (prevCutoffStatementDate, S_prev)
+export function calculateCardCutoffDates(statementDay: number | null | undefined, lastRolloverAt?: string | null): { cutoffStatementDate: string; prevCutoffStatementDate: string } {
   let cutoffStatementDate = '';
   let prevCutoffStatementDate = '';
-  if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
+  if (statementDay && statementDay >= 1 && statementDay <= 31) {
     const taipeiDateStr = getTaipeiDateString();
     const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
     let cutoffYear = currYear;
     let cutoffMonth = currMonth;
 
-    // 若當前日尚未到達結帳日 (currDay < card.statement_day)，則基準結帳日為上個月結帳日
-    if (currDay < card.statement_day) {
+    // 若當前日尚未到達結帳日 (currDay < statementDay)，則基準結帳日為上個月結帳日
+    if (currDay < statementDay) {
       cutoffMonth -= 1;
       if (cutoffMonth === 0) {
         cutoffMonth = 12;
@@ -500,15 +492,14 @@ export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string
       }
     }
 
-    // 檢查本期結帳日 (cutoffYear-cutoffMonth-statement_day) 是否已經由使用者手動執行過「出帳作業」(last_rollover_at >= S_cutoff)
-    // 若今天已到達或超過結帳日，但尚未手動點擊「出帳作業」，則本期刷卡明細必須維持在「未出帳」，故將有效已出帳基準日退回上一個結帳日！
+    // 檢查本期結帳日是否已經由使用者手動執行過「出帳作業」(last_rollover_at >= S_cutoff)
     const tentativeLastDay = new Date(cutoffYear, cutoffMonth, 0).getDate();
-    const tentativeDay = Math.min(card.statement_day, tentativeLastDay);
+    const tentativeDay = Math.min(statementDay, tentativeLastDay);
     const tentativeCutoff = `${cutoffYear}-${String(cutoffMonth).padStart(2, '0')}-${String(tentativeDay).padStart(2, '0')}`;
 
     let lastRolloverDateStr = '';
-    if (card.last_rollover_at) {
-      const raw = String(card.last_rollover_at).trim();
+    if (lastRolloverAt) {
+      const raw = String(lastRolloverAt).trim();
       const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z';
       const d = new Date(iso);
       if (!isNaN(d.getTime())) {
@@ -516,7 +507,7 @@ export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string
       }
     }
 
-    if (currDay >= card.statement_day && (!lastRolloverDateStr || lastRolloverDateStr < tentativeCutoff)) {
+    if (currDay >= statementDay && (!lastRolloverDateStr || lastRolloverDateStr < tentativeCutoff)) {
       cutoffMonth -= 1;
       if (cutoffMonth === 0) {
         cutoffMonth = 12;
@@ -525,7 +516,7 @@ export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string
     }
 
     const lastDayOfMonth = new Date(cutoffYear, cutoffMonth, 0).getDate();
-    const day = Math.min(card.statement_day, lastDayOfMonth);
+    const day = Math.min(statementDay, lastDayOfMonth);
     cutoffStatementDate = `${cutoffYear}-${String(cutoffMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     let prevYear = cutoffYear;
@@ -535,9 +526,126 @@ export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string
       prevYear -= 1;
     }
     const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
-    const prevDay = Math.min(card.statement_day, prevLastDay);
+    const prevDay = Math.min(statementDay, prevLastDay);
     prevCutoffStatementDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`;
   }
+  return { cutoffStatementDate, prevCutoffStatementDate };
+}
+
+const SYSTEM_CATEGORIES_SET = new Set(['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷']);
+
+// 批次唯讀計算多張信用卡之未出帳淨額與公私帳欠款分流（零資料庫寫入，單次 SQL 批次讀取，ADR-0023）
+export async function computeCreditCardsReadOnlyMetrics(
+  db: D1Database,
+  cards: Array<{ id: string; balance?: number; unbilled?: number; statement_day?: number | null; last_rollover_at?: string | null }>
+): Promise<Map<string, { balance: number; unbilled: number; shared_debt: number; personal_debt: number }>> {
+  const result = new Map<string, { balance: number; unbilled: number; shared_debt: number; personal_debt: number }>();
+  if (!cards || cards.length === 0) return result;
+
+  const uniqueCardIds = Array.from(new Set(cards.map(c => c.id)));
+  const placeholders = uniqueCardIds.map(() => '?').join(',');
+
+  const txRowsResult = await db.prepare(`
+    SELECT account_id, type, category, amount, date, is_shared, is_billed, defer_to_next_statement
+    FROM transactions
+    WHERE account_id IN (${placeholders})
+    ORDER BY date DESC, created_at DESC, rowid DESC
+  `).bind(...uniqueCardIds).all<{
+    account_id: string;
+    type: string;
+    category: string;
+    amount: number;
+    date: string;
+    is_shared: number;
+    is_billed: number;
+    defer_to_next_statement: number;
+  }>();
+
+  const txsByCard = new Map<string, Array<{
+    type: string;
+    category: string;
+    amount: number;
+    date: string;
+    is_shared: number;
+    is_billed: number;
+    defer_to_next_statement: number;
+  }>>();
+
+  for (const row of (txRowsResult.results || [])) {
+    let list = txsByCard.get(row.account_id);
+    if (!list) {
+      list = [];
+      txsByCard.set(row.account_id, list);
+    }
+    list.push(row);
+  }
+
+  for (const card of cards) {
+    const cardTxs = txsByCard.get(card.id) || [];
+    const { cutoffStatementDate, prevCutoffStatementDate } = calculateCardCutoffDates(card.statement_day, card.last_rollover_at);
+
+    let totalExp = 0;
+    let totalRef = 0;
+
+    for (const tx of cardTxs) {
+      if (SYSTEM_CATEGORIES_SET.has(tx.category)) continue;
+      let isUnbilledWindow = false;
+      if (cutoffStatementDate && prevCutoffStatementDate) {
+        isUnbilledWindow =
+          tx.date > cutoffStatementDate ||
+          (tx.date > prevCutoffStatementDate && tx.date <= cutoffStatementDate && Number(tx.defer_to_next_statement) === 1);
+      } else {
+        isUnbilledWindow = Number(tx.is_billed) === 0 || Number(tx.defer_to_next_statement) === 1;
+      }
+
+      if (isUnbilledWindow) {
+        if (tx.type === 'expense') totalExp += Number(tx.amount || 0);
+        else if (tx.type === 'income') totalRef += Number(tx.amount || 0);
+      }
+    }
+
+    const newUnbilled = Math.max(0, totalExp - totalRef);
+    const cardBalance = Number(card.balance || 0);
+    const totalDue = cardBalance + newUnbilled;
+
+    let shared = 0;
+    let personal = 0;
+    if (totalDue > 0) {
+      let remaining = totalDue;
+      let expCount = 0;
+      for (const tx of cardTxs) {
+        if (tx.type !== 'expense') continue;
+        expCount += 1;
+        if (expCount > 50 || remaining <= 0) break;
+        const take = Math.min(remaining, Number(tx.amount || 0));
+        if (Number(tx.is_shared) === 1) shared += take;
+        else personal += take;
+        remaining -= take;
+      }
+      if (remaining > 0) personal += remaining;
+    }
+
+    result.set(card.id, {
+      balance: cardBalance,
+      unbilled: newUnbilled,
+      shared_debt: shared,
+      personal_debt: personal,
+    });
+  }
+
+  return result;
+}
+
+export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string) {
+  await ensureAccountsSchema(db);
+  const card = await db.prepare(
+    `SELECT id, name, balance, unbilled, statement_day, last_rollover_at, is_joint, user_id FROM accounts WHERE id = ? AND type = 'credit_card'`
+  ).bind(cardId).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; last_rollover_at?: string | null; is_joint: number; user_id: string }>();
+
+  if (!card) return null;
+
+  // 計算最近一次已發生之基準結帳日 (cutoffStatementDate, S_cutoff) 與上一個結帳日 (prevCutoffStatementDate, S_prev)
+  const { cutoffStatementDate, prevCutoffStatementDate } = calculateCardCutoffDates(card.statement_day, card.last_rollover_at);
 
   // 1. 出帳狀態自癒修復 (Self-Healing Billed State)
   if (cutoffStatementDate && prevCutoffStatementDate) {
@@ -583,24 +691,29 @@ export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string
     queryParams.push(cutoffStatementDate, prevCutoffStatementDate, cutoffStatementDate);
   }
 
-  // 2. 當期未出帳之消費支出總額 (is_billed = 0)
-  const expenseRow = await db.prepare(`
-    SELECT COALESCE(SUM(amount), 0) as total
-    FROM transactions
-    WHERE account_id = ? AND type = 'expense' AND is_billed = 0
-      AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-      ${timeFilter}
-  `).bind(...queryParams).first<{ total: number }>();
+  // 2. 當期未出帳之消費支出與刷退收入總額 (批次查詢)
+  const [expenseRes, refundRes, recentExpRes] = await db.batch([
+    db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM transactions
+      WHERE account_id = ? AND type = 'expense' AND is_billed = 0
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+        ${timeFilter}
+    `).bind(...queryParams),
+    db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM transactions
+      WHERE account_id = ? AND type = 'income' AND is_billed = 0
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+        ${timeFilter}
+    `).bind(...queryParams),
+    db.prepare(
+      "SELECT amount, is_shared FROM transactions WHERE account_id = ? AND type = 'expense' ORDER BY date DESC, created_at DESC LIMIT 50"
+    ).bind(card.id),
+  ]);
 
-  // 3. 當期未出帳之刷退收入總額 (is_billed = 0)
-  const refundRow = await db.prepare(`
-    SELECT COALESCE(SUM(amount), 0) as total
-    FROM transactions
-    WHERE account_id = ? AND type = 'income' AND is_billed = 0
-      AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-      ${timeFilter}
-  `).bind(...queryParams).first<{ total: number }>();
-
+  const expenseRow = (expenseRes.results?.[0] as { total: number } | undefined);
+  const refundRow = (refundRes.results?.[0] as { total: number } | undefined);
   const totalExp = expenseRow ? Number(expenseRow.total) : 0;
   const totalRef = refundRow ? Number(refundRow.total) : 0;
 
@@ -616,11 +729,8 @@ export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string
   let shared = 0;
   let personal = 0;
   if (totalDue > 0) {
-    const txs = await db.prepare(
-      "SELECT amount, is_shared FROM transactions WHERE account_id = ? AND type = 'expense' ORDER BY date DESC, created_at DESC LIMIT 50"
-    ).bind(card.id).all();
     let remaining = totalDue;
-    for (const tx of (txs.results as Array<{ amount: number; is_shared: number }>)) {
+    for (const tx of ((recentExpRes.results || []) as Array<{ amount: number; is_shared: number }>)) {
       if (remaining <= 0) break;
       const take = Math.min(remaining, tx.amount);
       if (tx.is_shared === 1) shared += take;
@@ -681,8 +791,10 @@ accounts.post('/:id/reconcile', async (c) => {
 });
 
 
-// GET /accounts/balance 淨可用資金
+// GET /accounts/balance 淨可用資金 (純唯讀批次聚合，零資料庫寫入，ADR-0023)
 accounts.get('/balance', async (c) => {
+  await ensureAccountsSchema(c.env.DB);
+  await ensureRecurringSchema(c.env.DB);
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
@@ -699,54 +811,6 @@ accounts.get('/balance', async (c) => {
     sqlParams = [userId];
   }
 
-  const allAccounts = await c.env.DB.prepare(`SELECT * FROM accounts WHERE ${sqlCondition}`).bind(...sqlParams).all();
-  const accs = allAccounts.results as Array<{ id: string; type: string; balance: number; unbilled: number }>;
-  for (const acc of accs) {
-    if (acc.type === 'credit_card') {
-      const reconciled = await reconcileCreditCardUnbilled(c.env.DB, acc.id);
-      if (reconciled) {
-        acc.balance = reconciled.balance;
-        acc.unbilled = reconciled.unbilled;
-      }
-    }
-  }
-  const cashTotal = accs.filter(a => a.type === 'cash').reduce((s, a) => s + (a.balance || 0), 0);
-  const bankTotal = accs.filter(a => a.type === 'bank').reduce((s, a) => s + (a.balance || 0), 0);
-  const ccBilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.balance || 0), 0);
-  let ccUnbilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.unbilled || 0), 0);
-
-  // ADR 0015 精準會計責任法：在公帳視角下，加總全體成員個人私卡上的家庭代墊公帳欠款 (shared_debt)
-  if (scope === 'household') {
-    const personalCards = await c.env.DB.prepare(
-      `SELECT id, balance, unbilled FROM accounts WHERE user_id IN (${placeholders}) AND is_joint = 0 AND type = 'credit_card'`
-    ).bind(...memberUserIds).all<{ id: string; balance: number; unbilled: number }>();
-
-    for (const card of personalCards.results) {
-      const reconciled = await reconcileCreditCardUnbilled(c.env.DB, card.id);
-      if (reconciled) {
-        ccUnbilled += reconciled.shared_debt || 0;
-        continue;
-      }
-      const totalDue = (card.balance || 0) + (card.unbilled || 0);
-      if (totalDue <= 0) continue;
-      const txs = await c.env.DB.prepare(
-        "SELECT amount, is_shared FROM transactions WHERE account_id = ? AND type = 'expense' ORDER BY date DESC, created_at DESC LIMIT 50"
-      ).bind(card.id).all<{ amount: number; is_shared: number }>();
-      let remaining = totalDue;
-      let cardShared = 0;
-      for (const tx of txs.results) {
-        if (remaining <= 0) break;
-        const take = Math.min(remaining, tx.amount);
-        if (tx.is_shared === 1) cardShared += take;
-        remaining -= take;
-      }
-      ccUnbilled += cardShared;
-    }
-  }
-
-  const available = cashTotal + bankTotal - ccBilled - ccUnbilled;
-
-  await ensureRecurringSchema(c.env.DB);
   let recCondition = `((r.user_id = ? AND r.is_shared = 0) OR (r.user_id IN (${placeholders}) AND r.is_shared = 1))`;
   let recParams: any[] = [userId, ...memberUserIds];
   if (scope === 'household') {
@@ -757,20 +821,73 @@ accounts.get('/balance', async (c) => {
     recParams = [userId];
   }
 
-  const recurring = await c.env.DB.prepare(
-    `SELECT amount, cycle FROM recurring_items r WHERE ${recCondition} AND type = 'expense'`
-  ).bind(...recParams).all();
-  const cycleMonths: Record<string, number> = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
-  const monthlyFixed = (recurring.results as Array<{ amount: number; cycle: string }>)
-    .reduce((s, r) => s + r.amount / (cycleMonths[r.cycle] || 1), 0);
+  const batchQueries: any[] = [
+    c.env.DB.prepare(`SELECT * FROM accounts WHERE ${sqlCondition}`).bind(...sqlParams),
+    c.env.DB.prepare(`SELECT amount, cycle FROM recurring_items r WHERE ${recCondition} AND type = 'expense'`).bind(...recParams),
+  ];
 
-  let monthlyGoals = 0;
-  if (scope !== 'household') {
+  if (scope === 'household') {
+    batchQueries.push(
+      c.env.DB.prepare(
+        `SELECT id, balance, unbilled, statement_day, last_rollover_at FROM accounts WHERE user_id IN (${placeholders}) AND is_joint = 0 AND type = 'credit_card'`
+      ).bind(...memberUserIds)
+    );
+  } else {
     const goalsCondition = scope === 'personal' ? 'user_id = ?' : `user_id IN (${placeholders})`;
     const goalsParams = scope === 'personal' ? [userId] : memberUserIds;
-    const goals = await c.env.DB.prepare(`SELECT monthly_reserve FROM goals WHERE ${goalsCondition}`).bind(...goalsParams).all();
-    monthlyGoals = (goals.results as Array<{ monthly_reserve: number }>).reduce((s, g) => s + g.monthly_reserve, 0);
+    batchQueries.push(
+      c.env.DB.prepare(`SELECT monthly_reserve FROM goals WHERE ${goalsCondition}`).bind(...goalsParams)
+    );
   }
+
+  const batchResults = await c.env.DB.batch(batchQueries);
+  const accs = (batchResults[0].results || []) as Array<{ id: string; type: string; balance: number; unbilled: number; statement_day?: number | null; last_rollover_at?: string | null }>;
+  const recurringRows = (batchResults[1].results || []) as Array<{ amount: number; cycle: string }>;
+  const thirdRows = (batchResults[2]?.results || []) as any[];
+
+  const personalCardsForHousehold = scope === 'household'
+    ? (thirdRows as Array<{ id: string; balance: number; unbilled: number; statement_day?: number | null; last_rollover_at?: string | null }>)
+    : [];
+
+  const allCardsToCompute = [
+    ...accs.filter(a => a.type === 'credit_card'),
+    ...personalCardsForHousehold,
+  ];
+  const cardMetricsMap = await computeCreditCardsReadOnlyMetrics(c.env.DB, allCardsToCompute);
+
+  for (const acc of accs) {
+    if (acc.type === 'credit_card') {
+      const m = cardMetricsMap.get(acc.id);
+      if (m) {
+        acc.balance = m.balance;
+        acc.unbilled = m.unbilled;
+      }
+    }
+  }
+
+  const cashTotal = accs.filter(a => a.type === 'cash').reduce((s, a) => s + (a.balance || 0), 0);
+  const bankTotal = accs.filter(a => a.type === 'bank').reduce((s, a) => s + (a.balance || 0), 0);
+  const ccBilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.balance || 0), 0);
+  let ccUnbilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.unbilled || 0), 0);
+
+  // ADR 0015 精準會計責任法：在公帳視角下，加總全體成員個人私卡上的家庭代墊公帳欠款 (shared_debt)
+  if (scope === 'household') {
+    for (const card of personalCardsForHousehold) {
+      const m = cardMetricsMap.get(card.id);
+      if (m) {
+        ccUnbilled += m.shared_debt || 0;
+      }
+    }
+  }
+
+  const available = cashTotal + bankTotal - ccBilled - ccUnbilled;
+
+  const cycleMonths: Record<string, number> = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
+  const monthlyFixed = recurringRows.reduce((s, r) => s + r.amount / (cycleMonths[r.cycle] || 1), 0);
+
+  const monthlyGoals = scope !== 'household'
+    ? (thirdRows as Array<{ monthly_reserve: number }>).reduce((s, g) => s + (g.monthly_reserve || 0), 0)
+    : 0;
 
   const disposable = available - monthlyFixed - monthlyGoals;
   return c.json({ success: true, data: { cashTotal, bankTotal, ccBilled, ccUnbilled, available, monthlyFixed, monthlyGoals, disposable } });

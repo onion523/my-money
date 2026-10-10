@@ -1,5 +1,5 @@
 import { AnalyticsSkeleton } from '../components/Skeleton'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   txApi,
   budgetsApi,
@@ -76,6 +76,8 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 640 : false)
+  const loadedMonthRef = useRef<string | null>(null)
+  const loadedYearScopeRef = useRef<string | null>(null)
 
   useEffect(() => {
     const handleResize = () => {
@@ -91,20 +93,29 @@ export default function Analytics() {
   const [budgetAmount, setBudgetAmount] = useState('')
   const [submittingBudget, setSubmittingBudget] = useState(false)
 
-  const loadData = async (month: string, currentScope: 'all' | 'household' | 'personal') => {
+  const loadData = async (month: string, currentScope: 'all' | 'household' | 'personal', forceBudgets = false) => {
     try {
       setLoading(true)
       setLoadError(null)
+      const year = month.slice(0, 4)
+      const yearScopeKey = `${year}:${currentScope}`
+      const needMonthData = forceBudgets || loadedMonthRef.current !== month
+      const needYearScopeData = loadedYearScopeRef.current !== yearScopeKey
+
       const [sum, mStats, buds, shares] = await Promise.all([
         txApi.summary(month, currentScope),
-        txApi.monthly(undefined, currentScope),
-        budgetsApi.list(month),
-        txApi.householdShares(month),
+        needYearScopeData ? txApi.monthly(year, currentScope) : Promise.resolve(null),
+        needMonthData ? budgetsApi.list(month) : Promise.resolve(null),
+        needMonthData ? txApi.householdShares(month) : Promise.resolve(null),
       ])
       setCatSummary(sum)
-      setMonthlyStats(mStats)
-      setBudgets(buds)
-      setHouseholdShares(shares)
+      if (mStats !== null) {
+        setMonthlyStats(mStats)
+        loadedYearScopeRef.current = yearScopeKey
+      }
+      if (buds !== null) setBudgets(buds)
+      if (shares !== null) setHouseholdShares(shares)
+      if (needMonthData) loadedMonthRef.current = month
     } catch (e: any) {
       console.error('Failed to load analytics data:', e)
       setLoadError(e.message || '統計資料載入失敗，請檢查連線')
@@ -154,7 +165,7 @@ export default function Analytics() {
       })
       setShowBudgetModal(false)
       setBudgetAmount('')
-      loadData(currentMonth, scope)
+      loadData(currentMonth, scope, true)
     } catch (err: any) {
       alert(err.message || '預算設定失敗')
     } finally {
