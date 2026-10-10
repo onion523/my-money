@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Lock, FileText, CalendarClock, User } from 'lucide-react';
+import { Home, Lock, FileText, CalendarClock, User, CheckCircle2, HandCoins } from 'lucide-react';
 import { Transaction } from '../api/client';
 import { formatCurrency, formatDate, formatTxTime } from './utils';
 import { CategoryIcon } from './icons';
@@ -30,10 +30,20 @@ export default function TransactionRow({ tx, showDate = false, actions }: Transa
               <Lock size={11} style={{ flexShrink: 0 }} />
               <span>私帳</span>
             </span>
-          ) : (
+          ) : tx.account_is_joint === 1 ? (
             <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
               <Home size={11} style={{ flexShrink: 0 }} />
               <span>公帳</span>
+            </span>
+          ) : tx.reimbursement_id ? (
+            <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
+              <CheckCircle2 size={11} style={{ flexShrink: 0 }} />
+              <span>公帳 · 已撥款</span>
+            </span>
+          ) : (
+            <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#d97706', fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
+              <HandCoins size={11} style={{ flexShrink: 0 }} />
+              <span>公帳 · 待報銷</span>
             </span>
           )}
           {tx.is_billed === 1 && (

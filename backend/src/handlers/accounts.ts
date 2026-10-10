@@ -19,6 +19,9 @@ export async function ensureAccountsSchema(db: any) {
     await db.prepare('ALTER TABLE transactions ADD COLUMN defer_to_next_statement INTEGER NOT NULL DEFAULT 0').run();
   } catch (_) {}
   try {
+    await db.prepare('ALTER TABLE transactions ADD COLUMN reimbursement_id TEXT').run();
+  } catch (_) {}
+  try {
     const tableInfo = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'").first();
     if (tableInfo && tableInfo.sql && !tableInfo.sql.includes("'cash'")) {
       await db.prepare("PRAGMA foreign_keys = OFF").run();

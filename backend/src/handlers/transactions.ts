@@ -29,7 +29,7 @@ transactions.get('/', async (c) => {
 
   const { condition, params: scopeParams } = buildScopeCondition(userId, memberUserIds, scope);
 
-  let sql = `SELECT t.*, a.name as account_name, u.name as user_name FROM transactions t LEFT JOIN accounts a ON t.account_id = a.id LEFT JOIN users u ON t.user_id = u.id WHERE ${condition}`;
+  let sql = `SELECT t.*, a.name as account_name, a.is_joint as account_is_joint, a.type as account_type, u.name as user_name FROM transactions t LEFT JOIN accounts a ON t.account_id = a.id LEFT JOIN users u ON t.user_id = u.id WHERE ${condition}`;
   const params: (string | number)[] = [...scopeParams];
 
   if (category) { sql += ' AND t.category = ?'; params.push(category); }

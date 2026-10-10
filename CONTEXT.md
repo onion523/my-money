@@ -145,11 +145,22 @@ _Avoid_: 墊現鈔 (cash upfront)、自掏腰包 (out-of-pocket)
 _Avoid_: 代付 (upfront pay)、個人借款 (loan to family)、代付款 (advance)
 
 **Reimbursement (報銷沖帳)**:
-從家庭共同基金直接撥款轉帳至個人帳戶，以沖銷成員累積之家庭公帳待報銷總額的平帳作業。
+從家庭共同基金直接撥款轉帳至個人帳戶，以沖銷成員累積之家庭公帳待報銷款項的平帳作業。
 _Avoid_: 結算 (settlement)、退款 (refund)、還錢 (payback)、一鍵報銷 (one-click reimburse)
 
+**Itemized Advance Selection & Reimbursed Lifecycle (勾選指定代墊沖帳與明細生命週期)**:
+在家庭協同單元中執行「報銷沖帳」時，系統支援**逐筆勾選指定代墊明細**之分批沖帳機制：
+1. **報銷彈窗勾選清單（Reimbursement Item Selection）**：點擊「報銷沖帳」時，彈窗內完整列出該成員所有「待報銷」明細項目（日期、類別、備註、金額與扣款帳戶），附帶核取方塊（預設全選，支援自由勾選／取消勾選），報銷金額欄位由所勾選項目的金額總和即時動態連動，免去手動輸入計算。
+2. **家庭協同待報銷清單自動結清移出（Auto-Removal from Advance Pending List）**：一旦確認撥款報銷，被勾選結清之代墊消費記錄其報銷流水關聯，並**即刻從家庭協同的「待報銷消費明細」中移出**，使家庭協同單元維持極致精簡、僅呈現當前尚未結清的墊付責任。
+3. **收支明細精準三態徽章（Three-Tier Shared Status Badges）**：在全站收支明細列（`Transactions` / `TransactionRow`）中，公私帳標籤依支付來源與報銷狀態精準分流：
+   - **家庭共同帳戶直接扣款之公帳（非代墊）**：標示 **`[公帳]`** 藍色徽章。
+   - **個人私帳／私卡／現金墊付且尚未撥款之公帳（待報銷）**：標示 **`[公帳 · 待報銷]`** 暖橘色徽章。
+   - **個人墊付且已由共同基金撥款報銷之公帳（已結清）**：標示 **`[公帳 · 已撥款]`** 柔綠色徽章。
+   - **個人私帳**：維持 **`[私帳]`** 紅色鎖頭徽章。
+_Avoid_: 盲目手動輸入任意金額導致對不起來哪些項目已結清 (opaque lump-sum reimbursement without item linkage)、已結清代墊持續堆疊在待報銷清單中 (retained settled items cluttering pending advance list)、無法分辨公帳是共同基金扣款還是個人代墊 (inability to distinguish joint direct payments from personal advances)
+
 **Advance Items Breakdown (代墊與報銷明細)**:
-家庭頁面中各成員的透明流水帳明細，包含「個人墊付公帳消費清單（日期、類別、備註、扣款個人帳戶、金額）」以及「共同基金撥款報銷沖帳紀錄」，便於雙方隨時核帳與檢驗結清狀態。
+家庭頁面中各成員的透明流水帳明細，包含「個人墊付公帳待報銷消費清單（日期、類別、備註、扣款個人帳戶、金額）」以及「共同基金撥款報銷沖帳紀錄」，便於雙方隨時核帳與檢驗結清狀態。
 _Avoid_: 報銷單 (expense report)、請款單 (invoice)、明細表 (detail sheet)
 
 **Household Admin (家庭管理員)**:

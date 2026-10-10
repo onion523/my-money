@@ -62,6 +62,7 @@ export default function Family() {
     date: today(),
     note: '',
   })
+  const [selectedAdvanceIds, setSelectedAdvanceIds] = useState<string[]>([])
   const [reimbursing, setReimbursing] = useState(false)
   const [reimburseError, setReimburseError] = useState('')
 
@@ -114,18 +115,50 @@ export default function Family() {
     }
   }
 
-  
   const handleOpenReimburse = (adv: any) => {
     setReimburseModalTarget(adv)
+    const items = adv.advance_items || []
+    const allIds = items.map((it: any) => it.id)
+    setSelectedAdvanceIds(allIds)
+
+    const totalAmt = items.reduce((s: number, it: any) => s + it.amount, 0)
 
     setReimburseForm({
-      from_account_id: '',
-      to_account_id: '',
-      amount: adv.pending_reimburse.toString(),
+      from_account_id: jointAccounts[0]?.id || '',
+      to_account_id: adv.receiving_accounts?.[0]?.id || '',
+      amount: totalAmt.toString(),
       date: today(),
       note: `家庭共同基金撥款報銷 ${adv.user_name} 代墊公帳`,
     })
     setReimburseError('')
+  }
+
+  const toggleSelectAdvance = (id: string) => {
+    if (!reimburseModalTarget) return
+    const items = reimburseModalTarget.advance_items || []
+    let nextIds: string[]
+    if (selectedAdvanceIds.includes(id)) {
+      nextIds = selectedAdvanceIds.filter(x => x !== id)
+    } else {
+      nextIds = [...selectedAdvanceIds, id]
+    }
+    setSelectedAdvanceIds(nextIds)
+    const newAmt = items.filter((it: any) => nextIds.includes(it.id)).reduce((s: number, it: any) => s + it.amount, 0)
+    setReimburseForm(p => ({ ...p, amount: newAmt.toString() }))
+  }
+
+  const toggleSelectAllAdvances = () => {
+    if (!reimburseModalTarget) return
+    const items = reimburseModalTarget.advance_items || []
+    if (selectedAdvanceIds.length === items.length) {
+      setSelectedAdvanceIds([])
+      setReimburseForm(p => ({ ...p, amount: '0' }))
+    } else {
+      const allIds = items.map((it: any) => it.id)
+      setSelectedAdvanceIds(allIds)
+      const newAmt = items.reduce((s: number, it: any) => s + it.amount, 0)
+      setReimburseForm(p => ({ ...p, amount: newAmt.toString() }))
+    }
   }
 
   const handleReimburseSubmit = async (e: React.FormEvent) => {
@@ -136,7 +169,12 @@ export default function Family() {
     const { from_account_id, to_account_id, amount, date, note } = reimburseForm
     const amt = parseFloat(amount)
     if (!from_account_id || !to_account_id || isNaN(amt) || amt <= 0) {
-      setReimburseError('請選擇撥款公帳、收款帳戶並輸入大於 0 的金額')
+      setReimburseError('請選擇撥款公帳、收款帳戶並確認報銷金額大於 0')
+      return
+    }
+
+    if (selectedAdvanceIds.length === 0) {
+      setReimburseError('請至少勾選一筆要結清的代墊明細')
       return
     }
 
@@ -149,6 +187,7 @@ export default function Family() {
         amount: amt,
         date,
         note,
+        advance_ids: selectedAdvanceIds,
       })
       setReimburseModalTarget(null)
       await loadData()
@@ -503,16 +542,16 @@ export default function Family() {
                             <div className="flex items-center justify-between" style={{ marginBottom: 10, flexWrap: 'wrap', gap: 4 }}>
                               <h4 style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
                                 <Receipt size={16} color="var(--color-primary)" />
-                                個人代墊消費明細 ({advanceItems.length} 筆)
+                                個人待報銷代墊明細 ({advanceItems.length} 筆)
                               </h4>
                               <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                                僅計入自個人私帳、私卡或現金錢包支付之公帳
+                                僅計入自個人私帳、私卡或現金錢包支付且尚未報銷之公帳
                               </span>
                             </div>
 
                             {advanceItems.length === 0 ? (
                               <div className="text-xs text-secondary" style={{ padding: '12px 14px', background: 'var(--bg-surface-2)', borderRadius: 8 }}>
-                                尚未有任何個人代墊公帳消費紀錄。
+                                目前無待報銷之代墊消費紀錄（已結清款項自動移出，可於收支明細中查看「公帳 · 已撥款」標籤）。
                               </div>
                             ) : (
                               <div className="family-breakdown-table">
@@ -696,7 +735,89 @@ export default function Family() {
 
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.85rem', color: '#1E40AF' }}>
               <Lightbulb size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-              此操作將從家庭共同基金扣款，並撥入該成員的個人帳戶，自動結清公帳代墊款，<strong>不會被重複計入家庭消費支出</strong>！
+              勾選本次要報銷沖帳的代墊項目，系統將自動加總金額並從家庭共同基金撥入個人帳戶，結清之項目將從待報銷清單中移出！
+            </div>
+
+            {/* 待報銷代墊明細勾選清單 */}
+            <div className="form-group" style={{ marginBottom: 18 }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                <label className="form-label" style={{ margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Receipt size={16} color="var(--color-primary)" />
+                  <span>勾選本次要結清的代墊明細 (共 {(reimburseModalTarget.advance_items || []).length} 筆)</span>
+                </label>
+                {(reimburseModalTarget.advance_items || []).length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '2px 8px', fontSize: '0.8rem' }}
+                    onClick={toggleSelectAllAdvances}
+                  >
+                    {selectedAdvanceIds.length === (reimburseModalTarget.advance_items || []).length ? '取消全選' : '全選'}
+                  </button>
+                )}
+              </div>
+
+              {(reimburseModalTarget.advance_items || []).length === 0 ? (
+                <div className="text-xs text-secondary" style={{ padding: '10px 12px', background: 'var(--bg-surface-2)', borderRadius: 8 }}>
+                  查無待報銷之代墊明細
+                </div>
+              ) : (
+                <div style={{
+                  maxHeight: '190px',
+                  overflowY: 'auto',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 8,
+                  background: 'var(--bg-surface-2)',
+                  padding: '6px'
+                }}>
+                  {(reimburseModalTarget.advance_items || []).map((it: any) => {
+                    const isChecked = selectedAdvanceIds.includes(it.id);
+                    return (
+                      <div
+                        key={it.id}
+                        onClick={() => toggleSelectAdvance(it.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 10px',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          marginBottom: 4,
+                          background: isChecked ? 'rgba(85, 197, 149, 0.12)' : 'transparent',
+                          border: isChecked ? '1px solid rgba(85, 197, 149, 0.4)' : '1px solid transparent',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            style={{ cursor: 'pointer', accentColor: 'var(--color-success)', flexShrink: 0 }}
+                          />
+                          <div style={{ fontSize: '0.82rem', minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span>{it.category}</span>
+                              {it.note && <span className="text-muted" style={{ fontWeight: 400 }}>· {it.note}</span>}
+                            </div>
+                            <div className="text-xs text-secondary" style={{ marginTop: 2 }}>
+                              {it.date} · 墊付帳戶：{it.account_name}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-danger)', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                          {formatCurrency(it.amount)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="text-xs flex items-center justify-between" style={{ marginTop: 6, color: 'var(--text-secondary)' }}>
+                <span>已勾選：<strong>{selectedAdvanceIds.length}</strong> 筆</span>
+                <span>勾選項目合計：<strong style={{ color: 'var(--color-success)', fontSize: '0.95rem' }}>{formatCurrency(parseFloat(reimburseForm.amount) || 0)}</strong></span>
+              </div>
             </div>
 
             <div className="form-group">

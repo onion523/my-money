@@ -185,6 +185,7 @@ export const householdApi = {
     amount: number;
     date?: string;
     note?: string;
+    advance_ids?: string[];
   }) => post<{
     message: string;
     from_balance: number;
@@ -247,6 +248,9 @@ export interface Transaction {
   defer_to_next_statement?: number;
   created_at: string;
   account_name?: string;
+  account_is_joint?: number;
+  account_type?: string;
+  reimbursement_id?: string | null;
   user_name?: string;
 }
 
