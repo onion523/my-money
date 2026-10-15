@@ -493,8 +493,36 @@ accounts.get('/:id/rollover-preview', async (c) => {
   const totalRepay = Number((repayRes.results?.[0] as any)?.total_repay || 0);
   const baseNetUnbilled = Number((baseUnbilledRes.results?.[0] as any)?.net_unbilled || 0);
 
+  // 判定本期是否已執行過出帳作業 (是否有任何本期消費已是 is_billed = 1)
+  const hasRolledCycle = rawTxs.some(t => Number(t.is_billed) === 1);
+
+  // 標記交易的上期延入與初始延期狀態
+  const enrichedTxs = rawTxs.map(t => {
+    // 交易日早於或等於上期結帳日且未出帳者，屬於上期延入款
+    const isPriorDeferred = Boolean(statementDate && t.date <= prevStatementDate && Number(t.is_billed) === 0);
+    let isInitiallyDeferred = false;
+    if (hasRolledCycle) {
+      // 若當期已執行過出帳：仍為未出帳且標記延期者，代表上次出帳時已明確選擇延期
+      isInitiallyDeferred = Number(t.is_billed) === 0 && Number(t.defer_to_next_statement) === 1;
+    } else {
+      // 若當期尚未出帳：
+      // 上期延入款自動喚醒為納入本期出帳 (isInitiallyDeferred = false)
+      // 當期消費則維持是否被預先標記延期
+      if (isPriorDeferred) {
+        isInitiallyDeferred = false;
+      } else {
+        isInitiallyDeferred = Number(t.defer_to_next_statement) === 1;
+      }
+    }
+    return {
+      ...t,
+      is_prior_deferred: isPriorDeferred,
+      is_initially_deferred: isInitiallyDeferred,
+    };
+  });
+
   // 本期未被標記為延期之項目
-  const activeTxs = rawTxs.filter(t => Number(t.defer_to_next_statement) === 0);
+  const activeTxs = enrichedTxs.filter(t => !t.is_initially_deferred);
   const expenseTxs = activeTxs.filter(t => t.type === 'expense');
   const refundTxs = activeTxs.filter(t => t.type === 'income');
 
@@ -509,11 +537,13 @@ accounts.get('/:id/rollover-preview', async (c) => {
   const currentBalance = Number(card.balance || 0);
   const currentUnbilled = Number(card.unbilled || 0);
 
-  const deferredTxs = rawTxs.filter(t => Number(t.defer_to_next_statement) === 1);
+  const deferredTxs = enrichedTxs.filter(t => t.is_initially_deferred);
   const deferredNet = deferredTxs.reduce((s, t) => s + (t.type === 'expense' ? Number(t.amount || 0) : -Number(t.amount || 0)), 0);
 
   const projectedBalance = Math.max(0, baseNetBilled + netRolledAmount - totalRepay);
   const projectedUnbilled = Math.max(0, baseNetUnbilled + deferredNet);
+
+  const priorDeferredCount = enrichedTxs.filter(t => t.is_prior_deferred).length;
 
   return c.json({
     success: true,
@@ -538,9 +568,11 @@ accounts.get('/:id/rollover-preview', async (c) => {
       baseNetUnbilled,
       projectedBalance,
       projectedUnbilled,
+      hasRolledCycle,
+      priorDeferredCount,
       txCount: expenseTxs.length,
       refundCount: refundTxs.length,
-      transactions: rawTxs,
+      transactions: enrichedTxs,
     }
   });
 });

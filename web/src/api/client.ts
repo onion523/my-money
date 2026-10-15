@@ -76,8 +76,13 @@ export const accountsApi = {
     netRolledAmount: number;
     sharedDebt: number;
     personalDebt: number;
+    baseNetBilled?: number;
+    totalRepay?: number;
+    baseNetUnbilled?: number;
     projectedBalance: number;
     projectedUnbilled: number;
+    hasRolledCycle?: boolean;
+    priorDeferredCount?: number;
     txCount: number;
     refundCount: number;
     transactions: Array<{
@@ -89,6 +94,9 @@ export const accountsApi = {
       note: string | null;
       date: string;
       defer_to_next_statement: number;
+      is_billed?: number;
+      is_prior_deferred?: boolean;
+      is_initially_deferred?: boolean;
     }>;
   }>(`/accounts/${id}/rollover-preview`),
   rolloverStatement: (id: string, deferredTxIds?: string[]) => post<{

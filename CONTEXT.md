@@ -90,13 +90,20 @@ _Avoid_: 隱藏排除特定分類導致畫面明細與上方總計數字兜不�
 結帳日到達後，在持卡人尚未手動點擊「出帳作業」確認前，當期刷卡消費（含結帳日當天及該結帳週期內明細）一律維持為未出帳（`is_billed = 0`）並保留於「未出帳款（`unbilled`）」顯示，嚴禁於結帳日當天自動將未出帳歸零或未經出帳作業即覆寫為 `is_billed = 1`。當使用者點擊「出帳作業」時，系統開啟**出帳作業預覽彈窗（Statement Rollover Modal）**，並採行**週期全量檢視與真實明細冪等重算機制**：
 1. **週期全量明細透視（Full-Cycle Scope）**：預覽時完整撈取該結帳區間內的所有刷卡消費與刷退（涵蓋已出帳與未出帳明細），不因先前已執行過出帳而變為空清單，讓持卡人隨時可重新檢視當期完整帳單明細與各項目之延期狀態。
 2. **統計與公私帳拆解預覽**：清晰揭露本期結算起訖區間（例如 `9/11 次日 ～ 10/10`）、消費筆數與總計、刷退折抵淨額、本期預計出帳淨額，並即時拆解本期款項中之「家庭代墊公帳小計」與「個人私帳消費小計」。
-3. **明細檢視與動態延期暫存（Interactive Defer Toggle）**：彈窗展示週期內所有交易，每筆明細旁提供「延至下期」開關；切換時於前端本地記憶體動態重算本期帳單淨額與預估餘額，關閉彈窗則無副作用。
+3. **明細檢視與動態延期暫存（Interactive Defer Toggle & Status Badges）**：
+   - 清單依交易日期排列，並以語意徽章明確標示：`[上期延入]`（歷史週期遞延而來、預設納入本期出帳結算）、`[延至下期]`（於當期被指定遞延至下一週期並劃線扣除）。
+   - **智慧延期狀態識別（Initial Defer Identification）**：
+     - 若當期**尚未執行出帳作業**：上期延入款（`date <= prevStatementDate` 且 `is_billed = 0`）預設自動喚醒為「納入本期出帳」，不預設勾選延期。
+     - 若當期**已執行過出帳作業**（再次開啟彈窗二次檢視或調整）：當期仍為 `is_billed = 0 且 defer_to_next_statement = 1` 之款項，代表已於前次出帳中確認延期，維持勾選為 `[延至下期]`，其餘已出帳款項（`is_billed = 1`）維持納入。
 4. **真實明細冪等重算（Ground-Truth Recalculation）**：使用者確認出帳時，系統更新明細之出帳與延期狀態，並**根據整張卡片之所有已出帳消費、已出帳刷退及歷史還款紀錄全量精確重算 `balance`（已出帳待繳款）與 `unbilled`（未出帳款）**，徹底捨棄盲目的純增量累加（`balance = balance + rolled`），確保即使多次重複點選出帳作業、補登消費或修改延期，帳單數字永遠與底層交易明細 100% 精準吻合，絕不重複疊加。
 _Avoid_: 盲目累加導致重複點擊出帳金額疊加 (blind incremental balance addition causing double-count)、出帳後即變為空清單無法重新檢視調整 (empty list blocking re-inspection after initial rollover)、盲目確認無明細預覽之黑盒子出帳 (black-box rollover without preview)、結帳日未經手動出帳即自動歸零未出帳 (auto-zeroing unbilled on statement day before manual rollover)
 
-**Deferred Statement Billing (延至下期帳單)**:
-在記錄或編輯信用卡消費或刷退時，手動標記該筆收支延至下個結帳週期再行出帳與沖抵的屬性（defer_to_next_statement），適用於商家延遲請款、跨結帳日刷卡或跨期退款。在當期出帳作業時自動保留於未出帳，於下一期出帳作業時自動納入結算。當使用者在收支明細中編輯收支並勾選「延至下期帳單」（或將收支日期改至最近結帳日之後）時，系統立即將該筆收支之出帳狀態重置為未出帳（`is_billed = 0`），並自動同步重算該信用卡之未出帳金額（`unbilled`）。
-_Avoid_: 延遲繳款 (delayed payment)、跨期借貸 (cross-period loan)、下期消費 (next cycle expense)
+**Deferred Statement Billing (延至下期帳單與跨期延入生命週期)**:
+在記錄或編輯信用卡消費、或於出帳作業預覽彈窗中，標記該筆收支延至下個結帳週期再行出帳與沖抵的屬性（`defer_to_next_statement`），適用於商家延遲請款、爭議款或跨期退款。其生命週期嚴格劃分為兩大情境：
+1. **上期延入款 (Prior-Cycle Deferred Item)**：交易日期早於或等於上期結帳日（`date <= prevStatementDate`）且尚未出帳（`is_billed = 0`）之歷史款項。進入當前結帳週期時，其商業語意為「遞延至本期出帳」，因此在出帳作業預覽彈窗中**預設自動納入本期出帳**，清單中醒目標示為 `[上期延入]`；若當期商家依然未請款，持卡人仍可再次點擊「延至下期」繼續順延。
+2. **本期遞延下期款 (Current-Cycle Deferred Item)**：於當期出帳作業預覽中被持卡人勾選「延至下期」之交易（或於當期已出帳作業中被記錄延期者）。當期出帳時排除於出帳淨額外，維持未出帳（`is_billed = 0, defer_to_next_statement = 1`），並於下個結帳週期自動成為「上期延入款」。
+當使用者在收支明細中手動編輯勾選「延至下期帳單」（或將收支日期改至最近結帳日之後）時，系統將該筆收支重置為未出帳（`is_billed = 0`），並同步重算該信用卡之未出帳金額（`unbilled`）。
+_Avoid_: 上期延入款進入本期被持續排除導致永久無法出帳 (perpetually excluding prior-cycle deferred items from current statement)、延遲繳款 (delayed payment)、跨期借貸 (cross-period loan)、下期消費 (next cycle expense)
 
 **Billed Status (出帳狀態)**:
 每筆信用卡收支之結算狀態標記（is_billed），明確劃分「未出帳 (0)」與「已出帳 (1)」，作為帳單出帳作業、收支明細徽章顯示與未出帳自動校準之絕對準則。`is_billed = 1` 僅能由使用者手動執行「出帳作業（Statement Rollover）」寫入；嚴禁於系統啟動遷移或一般校準時，將尚未執行出帳作業之當期交易強制覆寫為 `is_billed = 1`。

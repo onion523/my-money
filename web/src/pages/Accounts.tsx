@@ -259,7 +259,16 @@ export default function Accounts() {
       setRolloverPreview(res)
       if (Array.isArray(res?.transactions)) {
         const deferred = res.transactions
-          .filter((t: any) => Number(t.defer_to_next_statement) === 1)
+          .filter((t: any) => {
+            if (t.is_initially_deferred !== undefined) {
+              return Boolean(t.is_initially_deferred)
+            }
+            const isPrior = Boolean(res.prevStatementDate && t.date <= res.prevStatementDate && Number(t.is_billed) === 0)
+            if (isPrior && !res.hasRolledCycle) {
+              return false
+            }
+            return Number(t.defer_to_next_statement) === 1
+          })
           .map((t: any) => t.id)
         setRolloverDeferredIds(new Set(deferred))
       }
@@ -1491,7 +1500,7 @@ export default function Accounts() {
                   gap: 8,
                 }}
               >
-                <div className="flex items-center gap-xs" style={{ fontSize: '0.88rem', color: '#1E40AF', fontWeight: 600 }}>
+                <div className="flex items-center gap-xs" style={{ fontSize: '0.88rem', color: '#1E40AF', fontWeight: 600, flexWrap: 'wrap' }}>
                   <Calendar size={16} />
                   <span>
                     本期結算區間：
@@ -1499,6 +1508,22 @@ export default function Accounts() {
                       ? `${rolloverPreview.prevStatementDate} 次日 ～ ${rolloverPreview.statementDate}`
                       : `至 ${rolloverPreview.statementDate || today()}`}
                   </span>
+                  {Number(rolloverPreview.priorDeferredCount || 0) > 0 && (
+                    <span
+                      style={{
+                        marginLeft: 6,
+                        fontSize: '0.73rem',
+                        fontWeight: 600,
+                        background: 'rgba(99, 102, 241, 0.15)',
+                        color: '#4338CA',
+                        padding: '1px 7px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(99, 102, 241, 0.25)',
+                      }}
+                    >
+                      含 {rolloverPreview.priorDeferredCount} 筆上期延入款（已預設納入結算）
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#4B5563' }}>
                   每月 {rolloverModalCard.statement_day || '--'} 號結帳 · {rolloverModalCard.payment_due_day || '--'} 號繳款
@@ -1672,6 +1697,22 @@ export default function Accounts() {
                                           <Lock size={10} style={{ marginRight: 2 }} />私帳
                                         </span>
                                       )}
+                                      {Boolean(t.is_prior_deferred || (rolloverPreview.prevStatementDate && t.date <= rolloverPreview.prevStatementDate && Number(t.is_billed) === 0)) && (
+                                        <span
+                                          className="badge"
+                                          style={{
+                                            fontSize: '0.7rem',
+                                            padding: '1px 5px',
+                                            background: 'rgba(99, 102, 241, 0.1)',
+                                            color: '#4F46E5',
+                                            fontWeight: 600,
+                                            border: '1px solid rgba(99, 102, 241, 0.25)',
+                                          }}
+                                          title="自上一結帳週期遞延而來，預設納入本期出帳"
+                                        >
+                                          上期延入
+                                        </span>
+                                      )}
                                       {isDeferred && (
                                         <span
                                           className="badge"
@@ -1681,6 +1722,7 @@ export default function Accounts() {
                                             background: '#FEF3C7',
                                             color: '#B45309',
                                             fontWeight: 600,
+                                            border: '1px solid rgba(245, 158, 11, 0.3)',
                                           }}
                                         >
                                           已延至下期
