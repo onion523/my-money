@@ -34,7 +34,9 @@ import {
   Banknote,
   PieChart,
   Landmark,
+  Clock,
 } from 'lucide-react'
+import { CategoryIcon } from '../components/icons'
 
 export default function Accounts() {
   const { user } = useStore()
@@ -238,19 +240,59 @@ export default function Accounts() {
     }
   }
 
-  const handleRollover = async (card: Account) => {
-    const cyclePrompt = card.statement_day
-      ? `確定要依據「${card.name}」的每月結帳日（${card.statement_day} 號），將本期結帳區間內的有效刷卡消費（自動扣除刷退，排除延至下期者）結算並出帳為已出帳待繳款嗎？`
-      : `確定要將「${card.name}」所有未延期的未出帳消費結算並出帳為已出帳待繳款嗎？`
-    if (!window.confirm(cyclePrompt)) {
-      return
-    }
+  // 出帳作業預覽 Modal (ADR-0024)
+  const [rolloverModalCard, setRolloverModalCard] = useState<Account | null>(null)
+  const [rolloverPreview, setRolloverPreview] = useState<any | null>(null)
+  const [rolloverLoading, setRolloverLoading] = useState(false)
+  const [rolloverSubmitting, setRolloverSubmitting] = useState(false)
+  const [rolloverDeferredIds, setRolloverDeferredIds] = useState<Set<string>>(new Set())
+  const [rolloverError, setRolloverError] = useState('')
+
+  const handleOpenRollover = async (card: Account) => {
+    setRolloverModalCard(card)
+    setRolloverLoading(true)
+    setRolloverError('')
+    setRolloverDeferredIds(new Set())
+    setRolloverPreview(null)
     try {
-      const res = await accountsApi.rolloverStatement(card.id)
-      alert(res.message || '出帳作業成功！')
-      loadData()
+      const res = await accountsApi.rolloverPreview(card.id)
+      setRolloverPreview(res)
     } catch (err: any) {
-      alert(err.message || '出帳作業失敗')
+      setRolloverError(err.message || '載入出帳預覽失敗')
+    } finally {
+      setRolloverLoading(false)
+    }
+  }
+
+  const handleToggleDefer = (txId: string) => {
+    setRolloverDeferredIds(prev => {
+      const next = new Set(prev)
+      if (next.has(txId)) {
+        next.delete(txId)
+      } else {
+        next.add(txId)
+      }
+      return next
+    })
+  }
+
+  const handleConfirmRollover = async () => {
+    if (!rolloverModalCard) return
+    try {
+      setRolloverSubmitting(true)
+      setRolloverError('')
+      const res = await accountsApi.rolloverStatement(
+        rolloverModalCard.id,
+        Array.from(rolloverDeferredIds)
+      )
+      alert(res.message || '出帳作業成功！')
+      setRolloverModalCard(null)
+      setRolloverPreview(null)
+      await loadData()
+    } catch (err: any) {
+      setRolloverError(err.message || '出帳作業失敗')
+    } finally {
+      setRolloverSubmitting(false)
     }
   }
 
@@ -861,7 +903,7 @@ export default function Accounts() {
                                 <button
                                   className="btn btn-xs btn-secondary cc-sub-action-btn"
                                   title="結帳日出帳作業"
-                                  onClick={() => handleRollover(card)}
+                                  onClick={() => handleOpenRollover(card)}
                                 >
                                   出帳作業
                                 </button>
@@ -1401,6 +1443,316 @@ export default function Accounts() {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* 結帳日出帳作業預覽 Modal (ADR-0024) */}
+      {rolloverModalCard && (
+        <Modal
+          onClose={() => {
+            if (!rolloverSubmitting) {
+              setRolloverModalCard(null)
+              setRolloverPreview(null)
+            }
+          }}
+          title={`結帳日出帳作業預覽 — ${rolloverModalCard.name}`}
+        >
+          {rolloverError && (
+            <div className="alert alert-danger" style={{ marginBottom: 14 }}>
+              {rolloverError}
+            </div>
+          )}
+
+          {rolloverLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
+              <RefreshCw size={24} className="spin" style={{ marginBottom: 8, display: 'inline-block' }} />
+              <div>正在計算本期結帳週期之消費與刷退明細...</div>
+            </div>
+          ) : rolloverPreview ? (
+            <div>
+              {/* 結算週期資訊條 */}
+              <div
+                style={{
+                  background: 'rgba(59, 130, 246, 0.08)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  marginBottom: 16,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                }}
+              >
+                <div className="flex items-center gap-xs" style={{ fontSize: '0.88rem', color: '#1E40AF', fontWeight: 600 }}>
+                  <Calendar size={16} />
+                  <span>
+                    本期結算區間：
+                    {rolloverPreview.prevStatementDate
+                      ? `${rolloverPreview.prevStatementDate} 次日 ～ ${rolloverPreview.statementDate}`
+                      : `至 ${rolloverPreview.statementDate || today()}`}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#4B5563' }}>
+                  每月 {rolloverModalCard.statement_day || '--'} 號結帳 · {rolloverModalCard.payment_due_day || '--'} 號繳款
+                </div>
+              </div>
+
+              {(() => {
+                const allTxs = rolloverPreview.transactions || []
+                const activeTxs = allTxs.filter((t: any) => !rolloverDeferredIds.has(t.id))
+                const activeExp = activeTxs.filter((t: any) => t.type === 'expense')
+                const activeRef = activeTxs.filter((t: any) => t.type === 'income')
+                const curExp = activeExp.reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
+                const curRef = activeRef.reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
+                const curNet = Math.max(0, curExp - curRef)
+                const curShared = activeExp.filter((t: any) => Number(t.is_shared) === 1).reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
+                const curPersonal = Math.max(0, curNet - curShared)
+                const curProjBal = (rolloverModalCard.balance || 0) + curNet
+                const curProjUnb = Math.max(0, (rolloverModalCard.unbilled || 0) - curNet)
+                const deferredCount = rolloverDeferredIds.size
+
+                return (
+                  <>
+                    {/* 統計指標卡片 */}
+                    <div className="grid grid-2 gap-sm" style={{ marginBottom: 14 }}>
+                      <div
+                        style={{
+                          background: '#F9FAFB',
+                          border: '1px solid rgba(0,0,0,0.06)',
+                          borderRadius: 8,
+                          padding: '10px 14px',
+                        }}
+                      >
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 2 }}>
+                          本期刷卡消費 ({activeExp.length} 筆)
+                        </div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {formatCurrency(curExp)}
+                        </div>
+                        {curRef > 0 && (
+                          <div style={{ fontSize: '0.75rem', color: '#10B981', marginTop: 2 }}>
+                            刷退折抵 ({activeRef.length} 筆)：-{formatCurrency(curRef)}
+                          </div>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.06)',
+                          border: '1px solid rgba(239, 68, 68, 0.2)',
+                          borderRadius: 8,
+                          padding: '10px 14px',
+                        }}
+                      >
+                        <div style={{ fontSize: '0.78rem', color: '#B91C1C', marginBottom: 2 }}>
+                          預計本期出帳淨額
+                        </div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-danger)' }}>
+                          {formatCurrency(curNet)}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                          出帳後待繳：{formatCurrency(curProjBal)} · 剩餘未出帳：{formatCurrency(curProjUnb)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 公私帳債務拆解 */}
+                    <div
+                      style={{
+                        background: '#FAFBFD',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        borderRadius: 8,
+                        padding: '10px 14px',
+                        marginBottom: 16,
+                      }}
+                    >
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <PieChart size={13} /> 本期出帳債務性質拆解：
+                      </div>
+                      <div className="flex items-center justify-between" style={{ fontSize: '0.85rem', marginBottom: 4 }}>
+                        <span className="flex items-center gap-xs">
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-primary)' }} />
+                          <Home size={13} color="var(--color-primary)" />
+                          <span>家庭代墊公帳（可向共同基金報銷）：</span>
+                        </span>
+                        <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
+                          {formatCurrency(curShared)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between" style={{ fontSize: '0.85rem' }}>
+                        <span className="flex items-center gap-xs">
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6B7280' }} />
+                          <Lock size={13} color="#6B7280" />
+                          <span>個人私帳消費：</span>
+                        </span>
+                        <span style={{ fontWeight: 700, color: '#4B5563' }}>
+                          {formatCurrency(curPersonal)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 明細清單與延至下期開關 */}
+                    <div style={{ marginBottom: 16 }}>
+                      <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          本期參與結算明細 ({allTxs.length} 筆{deferredCount > 0 ? `，已延期 ${deferredCount} 筆` : ''})
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          若有未請款項目可勾選延期
+                        </div>
+                      </div>
+
+                      {allTxs.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', background: '#F9FAFB', borderRadius: 8 }}>
+                          目前週期內無待出帳之消費記錄
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            maxHeight: 'min(300px, 38vh)',
+                            overflowY: 'auto',
+                            border: '1px solid rgba(0,0,0,0.08)',
+                            borderRadius: 8,
+                            padding: '4px 8px',
+                          }}
+                        >
+                          {allTxs.map((t: any) => {
+                            const isDeferred = rolloverDeferredIds.has(t.id)
+                            const isExpense = t.type === 'expense'
+
+                            return (
+                              <div
+                                key={t.id}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '8px 6px',
+                                  borderBottom: '1px solid rgba(0,0,0,0.04)',
+                                  opacity: isDeferred ? 0.55 : 1,
+                                  background: isDeferred ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+                                  borderRadius: 6,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <div className="flex items-center gap-xs" style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+                                  <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                                    <CategoryIcon category={t.category || '其他'} size={15} />
+                                  </div>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div className="flex items-center gap-xs" style={{ flexWrap: 'wrap' }}>
+                                      <span style={{ fontSize: '0.82rem', fontWeight: 600, textDecoration: isDeferred ? 'line-through' : 'none' }}>
+                                        {t.category || '消費'}
+                                      </span>
+                                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                        {t.date}
+                                      </span>
+                                      {t.is_shared === 1 ? (
+                                        <span className="badge badge-primary" style={{ fontSize: '0.7rem', padding: '1px 5px' }}>
+                                          <Home size={10} style={{ marginRight: 2 }} />公帳
+                                        </span>
+                                      ) : (
+                                        <span className="badge badge-secondary" style={{ fontSize: '0.7rem', padding: '1px 5px' }}>
+                                          <Lock size={10} style={{ marginRight: 2 }} />私帳
+                                        </span>
+                                      )}
+                                      {isDeferred && (
+                                        <span
+                                          className="badge"
+                                          style={{
+                                            fontSize: '0.7rem',
+                                            padding: '1px 5px',
+                                            background: '#FEF3C7',
+                                            color: '#B45309',
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          已延至下期
+                                        </span>
+                                      )}
+                                    </div>
+                                    {t.note && (
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {t.note}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-sm">
+                                  <span
+                                    style={{
+                                      fontSize: '0.88rem',
+                                      fontWeight: 700,
+                                      color: isDeferred ? 'var(--text-secondary)' : isExpense ? 'var(--color-danger)' : '#10B981',
+                                      textDecoration: isDeferred ? 'line-through' : 'none',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {isExpense ? '-' : '+'}{formatCurrency(t.amount)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className={`btn btn-xs ${isDeferred ? 'btn-primary' : 'btn-secondary'}`}
+                                    style={{ whiteSpace: 'nowrap' }}
+                                    onClick={() => handleToggleDefer(t.id)}
+                                  >
+                                    {isDeferred ? '取消延期' : '延至下期'}
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 底部確認按鈕組 */}
+                    <div className="flex items-center justify-between" style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        切換延期僅於預覽中試算，確認出帳時統一寫入
+                      </span>
+                      <div className="flex gap-xs">
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            setRolloverModalCard(null)
+                            setRolloverPreview(null)
+                          }}
+                          disabled={rolloverSubmitting}
+                        >
+                          取消
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          style={{
+                            background: curNet > 0 ? 'var(--color-danger)' : 'var(--color-primary)',
+                            borderColor: curNet > 0 ? 'var(--color-danger)' : 'var(--color-primary)',
+                          }}
+                          disabled={rolloverSubmitting || (activeTxs.length === 0 && deferredCount === 0)}
+                          onClick={handleConfirmRollover}
+                        >
+                          {rolloverSubmitting
+                            ? '出帳處理中...'
+                            : activeTxs.length === 0 && deferredCount > 0
+                            ? `僅提交延期 (${deferredCount} 筆)`
+                            : `確認出帳 ${formatCurrency(curNet)}`}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-secondary)' }}>
+              無法取得出帳預覽資料
+            </div>
+          )}
         </Modal>
       )}
     </div>

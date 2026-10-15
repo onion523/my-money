@@ -60,7 +60,51 @@ export const accountsApi = {
   create: (body: Partial<Account>) => post<Account>('/accounts', body),
   update: (id: string, body: Partial<Account>) => put<Account>(`/accounts/${id}`, body),
   remove: (id: string) => del<null>(`/accounts/${id}`),
-  rolloverStatement: (id: string) => post<{ id: string; balance: number; unbilled: number; message: string }>(`/accounts/${id}/rollover-statement`),
+  rolloverPreview: (id: string) => get<{
+    card: {
+      id: string;
+      name: string;
+      statement_day: number | null;
+      payment_due_day: number | null;
+      balance: number;
+      unbilled: number;
+    };
+    statementDate: string;
+    prevStatementDate: string;
+    totalExpense: number;
+    totalRefund: number;
+    netRolledAmount: number;
+    sharedDebt: number;
+    personalDebt: number;
+    projectedBalance: number;
+    projectedUnbilled: number;
+    txCount: number;
+    refundCount: number;
+    transactions: Array<{
+      id: string;
+      amount: number;
+      is_shared: number;
+      type: string;
+      category: string;
+      note: string | null;
+      date: string;
+      defer_to_next_statement: number;
+    }>;
+  }>(`/accounts/${id}/rollover-preview`),
+  rolloverStatement: (id: string, deferredTxIds?: string[]) => post<{
+    id: string;
+    balance: number;
+    unbilled: number;
+    rolledAmount: number;
+    totalExpense: number;
+    totalRefund: number;
+    txCount: number;
+    refundCount: number;
+    deferredCount: number;
+    statementDate: string;
+    prevStatementDate: string;
+    message: string;
+  }>(`/accounts/${id}/rollover-statement`, { deferredTxIds }),
   reconcileCreditCard: (id: string) => post<{ id: string; name: string; balance: number; unbilled: number; shared_debt: number; personal_debt: number; message: string }>(`/accounts/${id}/reconcile`),
   payCreditCard: (body: {
     bank_account_id: string;

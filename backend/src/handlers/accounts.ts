@@ -325,7 +325,138 @@ accounts.post('/pay-credit-card', async (c) => {
 });
 
 
-// POST /accounts/:id/rollover-statement — 結帳日一鍵出帳作業 (未出帳轉已出帳)
+export function getStatementCycleDates(statementDay: number | null | undefined): { statementDate: string; prevStatementDate: string } {
+  let statementDate = '';
+  let prevStatementDate = '';
+
+  if (statementDay && statementDay >= 1 && statementDay <= 31) {
+    const taipeiDateStr = getTaipeiDateString();
+    const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
+    let statementYear = currYear;
+    let statementMonth = currMonth;
+
+    if (currDay < statementDay) {
+      statementMonth -= 1;
+      if (statementMonth === 0) {
+        statementMonth = 12;
+        statementYear -= 1;
+      }
+    }
+    const lastDayOfMonth = new Date(statementYear, statementMonth, 0).getDate();
+    const day = Math.min(statementDay, lastDayOfMonth);
+    statementDate = `${statementYear}-${String(statementMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    // 推算上一個結帳日
+    let prevYear = statementYear;
+    let prevMonth = statementMonth - 1;
+    if (prevMonth === 0) {
+      prevMonth = 12;
+      prevYear -= 1;
+    }
+    const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
+    const pDay = Math.min(statementDay, prevLastDay);
+    prevStatementDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`;
+  }
+
+  return { statementDate, prevStatementDate };
+}
+
+// GET /accounts/:id/rollover-preview — 取得結帳日出帳預覽數據與明細清單 (ADR-0024)
+accounts.get('/:id/rollover-preview', async (c) => {
+  const userId = c.get('userId');
+  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
+  const placeholders = memberUserIds.map(() => '?').join(',');
+  const id = c.req.param('id');
+
+  const card = await c.env.DB.prepare(
+    `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
+  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; payment_due_day: number | null; is_joint: number; user_id: string }>();
+
+  if (!card) return c.json({ success: false, error: '信用卡不存在' }, 404);
+
+  // 權限檢查：個人信用卡出帳作業僅限持卡人本人操作
+  if ((card.is_joint === 0 || card.is_joint === null) && card.user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：個人信用卡出帳作業僅限持卡人本人操作' }, 403);
+  }
+
+  const { statementDate, prevStatementDate } = getStatementCycleDates(card.statement_day);
+
+  let txQuery = `
+    SELECT id, amount, is_shared, type, category, note, date, defer_to_next_statement
+    FROM transactions
+    WHERE account_id = ? AND is_billed = 0
+      AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+  `;
+  const txParams: (string | number)[] = [id];
+  if (statementDate) {
+    txQuery += `
+      AND (
+        (date <= ? AND defer_to_next_statement = 0)
+        OR (date <= ? AND defer_to_next_statement = 1)
+      )
+    `;
+    txParams.push(statementDate, prevStatementDate);
+  } else {
+    txQuery += ` AND defer_to_next_statement = 0`;
+  }
+  txQuery += ` ORDER BY date DESC, created_at DESC`;
+
+  const txsResult = await c.env.DB.prepare(txQuery).bind(...txParams).all();
+  const rawTxs = (txsResult.results || []) as Array<{
+    id: string;
+    amount: number;
+    is_shared: number;
+    type: string;
+    category: string;
+    note: string | null;
+    date: string;
+    defer_to_next_statement: number;
+  }>;
+
+  const expenseTxs = rawTxs.filter(t => t.type === 'expense');
+  const refundTxs = rawTxs.filter(t => t.type === 'income');
+
+  const totalExpense = expenseTxs.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const totalRefund = refundTxs.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const netRolledAmount = Math.max(0, totalExpense - totalRefund);
+
+  // 計算公私帳拆解
+  const sharedDebt = expenseTxs.filter(t => Number(t.is_shared) === 1).reduce((s, t) => s + Number(t.amount || 0), 0);
+  const personalDebt = Math.max(0, netRolledAmount - sharedDebt);
+
+  const currentBalance = Number(card.balance || 0);
+  const currentUnbilled = Number(card.unbilled || 0);
+  const projectedBalance = currentBalance + netRolledAmount;
+  const projectedUnbilled = Math.max(0, currentUnbilled - netRolledAmount);
+
+  return c.json({
+    success: true,
+    data: {
+      card: {
+        id: card.id,
+        name: card.name,
+        statement_day: card.statement_day,
+        payment_due_day: card.payment_due_day,
+        balance: currentBalance,
+        unbilled: currentUnbilled,
+      },
+      statementDate,
+      prevStatementDate,
+      totalExpense,
+      totalRefund,
+      netRolledAmount,
+      sharedDebt,
+      personalDebt,
+      projectedBalance,
+      projectedUnbilled,
+      txCount: expenseTxs.length,
+      refundCount: refundTxs.length,
+      transactions: rawTxs,
+    }
+  });
+});
+
+// POST /accounts/:id/rollover-statement — 結帳日出帳作業 (未出帳轉已出帳，支援 deferredTxIds)
 accounts.post('/:id/rollover-statement', async (c) => {
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
@@ -343,41 +474,21 @@ accounts.post('/:id/rollover-statement', async (c) => {
     return c.json({ success: false, error: '權限不足：個人信用卡出帳作業僅限持卡人本人操作' }, 403);
   }
 
-  // 計算結帳週期區間 (以卡片設定之結帳日為基準)
-  let statementDate = '';
-  let prevStatementDate = '';
-
-  if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
-    const taipeiDateStr = getTaipeiDateString();
-    const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
-    let statementYear = currYear;
-    let statementMonth = currMonth;
-
-    if (currDay < card.statement_day) {
-      statementMonth -= 1;
-      if (statementMonth === 0) {
-        statementMonth = 12;
-        statementYear -= 1;
-      }
+  // 讀取前端可選傳入之 deferredTxIds
+  let deferredTxIds: string[] = [];
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    if (Array.isArray(body?.deferredTxIds)) {
+      deferredTxIds = body.deferredTxIds.map(String);
     }
-    const lastDayOfMonth = new Date(statementYear, statementMonth, 0).getDate();
-    const day = Math.min(card.statement_day, lastDayOfMonth);
-    statementDate = `${statementYear}-${String(statementMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-    // 推算上一個結帳日
-    let prevYear = statementYear;
-    let prevMonth = statementMonth - 1;
-    if (prevMonth === 0) {
-      prevMonth = 12;
-      prevYear -= 1;
-    }
-    const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
-    const pDay = Math.min(card.statement_day, prevLastDay);
-    prevStatementDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`;
+  } catch {
+    // ignore
   }
+  const deferredSet = new Set(deferredTxIds);
+
+  const { statementDate, prevStatementDate } = getStatementCycleDates(card.statement_day);
 
   // 1. 撈取符合本期出帳之消費支出
-  // 條件：(date <= statementDate AND defer_to_next_statement = 0) OR (date <= prevStatementDate AND defer_to_next_statement = 1)
   let expQuery = `
     SELECT id, amount, is_shared
     FROM transactions
@@ -398,7 +509,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
   }
 
   const expenseTxs = await c.env.DB.prepare(expQuery).bind(...expParams).all();
-  const expResults = (expenseTxs.results || []) as Array<{ id: string; amount: number; is_shared: number }>;
+  const rawExpResults = (expenseTxs.results || []) as Array<{ id: string; amount: number; is_shared: number }>;
 
   // 2. 撈取符合本期出帳之刷退收入
   let refQuery = `
@@ -421,20 +532,31 @@ accounts.post('/:id/rollover-statement', async (c) => {
   }
 
   const refundTxs = await c.env.DB.prepare(refQuery).bind(...refParams).all();
-  const refResults = (refundTxs.results || []) as Array<{ id: string; amount: number }>;
+  const rawRefResults = (refundTxs.results || []) as Array<{ id: string; amount: number }>;
 
-  if (expResults.length === 0 && refResults.length === 0) {
+  // 排除被使用者於彈窗中標記為延至下期的項目
+  const expResults = rawExpResults.filter(t => !deferredSet.has(t.id));
+  const refResults = rawRefResults.filter(t => !deferredSet.has(t.id));
+
+  if (expResults.length === 0 && refResults.length === 0 && deferredTxIds.length === 0) {
     return c.json({ success: false, error: '目前結帳週期內無待出帳之消費記錄' }, 400);
   }
 
-  const totalExpense = expResults.reduce((s, t) => s + t.amount, 0);
-  const totalRefund = refResults.reduce((s, t) => s + t.amount, 0);
-  const netRolledAmount = Math.max(0, totalExpense - totalRefund);
-
-  // 3. 批次將參與出帳之消費與刷退標記為 is_billed = 1
-  const txIdsToBill = [...expResults.map(t => t.id), ...refResults.map(t => t.id)];
   const batchStatements: any[] = [];
 
+  // 將本次指定延期的項目更新為 defer_to_next_statement = 1
+  for (const deferredId of deferredTxIds) {
+    batchStatements.push(
+      c.env.DB.prepare('UPDATE transactions SET defer_to_next_statement = 1 WHERE id = ? AND account_id = ?').bind(deferredId, id)
+    );
+  }
+
+  const totalExpense = expResults.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const totalRefund = refResults.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const netRolledAmount = Math.max(0, totalExpense - totalRefund);
+
+  // 3. 批次將實際參與出帳之消費與刷退標記為 is_billed = 1
+  const txIdsToBill = [...expResults.map(t => t.id), ...refResults.map(t => t.id)];
   for (const txId of txIdsToBill) {
     batchStatements.push(c.env.DB.prepare('UPDATE transactions SET is_billed = 1 WHERE id = ?').bind(txId));
   }
@@ -456,6 +578,13 @@ accounts.post('/:id/rollover-statement', async (c) => {
 
   await c.env.DB.batch(batchStatements);
 
+  let message = '';
+  if (expResults.length > 0 || refResults.length > 0) {
+    message = `帳單出帳作業完成！本期結算 ${expResults.length} 筆消費${totalRefund > 0 ? ` (扣除刷退 NT$ ${totalRefund.toLocaleString()})` : ''}，淨額 NT$ ${netRolledAmount.toLocaleString()} 已轉入已出帳待繳款。${deferredTxIds.length > 0 ? `（另有 ${deferredTxIds.length} 筆消費已延至下期）` : ''}`;
+  } else {
+    message = `已成功將 ${deferredTxIds.length} 筆消費延至下期帳單。本期無其他需出帳之項目。`;
+  }
+
   return c.json({
     success: true,
     data: {
@@ -467,9 +596,10 @@ accounts.post('/:id/rollover-statement', async (c) => {
       totalRefund,
       txCount: expResults.length,
       refundCount: refResults.length,
+      deferredCount: deferredTxIds.length,
       statementDate,
       prevStatementDate,
-      message: `帳單出帳作業完成！本期結算 ${expResults.length} 筆消費${totalRefund > 0 ? ` (扣除刷退 NT$ ${totalRefund.toLocaleString()})` : ''}，淨額 NT$ ${netRolledAmount.toLocaleString()} 已轉入已出帳待繳款。`
+      message,
     }
   });
 });
