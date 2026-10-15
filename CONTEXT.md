@@ -86,12 +86,13 @@ _Avoid_: 將信用卡還款混入日常消費圓餅圖分類佔比 (mixing credi
 3. **淨收支**：`總收入 － 總支出`，確保畫面列表上每一筆看得到的 `+` 與 `-` 明細加總結果 100% 與上方「總收入、總支出、淨收支」及每日小計完全吻合。
 _Avoid_: 隱藏排除特定分類導致畫面明細與上方總計數字兜不攏 (silently excluding categories so visible rows do not sum to totals)
 
-**Statement Rollover & Preview Modal (結帳日出帳作業與透明預覽結算)**:
-結帳日到達後，在持卡人尚未手動點擊「出帳作業」確認前，當期刷卡消費（含結帳日當天及該結帳週期內明細）一律維持為未出帳（`is_billed = 0`）並保留於「未出帳款（`unbilled`）」顯示，嚴禁於結帳日當天自動將未出帳歸零或未經出帳作業即覆寫為 `is_billed = 1`。當使用者點擊「出帳作業」時，系統開啟**出帳作業預覽彈窗（Statement Rollover Modal）**，杜絕無感黑盒子操作：
-1. **週期與金額透明預覽**：清晰揭露本期結算起訖區間（例如 `9/11 ～ 10/10`）、消費筆數與總計、刷退折抵淨額、本期預計出帳淨額，以及出帳後預估之「已出帳待繳款」與「剩餘未出帳款」。
-2. **公私帳債務拆解**：即時拆解本期出帳款項中之「家庭代墊公帳小計」與「個人私帳消費小計」，使持卡人清楚掌握有多少出帳款可向家庭共同基金報銷。
-3. **明細檢視與動態延期暫存（Interactive Defer Toggle）**：彈窗完整展示本次參與出帳之消費與刷退清單（含日期、分類圖示、備註、公私帳徽章與金額），並於每筆明細旁提供「延至下期」切換開關。切換延期時，彈窗動態即時扣除該筆並重新試算本期出帳淨額與預估餘額；使用者確認出帳時一次性將延期標記（`defer_to_next_statement = 1`）與出帳標記（`is_billed = 1`）寫入資料庫；若關閉或取消彈窗則完全不改動資料庫，維持資料庫狀態零污染。
-_Avoid_: 盲目確認無明細預覽之黑盒子出帳 (black-box rollover without preview)、結帳日未經手動出帳即自動歸零未出帳 (auto-zeroing unbilled on statement day before manual rollover)、帳單重算 (recalculation)、全額滾入 (blanket carryover)
+**Statement Rollover & Idempotent Recalculation (結帳日出帳作業與冪等真實明細重算)**:
+結帳日到達後，在持卡人尚未手動點擊「出帳作業」確認前，當期刷卡消費（含結帳日當天及該結帳週期內明細）一律維持為未出帳（`is_billed = 0`）並保留於「未出帳款（`unbilled`）」顯示，嚴禁於結帳日當天自動將未出帳歸零或未經出帳作業即覆寫為 `is_billed = 1`。當使用者點擊「出帳作業」時，系統開啟**出帳作業預覽彈窗（Statement Rollover Modal）**，並採行**週期全量檢視與真實明細冪等重算機制**：
+1. **週期全量明細透視（Full-Cycle Scope）**：預覽時完整撈取該結帳區間內的所有刷卡消費與刷退（涵蓋已出帳與未出帳明細），不因先前已執行過出帳而變為空清單，讓持卡人隨時可重新檢視當期完整帳單明細與各項目之延期狀態。
+2. **統計與公私帳拆解預覽**：清晰揭露本期結算起訖區間（例如 `9/11 次日 ～ 10/10`）、消費筆數與總計、刷退折抵淨額、本期預計出帳淨額，並即時拆解本期款項中之「家庭代墊公帳小計」與「個人私帳消費小計」。
+3. **明細檢視與動態延期暫存（Interactive Defer Toggle）**：彈窗展示週期內所有交易，每筆明細旁提供「延至下期」開關；切換時於前端本地記憶體動態重算本期帳單淨額與預估餘額，關閉彈窗則無副作用。
+4. **真實明細冪等重算（Ground-Truth Recalculation）**：使用者確認出帳時，系統更新明細之出帳與延期狀態，並**根據整張卡片之所有已出帳消費、已出帳刷退及歷史還款紀錄全量精確重算 `balance`（已出帳待繳款）與 `unbilled`（未出帳款）**，徹底捨棄盲目的純增量累加（`balance = balance + rolled`），確保即使多次重複點選出帳作業、補登消費或修改延期，帳單數字永遠與底層交易明細 100% 精準吻合，絕不重複疊加。
+_Avoid_: 盲目累加導致重複點擊出帳金額疊加 (blind incremental balance addition causing double-count)、出帳後即變為空清單無法重新檢視調整 (empty list blocking re-inspection after initial rollover)、盲目確認無明細預覽之黑盒子出帳 (black-box rollover without preview)、結帳日未經手動出帳即自動歸零未出帳 (auto-zeroing unbilled on statement day before manual rollover)
 
 **Deferred Statement Billing (延至下期帳單)**:
 在記錄或編輯信用卡消費或刷退時，手動標記該筆收支延至下個結帳週期再行出帳與沖抵的屬性（defer_to_next_statement），適用於商家延遲請款、跨結帳日刷卡或跨期退款。在當期出帳作業時自動保留於未出帳，於下一期出帳作業時自動納入結算。當使用者在收支明細中編輯收支並勾選「延至下期帳單」（或將收支日期改至最近結帳日之後）時，系統立即將該筆收支之出帳狀態重置為未出帳（`is_billed = 0`），並自動同步重算該信用卡之未出帳金額（`unbilled`）。

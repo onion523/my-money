@@ -257,6 +257,12 @@ export default function Accounts() {
     try {
       const res = await accountsApi.rolloverPreview(card.id)
       setRolloverPreview(res)
+      if (Array.isArray(res?.transactions)) {
+        const deferred = res.transactions
+          .filter((t: any) => Number(t.defer_to_next_statement) === 1)
+          .map((t: any) => t.id)
+        setRolloverDeferredIds(new Set(deferred))
+      }
     } catch (err: any) {
       setRolloverError(err.message || '載入出帳預覽失敗')
     } finally {
@@ -899,10 +905,10 @@ export default function Accounts() {
                               >
                                 {reconcilingCardId === card.id ? '校準中...' : <><RefreshCw size={12} /> 校準</>}
                               </button>
-                              {unbilled > 0 && (
+                              {(card.statement_day || unbilled > 0 || billed > 0) && (
                                 <button
                                   className="btn btn-xs btn-secondary cc-sub-action-btn"
-                                  title="結帳日出帳作業"
+                                  title="結帳日出帳作業與週期明細檢視"
                                   onClick={() => handleOpenRollover(card)}
                                 >
                                   出帳作業
@@ -1509,8 +1515,16 @@ export default function Accounts() {
                 const curNet = Math.max(0, curExp - curRef)
                 const curShared = activeExp.filter((t: any) => Number(t.is_shared) === 1).reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
                 const curPersonal = Math.max(0, curNet - curShared)
-                const curProjBal = (rolloverModalCard.balance || 0) + curNet
-                const curProjUnb = Math.max(0, (rolloverModalCard.unbilled || 0) - curNet)
+                const deferredExp = allTxs.filter((t: any) => rolloverDeferredIds.has(t.id) && t.type === 'expense').reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
+                const deferredRef = allTxs.filter((t: any) => rolloverDeferredIds.has(t.id) && t.type === 'income').reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
+                const curDeferredNet = deferredExp - deferredRef
+
+                const curProjBal = rolloverPreview.baseNetBilled !== undefined
+                  ? Math.max(0, (rolloverPreview.baseNetBilled || 0) + (curExp - curRef) - (rolloverPreview.totalRepay || 0))
+                  : (rolloverModalCard.balance || 0) + curNet
+                const curProjUnb = rolloverPreview.baseNetUnbilled !== undefined
+                  ? Math.max(0, (rolloverPreview.baseNetUnbilled || 0) + curDeferredNet)
+                  : Math.max(0, (rolloverModalCard.unbilled || 0) - curNet)
                 const deferredCount = rolloverDeferredIds.size
 
                 return (

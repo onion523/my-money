@@ -361,7 +361,55 @@ export function getStatementCycleDates(statementDay: number | null | undefined):
   return { statementDate, prevStatementDate };
 }
 
-// GET /accounts/:id/rollover-preview — 取得結帳日出帳預覽數據與明細清單 (ADR-0024)
+export async function recalculateCardBalances(db: D1Database, cardId: string): Promise<{ balance: number; unbilled: number }> {
+  const [billedExpRes, billedRefRes, repayRes, unbilledExpRes, unbilledRefRes] = await db.batch([
+    // 1. 歷史所有已出帳消費 (is_billed = 1, type = expense, 不含系統類別)
+    db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total FROM transactions
+      WHERE account_id = ? AND type = 'expense' AND is_billed = 1
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+    `).bind(cardId),
+    // 2. 歷史所有已出帳刷退 (is_billed = 1, type = income, 不含系統類別)
+    db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total FROM transactions
+      WHERE account_id = ? AND type = 'income' AND is_billed = 1
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+    `).bind(cardId),
+    // 3. 歷史所有償還已出帳之還款 (amount - unbilled_offset)
+    db.prepare(`
+      SELECT COALESCE(SUM(amount - COALESCE(unbilled_offset, 0)), 0) as total FROM transactions
+      WHERE account_id = ? AND type = 'income' AND category = '信用卡還款'
+    `).bind(cardId),
+    // 4. 當前所有未出帳消費 (is_billed = 0 或 defer_to_next_statement = 1, type = expense)
+    db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total FROM transactions
+      WHERE account_id = ? AND type = 'expense' AND (is_billed = 0 OR defer_to_next_statement = 1)
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+    `).bind(cardId),
+    // 5. 當前所有未出帳刷退 (is_billed = 0 或 defer_to_next_statement = 1, type = income)
+    db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total FROM transactions
+      WHERE account_id = ? AND type = 'income' AND (is_billed = 0 OR defer_to_next_statement = 1)
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+    `).bind(cardId),
+  ]);
+
+  const billedExp = Number((billedExpRes.results?.[0] as any)?.total || 0);
+  const billedRef = Number((billedRefRes.results?.[0] as any)?.total || 0);
+  const billedRepay = Number((repayRes.results?.[0] as any)?.total || 0);
+  const unbilledExp = Number((unbilledExpRes.results?.[0] as any)?.total || 0);
+  const unbilledRef = Number((unbilledRefRes.results?.[0] as any)?.total || 0);
+
+  const newBalance = Math.max(0, billedExp - billedRef - billedRepay);
+  const newUnbilled = Math.max(0, unbilledExp - unbilledRef);
+
+  await db.prepare('UPDATE accounts SET balance = ?, unbilled = ? WHERE id = ?')
+    .bind(newBalance, newUnbilled, cardId).run();
+
+  return { balance: newBalance, unbilled: newUnbilled };
+}
+
+// GET /accounts/:id/rollover-preview — 取得結帳日出帳預覽數據與週期全量明細 (ADR-0024)
 accounts.get('/:id/rollover-preview', async (c) => {
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
@@ -381,23 +429,24 @@ accounts.get('/:id/rollover-preview', async (c) => {
 
   const { statementDate, prevStatementDate } = getStatementCycleDates(card.statement_day);
 
+  // 撈取結帳週期全量明細（含已出帳與未出帳，支援重複檢視與重算）
   let txQuery = `
-    SELECT id, amount, is_shared, type, category, note, date, defer_to_next_statement
+    SELECT id, amount, is_shared, type, category, note, date, defer_to_next_statement, is_billed
     FROM transactions
-    WHERE account_id = ? AND is_billed = 0
+    WHERE account_id = ?
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
   `;
   const txParams: (string | number)[] = [id];
   if (statementDate) {
     txQuery += `
       AND (
-        (date <= ? AND defer_to_next_statement = 0)
-        OR (date <= ? AND defer_to_next_statement = 1)
+        (date > ? AND date <= ?)
+        OR (date <= ? AND (defer_to_next_statement = 1 OR is_billed = 0))
       )
     `;
-    txParams.push(statementDate, prevStatementDate);
+    txParams.push(prevStatementDate, statementDate, prevStatementDate);
   } else {
-    txQuery += ` AND defer_to_next_statement = 0`;
+    txQuery += ` AND (is_billed = 0 OR defer_to_next_statement = 1)`;
   }
   txQuery += ` ORDER BY date DESC, created_at DESC`;
 
@@ -411,10 +460,43 @@ accounts.get('/:id/rollover-preview', async (c) => {
     note: string | null;
     date: string;
     defer_to_next_statement: number;
+    is_billed: number;
   }>;
 
-  const expenseTxs = rawTxs.filter(t => t.type === 'expense');
-  const refundTxs = rawTxs.filter(t => t.type === 'income');
+  // 基礎歷史數據（排除本期候選 txs，供動態預覽精準試算）
+  const cycleTxIdList = rawTxs.map(t => t.id);
+  const cycleIdPlaceholders = cycleTxIdList.length > 0 ? cycleTxIdList.map(() => '?').join(',') : '';
+
+  const [baseBilledRes, repayRes, baseUnbilledRes] = await c.env.DB.batch([
+    c.env.DB.prepare(`
+      SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE -amount END), 0) as net_billed
+      FROM transactions
+      WHERE account_id = ? AND is_billed = 1
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+        ${cycleTxIdList.length > 0 ? `AND id NOT IN (${cycleIdPlaceholders})` : ''}
+    `).bind(...(cycleTxIdList.length > 0 ? [id, ...cycleTxIdList] : [id])),
+    c.env.DB.prepare(`
+      SELECT COALESCE(SUM(amount - COALESCE(unbilled_offset, 0)), 0) as total_repay
+      FROM transactions
+      WHERE account_id = ? AND type = 'income' AND category = '信用卡還款'
+    `).bind(id),
+    c.env.DB.prepare(`
+      SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE -amount END), 0) as net_unbilled
+      FROM transactions
+      WHERE account_id = ? AND (is_billed = 0 OR defer_to_next_statement = 1)
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+        ${cycleTxIdList.length > 0 ? `AND id NOT IN (${cycleIdPlaceholders})` : ''}
+    `).bind(...(cycleTxIdList.length > 0 ? [id, ...cycleTxIdList] : [id])),
+  ]);
+
+  const baseNetBilled = Number((baseBilledRes.results?.[0] as any)?.net_billed || 0);
+  const totalRepay = Number((repayRes.results?.[0] as any)?.total_repay || 0);
+  const baseNetUnbilled = Number((baseUnbilledRes.results?.[0] as any)?.net_unbilled || 0);
+
+  // 本期未被標記為延期之項目
+  const activeTxs = rawTxs.filter(t => Number(t.defer_to_next_statement) === 0);
+  const expenseTxs = activeTxs.filter(t => t.type === 'expense');
+  const refundTxs = activeTxs.filter(t => t.type === 'income');
 
   const totalExpense = expenseTxs.reduce((s, t) => s + Number(t.amount || 0), 0);
   const totalRefund = refundTxs.reduce((s, t) => s + Number(t.amount || 0), 0);
@@ -426,8 +508,12 @@ accounts.get('/:id/rollover-preview', async (c) => {
 
   const currentBalance = Number(card.balance || 0);
   const currentUnbilled = Number(card.unbilled || 0);
-  const projectedBalance = currentBalance + netRolledAmount;
-  const projectedUnbilled = Math.max(0, currentUnbilled - netRolledAmount);
+
+  const deferredTxs = rawTxs.filter(t => Number(t.defer_to_next_statement) === 1);
+  const deferredNet = deferredTxs.reduce((s, t) => s + (t.type === 'expense' ? Number(t.amount || 0) : -Number(t.amount || 0)), 0);
+
+  const projectedBalance = Math.max(0, baseNetBilled + netRolledAmount - totalRepay);
+  const projectedUnbilled = Math.max(0, baseNetUnbilled + deferredNet);
 
   return c.json({
     success: true,
@@ -447,6 +533,9 @@ accounts.get('/:id/rollover-preview', async (c) => {
       netRolledAmount,
       sharedDebt,
       personalDebt,
+      baseNetBilled,
+      totalRepay,
+      baseNetUnbilled,
       projectedBalance,
       projectedUnbilled,
       txCount: expenseTxs.length,
@@ -456,7 +545,7 @@ accounts.get('/:id/rollover-preview', async (c) => {
   });
 });
 
-// POST /accounts/:id/rollover-statement — 結帳日出帳作業 (未出帳轉已出帳，支援 deferredTxIds)
+// POST /accounts/:id/rollover-statement — 結帳日出帳作業 (週期全量透視與真實明細冪等重算，ADR-0024)
 accounts.post('/:id/rollover-statement', async (c) => {
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
@@ -488,98 +577,75 @@ accounts.post('/:id/rollover-statement', async (c) => {
 
   const { statementDate, prevStatementDate } = getStatementCycleDates(card.statement_day);
 
-  // 1. 撈取符合本期出帳之消費支出
-  let expQuery = `
-    SELECT id, amount, is_shared
+  // 撈取結帳週期全量明細（含已出帳與未出帳）
+  let cycleQuery = `
+    SELECT id, amount, is_shared, type
     FROM transactions
-    WHERE account_id = ? AND type = 'expense' AND is_billed = 0
+    WHERE account_id = ?
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
   `;
-  const expParams: (string | number)[] = [id];
+  const cycleParams: (string | number)[] = [id];
   if (statementDate) {
-    expQuery += `
+    cycleQuery += `
       AND (
-        (date <= ? AND defer_to_next_statement = 0)
-        OR (date <= ? AND defer_to_next_statement = 1)
+        (date > ? AND date <= ?)
+        OR (date <= ? AND (defer_to_next_statement = 1 OR is_billed = 0))
       )
     `;
-    expParams.push(statementDate, prevStatementDate);
+    cycleParams.push(prevStatementDate, statementDate, prevStatementDate);
   } else {
-    expQuery += ` AND defer_to_next_statement = 0`;
+    cycleQuery += ` AND (is_billed = 0 OR defer_to_next_statement = 1)`;
   }
 
-  const expenseTxs = await c.env.DB.prepare(expQuery).bind(...expParams).all();
-  const rawExpResults = (expenseTxs.results || []) as Array<{ id: string; amount: number; is_shared: number }>;
+  const cycleTxsResult = await c.env.DB.prepare(cycleQuery).bind(...cycleParams).all();
+  const cycleTxs = (cycleTxsResult.results || []) as Array<{ id: string; amount: number; is_shared: number; type: string }>;
 
-  // 2. 撈取符合本期出帳之刷退收入
-  let refQuery = `
-    SELECT id, amount
-    FROM transactions
-    WHERE account_id = ? AND type = 'income' AND is_billed = 0
-      AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-  `;
-  const refParams: (string | number)[] = [id];
-  if (statementDate) {
-    refQuery += `
-      AND (
-        (date <= ? AND defer_to_next_statement = 0)
-        OR (date <= ? AND defer_to_next_statement = 1)
-      )
-    `;
-    refParams.push(statementDate, prevStatementDate);
-  } else {
-    refQuery += ` AND defer_to_next_statement = 0`;
-  }
-
-  const refundTxs = await c.env.DB.prepare(refQuery).bind(...refParams).all();
-  const rawRefResults = (refundTxs.results || []) as Array<{ id: string; amount: number }>;
-
-  // 排除被使用者於彈窗中標記為延至下期的項目
-  const expResults = rawExpResults.filter(t => !deferredSet.has(t.id));
-  const refResults = rawRefResults.filter(t => !deferredSet.has(t.id));
-
-  if (expResults.length === 0 && refResults.length === 0 && deferredTxIds.length === 0) {
-    return c.json({ success: false, error: '目前結帳週期內無待出帳之消費記錄' }, 400);
+  if (cycleTxs.length === 0 && deferredTxIds.length === 0) {
+    return c.json({ success: false, error: '目前結帳週期內無任何刷卡記錄' }, 400);
   }
 
   const batchStatements: any[] = [];
 
-  // 將本次指定延期的項目更新為 defer_to_next_statement = 1
+  // 1. 更新指定延期之項目：defer_to_next_statement = 1, is_billed = 0
   for (const deferredId of deferredTxIds) {
     batchStatements.push(
-      c.env.DB.prepare('UPDATE transactions SET defer_to_next_statement = 1 WHERE id = ? AND account_id = ?').bind(deferredId, id)
+      c.env.DB.prepare('UPDATE transactions SET defer_to_next_statement = 1, is_billed = 0 WHERE id = ? AND account_id = ?').bind(deferredId, id)
     );
   }
 
-  const totalExpense = expResults.reduce((s, t) => s + Number(t.amount || 0), 0);
-  const totalRefund = refResults.reduce((s, t) => s + Number(t.amount || 0), 0);
-  const netRolledAmount = Math.max(0, totalExpense - totalRefund);
-
-  // 3. 批次將實際參與出帳之消費與刷退標記為 is_billed = 1
-  const txIdsToBill = [...expResults.map(t => t.id), ...refResults.map(t => t.id)];
-  for (const txId of txIdsToBill) {
-    batchStatements.push(c.env.DB.prepare('UPDATE transactions SET is_billed = 1 WHERE id = ?').bind(txId));
+  // 2. 更新本期其餘非延期項目：defer_to_next_statement = 0, is_billed = 1
+  const nonDeferredTxs = cycleTxs.filter(t => !deferredSet.has(t.id));
+  for (const tx of nonDeferredTxs) {
+    batchStatements.push(
+      c.env.DB.prepare('UPDATE transactions SET defer_to_next_statement = 0, is_billed = 1 WHERE id = ? AND account_id = ?').bind(tx.id, id)
+    );
   }
 
-  // 同步結算已在區間內沖抵的還款流水
+  // 3. 同步結算已在區間內沖抵的還款流水
   if (statementDate) {
     batchStatements.push(
       c.env.DB.prepare("UPDATE transactions SET is_billed = 1 WHERE account_id = ? AND category = '信用卡還款' AND is_billed = 0 AND date <= ?").bind(id, statementDate)
     );
   }
 
-  const newBalance = (card.balance || 0) + netRolledAmount;
-  const newUnbilled = Math.max(0, (card.unbilled || 0) - netRolledAmount);
-
+  // 4. 記錄最後出帳時間戳記
   batchStatements.push(
-    c.env.DB.prepare('UPDATE accounts SET balance = ?, unbilled = ?, last_rollover_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .bind(newBalance, newUnbilled, id)
+    c.env.DB.prepare('UPDATE accounts SET last_rollover_at = CURRENT_TIMESTAMP WHERE id = ?').bind(id)
   );
 
   await c.env.DB.batch(batchStatements);
 
+  // 5. 全量真實明細冪等重算 (Ground-Truth Recalculation)
+  const { balance: newBalance, unbilled: newUnbilled } = await recalculateCardBalances(c.env.DB, id);
+
+  const expResults = nonDeferredTxs.filter(t => t.type === 'expense');
+  const refResults = nonDeferredTxs.filter(t => t.type === 'income');
+  const totalExpense = expResults.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const totalRefund = refResults.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const netRolledAmount = Math.max(0, totalExpense - totalRefund);
+
   let message = '';
-  if (expResults.length > 0 || refResults.length > 0) {
+  if (nonDeferredTxs.length > 0) {
     message = `帳單出帳作業完成！本期結算 ${expResults.length} 筆消費${totalRefund > 0 ? ` (扣除刷退 NT$ ${totalRefund.toLocaleString()})` : ''}，淨額 NT$ ${netRolledAmount.toLocaleString()} 已轉入已出帳待繳款。${deferredTxIds.length > 0 ? `（另有 ${deferredTxIds.length} 筆消費已延至下期）` : ''}`;
   } else {
     message = `已成功將 ${deferredTxIds.length} 筆消費延至下期帳單。本期無其他需出帳之項目。`;
