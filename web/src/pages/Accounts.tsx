@@ -317,10 +317,14 @@ export default function Accounts() {
     let defaultAmount = (card.balance || 0) + (card.unbilled || 0)
     let isSharedTarget = 1
     if (payType === 'shared') {
-      defaultAmount = card.shared_debt || 0
+      const billedShared = card.billed_shared_debt ?? 0
+      const unbilledShared = card.unbilled_shared_debt ?? (card.shared_debt ?? 0)
+      defaultAmount = billedShared > 0 ? billedShared : (card.shared_debt ?? unbilledShared)
       isSharedTarget = 1
     } else if (payType === 'personal') {
-      defaultAmount = card.personal_debt || 0
+      const billedPersonal = card.billed_personal_debt ?? 0
+      const unbilledPersonal = card.unbilled_personal_debt ?? (card.personal_debt ?? 0)
+      defaultAmount = billedPersonal > 0 ? billedPersonal : (card.personal_debt ?? unbilledPersonal)
       isSharedTarget = 0
     }
 
@@ -821,8 +825,12 @@ export default function Accounts() {
               const billed = card.balance || 0
               const unbilled = card.unbilled || 0
               const totalDue = billed + unbilled
-              const sharedDebt = card.shared_debt || 0
-              const personalDebt = card.personal_debt || 0
+              const billedShared = card.billed_shared_debt ?? 0
+              const billedPersonal = card.billed_personal_debt ?? Math.max(0, billed - billedShared)
+              const unbilledShared = card.unbilled_shared_debt ?? 0
+              const unbilledPersonal = card.unbilled_personal_debt ?? Math.max(0, unbilled - unbilledShared)
+              const sharedDebt = card.shared_debt ?? (billedShared + unbilledShared)
+              const personalDebt = card.personal_debt ?? (billedPersonal + unbilledPersonal)
               const limit = card.credit_limit || 0
               const remainingLimit = isMasked ? null : (limit > 0 ? Math.max(0, limit - totalDue) : null)
 
@@ -888,20 +896,29 @@ export default function Accounts() {
                     <div className="grid grid-2 gap-sm" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed rgba(0,0,0,0.1)' }}>
                       <div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {isMasked ? '個人帳單狀態' : '已出帳待繳款'}
+                          {isMasked ? '本期公帳待繳' : '已出帳待繳款'}
                         </div>
-                        <div style={{ fontWeight: 600, color: (!isMasked && billed > 0) ? 'var(--color-danger)' : 'var(--text-primary)' }}>
+                        <div style={{ fontWeight: 600, color: ((!isMasked && billed > 0) || (isMasked && billedShared > 0)) ? 'var(--color-danger)' : 'var(--text-primary)' }}>
                           {isMasked ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <Lock size={12} /> 隱私遮蔽
-                            </span>
+                            billedShared > 0 ? formatCurrency(billedShared) : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)' }}>
+                                <Lock size={12} /> 無待繳公帳
+                              </span>
+                            )
                           ) : formatCurrency(billed)}
                         </div>
+                        {!isMasked && billed > 0 && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                            <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>公 {formatCurrency(billedShared)}</span>
+                            <span style={{ opacity: 0.4 }}>·</span>
+                            <span style={{ color: '#4B5563' }}>私 {formatCurrency(billedPersonal)}</span>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            {isMasked ? '公帳代墊待清償' : '未出帳（累計消費）'}
+                            {isMasked ? '未出帳公帳代墊' : '未出帳（累計消費）'}
                           </span>
                           {canOperateCard(card) && (
                             <div className="flex gap-xs" style={{ flexWrap: 'wrap' }}>
@@ -927,8 +944,15 @@ export default function Accounts() {
                           )}
                         </div>
                         <div style={{ fontWeight: 600, color: isMasked ? 'var(--color-primary)' : 'inherit' }}>
-                          {isMasked ? formatCurrency(sharedDebt) : formatCurrency(unbilled)}
+                          {isMasked ? formatCurrency(unbilledShared) : formatCurrency(unbilled)}
                         </div>
+                        {!isMasked && unbilled > 0 && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                            <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>公 {formatCurrency(unbilledShared)}</span>
+                            <span style={{ opacity: 0.4 }}>·</span>
+                            <span style={{ color: '#4B5563' }}>私 {formatCurrency(unbilledPersonal)}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -938,7 +962,7 @@ export default function Accounts() {
                     <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <PieChart size={13} /> 負債性質拆解：
                     </div>
-                    <div className="flex items-center justify-between" style={{ fontSize: '0.85rem', marginBottom: 4 }}>
+                    <div className="flex items-center justify-between" style={{ fontSize: '0.85rem', marginBottom: 2 }}>
                       <span className="flex items-center gap-xs">
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-primary)' }} />
                         <Home size={13} /> 家庭代墊公帳：
@@ -947,7 +971,12 @@ export default function Accounts() {
                         {formatCurrency(sharedDebt)}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between" style={{ fontSize: '0.85rem' }}>
+                    {sharedDebt > 0 && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', paddingLeft: 16, marginBottom: 6 }}>
+                        本期已出帳待繳：<strong style={{ color: 'var(--color-primary)' }}>{formatCurrency(billedShared)}</strong> · 未出帳累計：{formatCurrency(unbilledShared)}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between" style={{ fontSize: '0.85rem', marginBottom: 2 }}>
                       <span className="flex items-center gap-xs">
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6B7280' }} />
                         <User size={13} /> 個人私帳消費：
@@ -960,6 +989,11 @@ export default function Accounts() {
                         ) : formatCurrency(personalDebt)}
                       </span>
                     </div>
+                    {personalDebt > 0 && !isMasked && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', paddingLeft: 16 }}>
+                        本期已出帳待繳：<strong style={{ color: '#4B5563' }}>{formatCurrency(billedPersonal)}</strong> · 未出帳累計：{formatCurrency(unbilledPersonal)}
+                      </div>
+                    )}
                   </div>
 
                   {/* 帳單週期資訊 */}
@@ -981,7 +1015,7 @@ export default function Accounts() {
                         onClick={() => handleOpenPay(card, 'shared')}
                         disabled={sharedDebt <= 0}
                       >
-                        <Home size={13} /> 繳家庭代墊
+                        <Home size={13} /> 繳家庭代墊 {billedShared > 0 ? `(${formatCurrency(billedShared)})` : `(${formatCurrency(sharedDebt)})`}
                       </button>
                       <button
                         className="btn btn-sm btn-secondary"
@@ -989,7 +1023,7 @@ export default function Accounts() {
                         onClick={() => handleOpenPay(card, 'personal')}
                         disabled={personalDebt <= 0}
                       >
-                        <User size={13} /> 繳個人私帳
+                        <User size={13} /> 繳個人私帳 {billedPersonal > 0 ? `(${formatCurrency(billedPersonal)})` : `(${formatCurrency(personalDebt)})`}
                       </button>
                       <button
                         className="btn btn-sm btn-primary"
@@ -1007,7 +1041,7 @@ export default function Accounts() {
                           onClick={() => handleOpenPay(card, 'shared')}
                         >
                           <Home size={14} />
-                          <span>繳家庭代墊款 ({formatCurrency(sharedDebt)})</span>
+                          <span>繳家庭代墊款 {billedShared > 0 ? `(${formatCurrency(billedShared)})` : `(${formatCurrency(sharedDebt)})`}</span>
                         </button>
                         <div className="text-center" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                           <Lock size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
@@ -1397,6 +1431,57 @@ export default function Accounts() {
                   onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))}
                   required
                 />
+                <div className="flex flex-wrap gap-xs" style={{ marginTop: 8 }}>
+                  {payForm.is_shared === 1 ? (
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-secondary"
+                        onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.billed_shared_debt || 0).toString() }))}
+                        disabled={(payCardModal.billed_shared_debt || 0) <= 0}
+                      >
+                        當期已出帳公帳: {formatCurrency(payCardModal.billed_shared_debt || 0)}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-secondary"
+                        onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.shared_debt || 0).toString() }))}
+                        disabled={(payCardModal.shared_debt || 0) <= 0}
+                      >
+                        結清全部代墊: {formatCurrency(payCardModal.shared_debt || 0)}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-secondary"
+                        onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.billed_personal_debt || 0).toString() }))}
+                        disabled={(payCardModal.billed_personal_debt || 0) <= 0}
+                      >
+                        當期已出帳私帳: {formatCurrency(payCardModal.billed_personal_debt || 0)}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-secondary"
+                        onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.personal_debt || 0).toString() }))}
+                        disabled={(payCardModal.personal_debt || 0) <= 0}
+                      >
+                        結清全部私帳: {formatCurrency(payCardModal.personal_debt || 0)}
+                      </button>
+                    </>
+                  )}
+                  {(payCardModal.is_joint === 1 || (user && payCardModal.user_id === user.id)) && (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-secondary"
+                      onClick={() => setPayForm(p => ({ ...p, amount: ((payCardModal.balance || 0) + (payCardModal.unbilled || 0)).toString() }))}
+                      disabled={((payCardModal.balance || 0) + (payCardModal.unbilled || 0)) <= 0}
+                    >
+                      全額待繳: {formatCurrency((payCardModal.balance || 0) + (payCardModal.unbilled || 0))}
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">扣款日期</label>
@@ -1423,7 +1508,16 @@ export default function Accounts() {
                   type="button"
                   className={`btn ${payForm.is_shared === 1 ? 'btn-primary' : 'btn-secondary'}`}
                   style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                  onClick={() => setPayForm(p => ({ ...p, is_shared: 1 }))}
+                  onClick={() => {
+                    const billedShared = payCardModal.billed_shared_debt ?? 0
+                    const defaultShared = billedShared > 0 ? billedShared : (payCardModal.shared_debt ?? 0)
+                    setPayForm(p => ({
+                      ...p,
+                      is_shared: 1,
+                      amount: defaultShared > 0 ? defaultShared.toString() : p.amount,
+                      note: `扣繳【${payCardModal.name}】卡費 (家庭公帳代墊)`
+                    }))
+                  }}
                 >
                   <Home size={14} /> 公帳
                 </button>
@@ -1431,7 +1525,16 @@ export default function Accounts() {
                   type="button"
                   className={`btn ${payForm.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
                   style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                  onClick={() => setPayForm(p => ({ ...p, is_shared: 0 }))}
+                  onClick={() => {
+                    const billedPersonal = payCardModal.billed_personal_debt ?? 0
+                    const defaultPersonal = billedPersonal > 0 ? billedPersonal : (payCardModal.personal_debt ?? 0)
+                    setPayForm(p => ({
+                      ...p,
+                      is_shared: 0,
+                      amount: defaultPersonal > 0 ? defaultPersonal.toString() : p.amount,
+                      note: `扣繳【${payCardModal.name}】卡費 (個人私帳)`
+                    }))
+                  }}
                 >
                   <Lock size={14} /> 私帳
                 </button>

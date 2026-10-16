@@ -267,6 +267,10 @@ export interface Account {
   unbilled: number;
   color: string;
   is_joint?: number;
+  billed_shared_debt?: number;
+  billed_personal_debt?: number;
+  unbilled_shared_debt?: number;
+  unbilled_personal_debt?: number;
   shared_debt?: number;
   personal_debt?: number;
   is_masked?: boolean;

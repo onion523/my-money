@@ -111,19 +111,31 @@ accounts.get('/', async (c) => {
   const results = accRows.map(acc => {
     if (acc.type !== 'credit_card') return acc;
     const m = metricsMap.get(acc.id);
-    if (!m) return { ...acc, shared_debt: 0, personal_debt: 0 };
+    if (!m) return {
+      ...acc,
+      billed_shared_debt: 0,
+      billed_personal_debt: 0,
+      unbilled_shared_debt: 0,
+      unbilled_personal_debt: 0,
+      shared_debt: 0,
+      personal_debt: 0,
+    };
     return {
       ...acc,
       balance: m.balance,
       unbilled: m.unbilled,
+      billed_shared_debt: m.billed_shared_debt,
+      billed_personal_debt: m.billed_personal_debt,
+      unbilled_shared_debt: m.unbilled_shared_debt,
+      unbilled_personal_debt: m.unbilled_personal_debt,
       shared_debt: m.shared_debt,
       personal_debt: m.personal_debt,
     };
   });
 
-  // 過濾與脫敏處理 (ADR 0015)：
+  // 過濾與脫敏處理 (ADR 0015 & ADR 0025)：
   // 在公帳視角下，若為個人私卡 (is_joint = 0)，必須滿足 shared_debt > 0 才納入展示；
-  // 若為他人私卡，執行隱私脫敏（僅揭示公帳待繳額，遮蔽個人額度與個人私密消費）。
+  // 若為他人私卡，執行隱私脫敏（揭示已出帳公帳待繳與未出帳公帳累計，全面遮蔽個人額度與個人私密消費）。
   const finalResults = results
     .filter(acc => {
       if (scope === 'household' && acc.is_joint === 0) {
@@ -136,8 +148,13 @@ accounts.get('/', async (c) => {
         return {
           ...acc,
           credit_limit: null,
-          balance: 0,
-          unbilled: acc.shared_debt || 0,
+          balance: acc.billed_shared_debt || 0,
+          unbilled: acc.unbilled_shared_debt || 0,
+          billed_shared_debt: acc.billed_shared_debt || 0,
+          billed_personal_debt: 0,
+          unbilled_shared_debt: acc.unbilled_shared_debt || 0,
+          unbilled_personal_debt: 0,
+          shared_debt: acc.shared_debt || 0,
           personal_debt: 0,
           is_masked: true,
         };
@@ -762,19 +779,37 @@ export function calculateCardCutoffDates(statementDay: number | null | undefined
 
 const SYSTEM_CATEGORIES_SET = new Set(['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷']);
 
-// 批次唯讀計算多張信用卡之未出帳淨額與公私帳欠款分流（零資料庫寫入，單次 SQL 批次讀取，ADR-0023）
+// 批次唯讀計算多張信用卡之未出帳淨額與公私帳欠款分流（零資料庫寫入，單次 SQL 批次讀取，ADR-0023 & ADR-0025）
 export async function computeCreditCardsReadOnlyMetrics(
   db: D1Database,
   cards: Array<{ id: string; balance?: number; unbilled?: number; statement_day?: number | null; last_rollover_at?: string | null }>
-): Promise<Map<string, { balance: number; unbilled: number; shared_debt: number; personal_debt: number }>> {
-  const result = new Map<string, { balance: number; unbilled: number; shared_debt: number; personal_debt: number }>();
+): Promise<Map<string, {
+  balance: number;
+  unbilled: number;
+  billed_shared_debt: number;
+  billed_personal_debt: number;
+  unbilled_shared_debt: number;
+  unbilled_personal_debt: number;
+  shared_debt: number;
+  personal_debt: number;
+}>> {
+  const result = new Map<string, {
+    balance: number;
+    unbilled: number;
+    billed_shared_debt: number;
+    billed_personal_debt: number;
+    unbilled_shared_debt: number;
+    unbilled_personal_debt: number;
+    shared_debt: number;
+    personal_debt: number;
+  }>();
   if (!cards || cards.length === 0) return result;
 
   const uniqueCardIds = Array.from(new Set(cards.map(c => c.id)));
   const placeholders = uniqueCardIds.map(() => '?').join(',');
 
   const txRowsResult = await db.prepare(`
-    SELECT account_id, type, category, amount, date, is_shared, is_billed, defer_to_next_statement
+    SELECT account_id, type, category, amount, date, is_shared, is_billed, defer_to_next_statement, unbilled_offset
     FROM transactions
     WHERE account_id IN (${placeholders})
     ORDER BY date DESC, created_at DESC, rowid DESC
@@ -787,6 +822,7 @@ export async function computeCreditCardsReadOnlyMetrics(
     is_shared: number;
     is_billed: number;
     defer_to_next_statement: number;
+    unbilled_offset: number | null;
   }>();
 
   const txsByCard = new Map<string, Array<{
@@ -797,6 +833,7 @@ export async function computeCreditCardsReadOnlyMetrics(
     is_shared: number;
     is_billed: number;
     defer_to_next_statement: number;
+    unbilled_offset: number | null;
   }>>();
 
   for (const row of (txRowsResult.results || [])) {
@@ -812,11 +849,37 @@ export async function computeCreditCardsReadOnlyMetrics(
     const cardTxs = txsByCard.get(card.id) || [];
     const { cutoffStatementDate, prevCutoffStatementDate } = calculateCardCutoffDates(card.statement_day, card.last_rollover_at);
 
-    let totalExp = 0;
-    let totalRef = 0;
+    let unbilledExpShared = 0;
+    let unbilledExpPersonal = 0;
+    let unbilledRefShared = 0;
+    let unbilledRefPersonal = 0;
+    let unbilledRepayShared = 0;
+    let unbilledRepayPersonal = 0;
+
+    let billedExpShared = 0;
+    let billedExpPersonal = 0;
+    let billedRefShared = 0;
+    let billedRefPersonal = 0;
+    let billedRepayShared = 0;
+    let billedRepayPersonal = 0;
 
     for (const tx of cardTxs) {
+      if (tx.category === '信用卡還款') {
+        const repayAmt = Number(tx.amount || 0);
+        const unbOffset = Math.min(repayAmt, Number(tx.unbilled_offset || 0));
+        const billedRepay = Math.max(0, repayAmt - unbOffset);
+        if (Number(tx.is_shared) === 1) {
+          unbilledRepayShared += unbOffset;
+          billedRepayShared += billedRepay;
+        } else {
+          unbilledRepayPersonal += unbOffset;
+          billedRepayPersonal += billedRepay;
+        }
+        continue;
+      }
+
       if (SYSTEM_CATEGORIES_SET.has(tx.category)) continue;
+
       let isUnbilledWindow = false;
       if (cutoffStatementDate && prevCutoffStatementDate) {
         isUnbilledWindow =
@@ -826,38 +889,55 @@ export async function computeCreditCardsReadOnlyMetrics(
         isUnbilledWindow = Number(tx.is_billed) === 0 || Number(tx.defer_to_next_statement) === 1;
       }
 
+      const isShared = Number(tx.is_shared) === 1;
+      const amt = Number(tx.amount || 0);
+
       if (isUnbilledWindow) {
-        if (tx.type === 'expense') totalExp += Number(tx.amount || 0);
-        else if (tx.type === 'income') totalRef += Number(tx.amount || 0);
+        if (tx.type === 'expense') {
+          if (isShared) unbilledExpShared += amt;
+          else unbilledExpPersonal += amt;
+        } else if (tx.type === 'income') {
+          if (isShared) unbilledRefShared += amt;
+          else unbilledRefPersonal += amt;
+        }
+      } else {
+        if (tx.type === 'expense') {
+          if (isShared) billedExpShared += amt;
+          else billedExpPersonal += amt;
+        } else if (tx.type === 'income') {
+          if (isShared) billedRefShared += amt;
+          else billedRefPersonal += amt;
+        }
       }
     }
 
-    const newUnbilled = Math.max(0, totalExp - totalRef);
+    const totalUnbilledExp = unbilledExpShared + unbilledExpPersonal;
+    const totalUnbilledRef = unbilledRefShared + unbilledRefPersonal;
+    const newUnbilled = Math.max(0, totalUnbilledExp - totalUnbilledRef);
     const cardBalance = Number(card.balance || 0);
-    const totalDue = cardBalance + newUnbilled;
 
-    let shared = 0;
-    let personal = 0;
-    if (totalDue > 0) {
-      let remaining = totalDue;
-      let expCount = 0;
-      for (const tx of cardTxs) {
-        if (tx.type !== 'expense') continue;
-        expCount += 1;
-        if (expCount > 50 || remaining <= 0) break;
-        const take = Math.min(remaining, Number(tx.amount || 0));
-        if (Number(tx.is_shared) === 1) shared += take;
-        else personal += take;
-        remaining -= take;
-      }
-      if (remaining > 0) personal += remaining;
-    }
+    // 未出帳公私帳分流 (保證和等於 newUnbilled)
+    const netUnbilledShared = Math.max(0, unbilledExpShared - unbilledRefShared - unbilledRepayShared);
+    const unbilled_shared_debt = Math.min(newUnbilled, netUnbilledShared);
+    const unbilled_personal_debt = Math.max(0, newUnbilled - unbilled_shared_debt);
+
+    // 已出帳公私帳分流 (保證和等於 cardBalance)
+    const netBilledShared = Math.max(0, billedExpShared - billedRefShared - billedRepayShared);
+    const billed_shared_debt = Math.min(cardBalance, netBilledShared);
+    const billed_personal_debt = Math.max(0, cardBalance - billed_shared_debt);
+
+    const shared_debt = billed_shared_debt + unbilled_shared_debt;
+    const personal_debt = billed_personal_debt + unbilled_personal_debt;
 
     result.set(card.id, {
       balance: cardBalance,
       unbilled: newUnbilled,
-      shared_debt: shared,
-      personal_debt: personal,
+      billed_shared_debt,
+      billed_personal_debt,
+      unbilled_shared_debt,
+      unbilled_personal_debt,
+      shared_debt,
+      personal_debt,
     });
   }
 
@@ -952,29 +1032,21 @@ export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string
   await db.prepare('UPDATE accounts SET unbilled = ? WHERE id = ?')
     .bind(newUnbilled, cardId).run();
 
-  // 重算 shared_debt 與 personal_debt
-  const totalDue = (card.balance || 0) + newUnbilled;
-  let shared = 0;
-  let personal = 0;
-  if (totalDue > 0) {
-    let remaining = totalDue;
-    for (const tx of ((recentExpRes.results || []) as Array<{ amount: number; is_shared: number }>)) {
-      if (remaining <= 0) break;
-      const take = Math.min(remaining, tx.amount);
-      if (tx.is_shared === 1) shared += take;
-      else personal += take;
-      remaining -= take;
-    }
-    if (remaining > 0) personal += remaining;
-  }
+  // 重算雙層公私債務指標 (ADR-0025)
+  const metricsMap = await computeCreditCardsReadOnlyMetrics(db, [{ ...card, unbilled: newUnbilled }]);
+  const m = metricsMap.get(card.id);
 
   return {
     id: card.id,
     name: card.name,
     balance: card.balance,
     unbilled: newUnbilled,
-    shared_debt: shared,
-    personal_debt: personal,
+    billed_shared_debt: m?.billed_shared_debt || 0,
+    billed_personal_debt: m?.billed_personal_debt || 0,
+    unbilled_shared_debt: m?.unbilled_shared_debt || 0,
+    unbilled_personal_debt: m?.unbilled_personal_debt || 0,
+    shared_debt: m?.shared_debt || 0,
+    personal_debt: m?.personal_debt || 0,
     cutoffStatementDate,
     prevCutoffStatementDate,
   };

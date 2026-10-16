@@ -119,6 +119,16 @@ _Avoid_: 雙步覆蓋 (two-step overwrite)、夾零截斷 (zero clamping)、已�
 2. **純粹未出帳淨額加總**：精準加總所有 `is_billed = 0` 之未出帳區間內「有效消費支出總額 － 刷退退款總額」（$$\max(0, \sum \text{未出帳消費} - \sum \text{未出帳刷退})$$），完全不扣減 `unbilled_offset` 還款紀錄以免溢扣上期繳卡費，並透過批次聚合即刻計算公私帳刷卡分流（`shared_debt` 與 `personal_debt`）。
 _Avoid_: 讀取帳戶列表或餘額時夾帶資料庫寫入與逐卡 N+1 迴圈 (side-effect DB writes or N+1 per-card queries during read requests)、結帳日當天未按出帳作業卻把未出帳強制歸零 (zeroing unbilled on statement day before manual rollover)、全額還款扣減 (full repayment deduction)、溢繳還款誤扣 (unbilled_offset deduction)
 
+**Two-Dimensional Credit Debt Matrix (信用卡雙層公私債務矩陣)**:
+將信用卡欠款在「出帳狀態維度（已出帳待繳 `balance` vs 未出帳累計 `unbilled`）」與「責任主體維度（家庭代墊公帳 `shared` vs 個人私帳 `personal`）」進行四維結構化拆解：
+1. **已出帳公帳待繳款 (`billed_shared_debt`)**：當期已出帳明細中屬於家庭公帳代墊之淨額，為銀行當期帳單中應由家庭共同基金撥付繳納之法定金額。
+2. **已出帳私帳待繳款 (`billed_personal_debt`)**：當期已出帳明細中屬於持卡人個人私帳之淨額，應由持卡人個人帳戶自行承擔繳納。
+3. **未出帳公帳累計 (`unbilled_shared_debt`)**：未出帳區間內累積之家庭代墊消費淨額，代表下期或後續出帳時將轉入之代墊款。
+4. **未出帳私帳累計 (`unbilled_personal_debt`)**：未出帳區間內累積之持卡人個人私密消費淨額。
+5. **還款預設與沖銷順序**：點擊「繳家庭代墊」時，若有已出帳公帳（`billed_shared_debt > 0`），系統預設代入「已出帳公帳」金額，避免共同基金提早溢繳尚未出帳之消費，並於繳款彈窗中提供快捷切換；共同基金還款流水（`is_shared = 1`）優先沖銷已出帳公帳，餘額溢出方沖銷未出帳公帳。
+6. **他人私卡公帳視角脫敏防線**：在家庭公帳視角或非持卡人檢視伴侶之個人私卡時，清楚揭露 `billed_shared_debt` 與 `unbilled_shared_debt`，並提供「繳家庭代墊」操作；而個人私帳金額（`credit_limit`、`billed_personal_debt`、`unbilled_personal_debt`、`balance`）全面落實隱私脫敏遮蔽。
+_Avoid_: 混淆已出帳與未出帳導致公帳盲目全額溢繳 (mixing billed and unbilled causing premature joint fund payment)、他人私卡揭露個人私帳金額 (leaking personal debt details of other members' cards)
+
 ---
 
 ### 家庭公帳與共同基金 (Household & Joint Fund)
