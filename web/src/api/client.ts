@@ -243,6 +243,7 @@ export const householdApi = {
     from_balance: number;
     to_balance: number;
   }>('/households/reimburse', body),
+  unlinkAdvance: (id: string) => post<{ success: boolean; message: string }>(`/households/advances/${id}/unlink`),
 };
 
 // Bot (LINE & Telegram 璈鈭?
@@ -434,6 +435,8 @@ export interface HouseholdAdvanceItem {
   amount: number;
   account_name: string;
   account_type: string;
+  type?: 'expense' | 'income';
+  reimbursement_id?: string | null;
 }
 
 export interface HouseholdReimbursementItem {
@@ -457,8 +460,11 @@ export interface HouseholdAdvance {
   email: string;
   total_advanced: number;
   total_reimbursed: number;
+  linked_reimbursed?: number;
+  unlinked_reimbursed?: number;
   pending_reimburse: number;
   advance_items?: HouseholdAdvanceItem[];
+  settled_items?: HouseholdAdvanceItem[];
   reimbursement_items?: HouseholdReimbursementItem[];
   receiving_accounts?: ReceivingAccount[];
 }

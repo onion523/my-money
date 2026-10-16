@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   unbilled_offset REAL DEFAULT 0,
   is_billed INTEGER NOT NULL DEFAULT 0,
   defer_to_next_statement INTEGER NOT NULL DEFAULT 0,
+  reimbursement_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

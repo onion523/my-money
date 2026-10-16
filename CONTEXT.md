@@ -254,6 +254,30 @@ _Avoid_: 單列硬擠 (single-row cramming)、橫向截斷 (horizontal clipping)
 
 ---
 
+### 家庭代墊與報銷核銷生命週期 (Household Advances & Reimbursement Lifecycle)
+
+**Itemized Advance Reconciliation (明細實報實銷制)**:
+成員以個人私帳／私卡／現金墊付公帳（`is_shared = 1` 且 `is_joint = 0`）之消費與退款，其待報銷總額（`pending_reimburse`）嚴格等於「目前待報銷清單中所有未報銷項目之淨金額加總（$$\sum \text{代墊支出} - \sum \text{代墊退款}$$）」。每一筆結清款項皆精確綁定特定收支明細之 `reimbursement_id`，讀取查詢端點（`GET /households/advances`）全面落實純讀取冪等性，嚴禁在查詢時執行任何靜默修改資料庫之「歷史差額自動沖銷（auto-heal）」副作用。
+_Avoid_: 讀取端點自動核銷副作用 (side-effect auto-healing on GET requests)、貪婪猜測核銷 (greedy fallback auto-linking)、硬湊不相等的公式算式 (mathematically contradictory tooltip formulas)
+
+**Shared Refund Offset in Advances (公帳退款／刷退負項抵減)**:
+成員以個人帳戶、私卡或現金代墊公帳後所發生之退貨、刷退或回饋金（`type = 'income'`, `is_shared = 1`, `account.is_joint = 0`，且非內部移轉如信用卡還款、內部轉帳、公帳代墊報銷），納入家庭代墊清單中作為負項（顯示為綠色減項），自動抵減該成員之待報銷總額，確保代墊款不因刷退退貨而虛增。
+_Avoid_: 排除退款導致代墊虛增 (omitting shared refunds leading to inflated advances)
+
+**Explicit Reimbursement Surplus Display (預收款／溢撥款獨立揭示)**:
+當家庭歷史自共同基金撥款報銷之總金額大於已具體勾稽結清之代墊明細總額時（例如整數定額撥款或手動預支），系統將此差額獨立清晰標示為「家庭基金溢撥／預收款：NT$ X」，絕不可自動侵吞後續新增的未報銷代墊消費。
+_Avoid_: 差額靜默吞食新代墊 (silent swallowing of new advances by surplus difference)
+
+**Dual Tab Advance Audit & Unlink Action (待報銷與已結清雙分頁與解除報銷)**:
+在家庭協同（Family）代墊明細區塊提供「待報銷明細（Pending）」與「已結清明細（Settled）」分頁切換，完整追溯每一筆已報銷代墊由哪一筆撥款流水結清；並支援家庭管理員或記錄者本人執行「解除報銷（退回待報銷）」，將誤核銷之收支明細重置為未報銷狀態（`reimbursement_id = NULL`），具備完整防呆與審計溯源性。
+_Avoid_: 已結清明細黑盒子不可見 (invisible settled advances black-box)、誤核銷無法退回 (irreversible accidental reimbursement)
+
+**Historical Auto-Heal Reset (歷史自動核銷標記平反重置)**:
+系統執行單次冪等資料庫修正，將過去因歷史差額自動沖銷邏輯被打上 `reimbursement_id = 'historical_reimbursement'` 標記之歷史收支全面重置為 `NULL`，使被誤吞隱藏之代墊明細立即全數重見天日並回到待報銷清單中供使用者核對與勾選。
+_Avoid_: 歷史誤吞資料永久遺失 (leaving historical auto-healed items permanently hidden)
+
+---
+
 ### 交易分類體系 (Category Taxonomy)
 
 **Curated Category Taxonomy (標準擴充分類庫)**:
