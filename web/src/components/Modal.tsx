@@ -8,7 +8,7 @@ interface ModalProps {
   maxWidth?: number
 }
 
-export default function Modal({ title, onClose, children, maxWidth = 480 }: ModalProps) {
+export default function Modal({ title, onClose, children, maxWidth = 540 }: ModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)

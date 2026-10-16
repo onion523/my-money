@@ -1101,7 +1101,7 @@ export default function Accounts() {
                     style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                     onClick={() => setForm(p => ({ ...p, type: 'bank', color: '#3B82F6' }))}
                   >
-                    <Landmark size={15} /> 銀行存款帳戶
+                    <Landmark size={15} /> 銀行存款
                   </button>
                   <button
                     type="button"
@@ -1397,7 +1397,7 @@ export default function Accounts() {
         <Modal
           
           onClose={() => setPayCardModal(null)}
-          title={`信用卡扣款還款 ${payCardModal.name} 信用卡待繳款`}
+          title={`信用卡繳費沖銷 — ${payCardModal.name}`}
         >
           <form onSubmit={handlePaySubmit}>
             {payError && <div className="alert alert-danger" style={{ marginBottom: 14 }}>{payError}</div>}
@@ -1431,57 +1431,6 @@ export default function Accounts() {
                   onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))}
                   required
                 />
-                <div className="flex flex-wrap gap-xs" style={{ marginTop: 8 }}>
-                  {payForm.is_shared === 1 ? (
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-xs btn-secondary"
-                        onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.billed_shared_debt || 0).toString() }))}
-                        disabled={(payCardModal.billed_shared_debt || 0) <= 0}
-                      >
-                        當期已出帳公帳: {formatCurrency(payCardModal.billed_shared_debt || 0)}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-xs btn-secondary"
-                        onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.shared_debt || 0).toString() }))}
-                        disabled={(payCardModal.shared_debt || 0) <= 0}
-                      >
-                        結清全部代墊: {formatCurrency(payCardModal.shared_debt || 0)}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-xs btn-secondary"
-                        onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.billed_personal_debt || 0).toString() }))}
-                        disabled={(payCardModal.billed_personal_debt || 0) <= 0}
-                      >
-                        當期已出帳私帳: {formatCurrency(payCardModal.billed_personal_debt || 0)}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-xs btn-secondary"
-                        onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.personal_debt || 0).toString() }))}
-                        disabled={(payCardModal.personal_debt || 0) <= 0}
-                      >
-                        結清全部私帳: {formatCurrency(payCardModal.personal_debt || 0)}
-                      </button>
-                    </>
-                  )}
-                  {(payCardModal.is_joint === 1 || (user && payCardModal.user_id === user.id)) && (
-                    <button
-                      type="button"
-                      className="btn btn-xs btn-secondary"
-                      onClick={() => setPayForm(p => ({ ...p, amount: ((payCardModal.balance || 0) + (payCardModal.unbilled || 0)).toString() }))}
-                      disabled={((payCardModal.balance || 0) + (payCardModal.unbilled || 0)) <= 0}
-                    >
-                      全額待繳: {formatCurrency((payCardModal.balance || 0) + (payCardModal.unbilled || 0))}
-                    </button>
-                  )}
-                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">扣款日期</label>
@@ -1492,6 +1441,64 @@ export default function Accounts() {
                   onChange={e => setPayForm(p => ({ ...p, date: e.target.value }))}
                   required
                 />
+              </div>
+            </div>
+
+            {/* 快捷金額標籤 (滿寬整行排版) */}
+            <div className="form-group" style={{ marginTop: -4, marginBottom: 16 }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+                快捷填入扣款金額：
+              </div>
+              <div className="flex flex-wrap gap-xs">
+                {payForm.is_shared === 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-secondary"
+                      onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.billed_shared_debt || 0).toString() }))}
+                      disabled={(payCardModal.billed_shared_debt || 0) <= 0}
+                    >
+                      當期已出帳公帳: {formatCurrency(payCardModal.billed_shared_debt || 0)}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-secondary"
+                      onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.shared_debt || 0).toString() }))}
+                      disabled={(payCardModal.shared_debt || 0) <= 0}
+                    >
+                      結清全部代墊: {formatCurrency(payCardModal.shared_debt || 0)}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-secondary"
+                      onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.billed_personal_debt || 0).toString() }))}
+                      disabled={(payCardModal.billed_personal_debt || 0) <= 0}
+                    >
+                      當期已出帳私帳: {formatCurrency(payCardModal.billed_personal_debt || 0)}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-secondary"
+                      onClick={() => setPayForm(p => ({ ...p, amount: (payCardModal.personal_debt || 0).toString() }))}
+                      disabled={(payCardModal.personal_debt || 0) <= 0}
+                    >
+                      結清全部私帳: {formatCurrency(payCardModal.personal_debt || 0)}
+                    </button>
+                  </>
+                )}
+                {(payCardModal.is_joint === 1 || (user && payCardModal.user_id === user.id)) && (
+                  <button
+                    type="button"
+                    className="btn btn-xs btn-secondary"
+                    onClick={() => setPayForm(p => ({ ...p, amount: ((payCardModal.balance || 0) + (payCardModal.unbilled || 0)).toString() }))}
+                    disabled={((payCardModal.balance || 0) + (payCardModal.unbilled || 0)) <= 0}
+                  >
+                    全額待繳: {formatCurrency((payCardModal.balance || 0) + (payCardModal.unbilled || 0))}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1567,7 +1574,7 @@ export default function Accounts() {
       {/* 結帳日出帳作業預覽 Modal (ADR-0024) */}
       {rolloverModalCard && (
         <Modal
-          maxWidth={640}
+          maxWidth={720}
           onClose={() => {
             if (!rolloverSubmitting) {
               setRolloverModalCard(null)
@@ -1834,7 +1841,7 @@ export default function Accounts() {
                                       )}
                                     </div>
                                     {t.note && (
-                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', wordBreak: 'break-word', lineHeight: 1.35, marginTop: 2 }}>
                                         {t.note}
                                       </div>
                                     )}

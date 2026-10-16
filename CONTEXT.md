@@ -376,10 +376,12 @@ _Avoid_: 手機置中懸浮彈窗 (centered floating modal on mobile)、低於 1
    - `.modal-body`（獨立滾動層）：`flex: 1; min-height: 0; overflow-y: auto;` 承載表單或清單內容。在電腦版下套用日系輕量 6px 細圓角半透明卷軸，並設定 `scrollbar-gutter: stable;`，徹底消除卷軸出現時彈窗內容橫向跳動。
 2. **電腦版彈窗分級寬度規範（Tiered Modal Sizing）**：
    - **小型確認/數值彈窗**：`maxWidth: 400px`（如預算設定、存入目標）。
-   - **標準表單彈窗**：`maxWidth: 480px`（預設值，如新增/編輯帳戶、轉帳、信用卡還款、快速記帳、新增週期性收支、目標設定等）。
-   - **複雜明細與清單彈窗**：`maxWidth: 640px`（如「結帳日出帳作業預覽」與「家庭代墊報銷清單」），提供充裕水平空間給統計卡片、公私拆解與勾選明細，消除內部雙重嵌套卷軸與擁擠換行。
+   - **標準表單彈窗**：`maxWidth: 540px`（預設值，由 480px 提升至 540px，如新增/編輯帳戶、轉帳、信用卡還款、快速記帳、新增週期性收支、目標設定等，確保各類帳戶選單文字不截斷）。
+   - **複雜明細與清單彈窗**：`maxWidth: 720px`（如「結帳日出帳作業預覽」與「家庭代墊報銷清單」，由 640px 提升至 720px），提供充裕水平空間給統計卡片、公私拆解與勾選明細，消除內部雙重嵌套卷軸與擁擠換行。
+   - **還款快捷按鈕滿寬獨立排版**：信用卡繳費彈窗之快捷金額標籤抽離至金額與日期網格下方作為獨立整行（Full-width），不再擠壓於單一欄位內。
+   - **明細備註自然換行**：出帳預覽等清單之收支備註解除 `nowrap` 與 `ellipsis` 單行強制截斷，採 `wordBreak: break-word` 自然多行呈現，完整展現備註內容。
    - **行動端自適應**：在 `<= 640px` 下，所有分級彈窗統一自動自適應為 100% 滿寬之底部抽屜（Bottom Sheet），維持安全區與吸頂標題列體驗。
-_Avoid_: 外框直接設 overflow-y 導致直角卷軸刺穿圓角 (overflow-y directly on rounded modal-box piercing 24px corners)、Header 隨內容滾走 (header scrolling away with content)、複雜清單塞入 480px 窄彈窗造成雙重卷軸 (cramping wide tables into 480px modal causing nested double scrollbars)、卷軸出現時內容橫向跳動 (content layout shifting without scrollbar-gutter)
+_Avoid_: 外框直接設 overflow-y 導致直角卷軸刺穿圓角 (overflow-y directly on rounded modal-box piercing 24px corners)、Header 隨內容滾走 (header scrolling away with content)、複雜清單塞入窄彈窗造成雙重卷軸 (cramping wide tables into narrow modal causing nested double scrollbars)、卷軸出現時內容橫向跳動 (content layout shifting without scrollbar-gutter)、單行省略截斷導致無法讀取完整備註 (truncating transaction notes with ellipsis)
 
 **Collapsible Mobile Filter Bar (行動端可收合進階篩選列)**:
 在收支明細頁（Transactions）的行動端視角（`<= 640px`）下，篩選工具列預設僅常駐顯示「三態帳本視角等寬切換器」、「關鍵字搜尋框」與附帶已啟用篩選數徽章之「進階篩選收合按鈕」，將起始／結束日期、收支類型、分類、帳戶等次要篩選條件預設折疊收合（展開時日期採雙欄並排），並將篩選結果統計列之「總收入、總支出、淨收支」轉為三欄等寬網格，確保使用者進入頁面第一屏即可直接檢視收支明細。
