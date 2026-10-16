@@ -1651,8 +1651,18 @@ export default function Accounts() {
                 const curExp = activeExp.reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
                 const curRef = activeRef.reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
                 const curNet = Math.max(0, curExp - curRef)
-                const curShared = activeExp.filter((t: any) => Number(t.is_shared) === 1).reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
+
+                // ADR-0029：公帳已報銷者轉列個人自負，公帳刷退優先折抵公帳欠款
+                const sharedExpUnreimbursed = activeExp
+                  .filter((t: any) => Number(t.is_shared) === 1 && (!t.reimbursement_id || String(t.reimbursement_id).trim() === ''))
+                  .reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
+                const sharedRef = activeRef
+                  .filter((t: any) => Number(t.is_shared) === 1)
+                  .reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
+                const curShared = Math.max(0, sharedExpUnreimbursed - sharedRef)
                 const curPersonal = Math.max(0, curNet - curShared)
+                const reimbursedSharedCount = activeExp.filter((t: any) => Number(t.is_shared) === 1 && t.reimbursement_id && String(t.reimbursement_id).trim() !== '').length
+
                 const deferredExp = allTxs.filter((t: any) => rolloverDeferredIds.has(t.id) && t.type === 'expense').reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
                 const deferredRef = allTxs.filter((t: any) => rolloverDeferredIds.has(t.id) && t.type === 'income').reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
                 const curDeferredNet = deferredExp - deferredRef
@@ -1727,7 +1737,7 @@ export default function Accounts() {
                         <span className="flex items-center gap-xs">
                           <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-primary)' }} />
                           <Home size={13} color="var(--color-primary)" />
-                          <span>家庭代墊公帳（可向共同基金報銷）：</span>
+                          <span>家庭代墊公帳（待向共同基金報銷）：</span>
                         </span>
                         <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
                           {formatCurrency(curShared)}
@@ -1737,7 +1747,7 @@ export default function Accounts() {
                         <span className="flex items-center gap-xs">
                           <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6B7280' }} />
                           <Lock size={13} color="#6B7280" />
-                          <span>個人私帳消費：</span>
+                          <span>個人私帳消費{reimbursedSharedCount > 0 ? `（含 ${reimbursedSharedCount} 筆公帳已由家庭報銷結清）` : ''}：</span>
                         </span>
                         <span style={{ fontWeight: 700, color: '#4B5563' }}>
                           {formatCurrency(curPersonal)}
@@ -1802,12 +1812,39 @@ export default function Accounts() {
                                         {t.date}
                                       </span>
                                       {t.is_shared === 1 ? (
-                                        <span className="badge badge-primary" style={{ fontSize: '0.7rem', padding: '1px 5px' }}>
-                                          <Home size={10} style={{ marginRight: 2 }} />公帳
-                                        </span>
+                                        t.reimbursement_id && String(t.reimbursement_id).trim() !== '' ? (
+                                          <span
+                                            className="badge"
+                                            style={{
+                                              fontSize: '0.7rem',
+                                              padding: '1px 5px',
+                                              background: 'rgba(16, 185, 129, 0.12)',
+                                              color: '#059669',
+                                              border: '1px solid rgba(16, 185, 129, 0.25)',
+                                              fontWeight: 600,
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: 2,
+                                            }}
+                                            title="家庭共同基金已完成撥款報銷，出帳由持卡人自負向發卡機構繳費"
+                                          >
+                                            <CheckCircle2 size={10} />
+                                            公帳 · 家庭已報銷
+                                          </span>
+                                        ) : (
+                                          <span
+                                            className="badge badge-primary"
+                                            style={{ fontSize: '0.7rem', padding: '1px 5px', display: 'inline-flex', alignItems: 'center', gap: 2 }}
+                                            title="家庭公帳代墊款，待向共同基金報銷"
+                                          >
+                                            <Home size={10} />
+                                            公帳 · 待報銷
+                                          </span>
+                                        )
                                       ) : (
-                                        <span className="badge badge-secondary" style={{ fontSize: '0.7rem', padding: '1px 5px' }}>
-                                          <Lock size={10} style={{ marginRight: 2 }} />私帳
+                                        <span className="badge badge-secondary" style={{ fontSize: '0.7rem', padding: '1px 5px', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                          <Lock size={10} />
+                                          私帳
                                         </span>
                                       )}
                                       {Boolean(t.is_prior_deferred || (rolloverPreview.prevStatementDate && t.date <= rolloverPreview.prevStatementDate && Number(t.is_billed) === 0)) && (

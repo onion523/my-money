@@ -656,7 +656,33 @@ export default function Family() {
                                         )}
                                         {item.note && <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.note}</span>}
                                       </div>
-                                      <div className="fb-cell-account">{item.account_name}</div>
+                                      <div className="fb-cell-account">
+                                        <span>{item.account_name}</span>
+                                        {item.account_type === 'credit_card' && (
+                                          <span
+                                            className="badge"
+                                            style={{
+                                              fontSize: '0.68rem',
+                                              padding: '1px 5px',
+                                              marginLeft: 5,
+                                              background: item.defer_to_next_statement === 1
+                                                ? '#FEF3C7'
+                                                : item.is_billed === 1
+                                                ? 'rgba(99, 102, 241, 0.1)'
+                                                : 'rgba(245, 158, 11, 0.1)',
+                                              color: item.defer_to_next_statement === 1
+                                                ? '#B45309'
+                                                : item.is_billed === 1
+                                                ? '#4F46E5'
+                                                : '#D97706',
+                                              fontWeight: 600,
+                                              border: `1px solid ${item.defer_to_next_statement === 1 ? 'rgba(245, 158, 11, 0.3)' : item.is_billed === 1 ? 'rgba(99, 102, 241, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                                            }}
+                                          >
+                                            {item.defer_to_next_statement === 1 ? '延至下期' : item.is_billed === 1 ? '已出帳' : '未出帳'}
+                                          </span>
+                                        )}
+                                      </div>
                                       <div
                                         className="fb-cell-amount"
                                         style={{ color: item.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)' }}
@@ -708,7 +734,33 @@ export default function Family() {
                                         )}
                                         {item.note && <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.note}</span>}
                                       </div>
-                                      <div className="fb-cell-account">{item.account_name}</div>
+                                      <div className="fb-cell-account">
+                                        <span>{item.account_name}</span>
+                                        {item.account_type === 'credit_card' && (
+                                          <span
+                                            className="badge"
+                                            style={{
+                                              fontSize: '0.68rem',
+                                              padding: '1px 5px',
+                                              marginLeft: 5,
+                                              background: item.defer_to_next_statement === 1
+                                                ? '#FEF3C7'
+                                                : item.is_billed === 1
+                                                ? 'rgba(99, 102, 241, 0.1)'
+                                                : 'rgba(245, 158, 11, 0.1)',
+                                              color: item.defer_to_next_statement === 1
+                                                ? '#B45309'
+                                                : item.is_billed === 1
+                                                ? '#4F46E5'
+                                                : '#D97706',
+                                              fontWeight: 600,
+                                              border: `1px solid ${item.defer_to_next_statement === 1 ? 'rgba(245, 158, 11, 0.3)' : item.is_billed === 1 ? 'rgba(99, 102, 241, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                                            }}
+                                          >
+                                            {item.defer_to_next_statement === 1 ? '延至下期' : item.is_billed === 1 ? '已出帳' : '未出帳'}
+                                          </span>
+                                        )}
+                                      </div>
                                       <div
                                         className="fb-cell-amount"
                                         style={{ color: item.type === 'income' ? 'var(--color-success)' : 'var(--text-primary)', fontWeight: 600 }}
@@ -1055,8 +1107,31 @@ export default function Family() {
                                         )}
                                         {it.note && <span className="text-muted" style={{ fontWeight: 400 }}>· {it.note}</span>}
                                       </div>
-                                      <div className="text-xs text-secondary" style={{ marginTop: 2 }}>
-                                        {it.date}
+                                      <div className="text-xs text-secondary" style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <span>{it.date}</span>
+                                        {it.account_type === 'credit_card' && (
+                                          <span
+                                            className="badge"
+                                            style={{
+                                              fontSize: '0.65rem',
+                                              padding: '0px 4px',
+                                              background: it.defer_to_next_statement === 1
+                                                ? '#FEF3C7'
+                                                : it.is_billed === 1
+                                                ? 'rgba(99, 102, 241, 0.1)'
+                                                : 'rgba(245, 158, 11, 0.1)',
+                                              color: it.defer_to_next_statement === 1
+                                                ? '#B45309'
+                                                : it.is_billed === 1
+                                                ? '#4F46E5'
+                                                : '#D97706',
+                                              fontWeight: 600,
+                                              border: `1px solid ${it.defer_to_next_statement === 1 ? 'rgba(245, 158, 11, 0.3)' : it.is_billed === 1 ? 'rgba(99, 102, 241, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                                            }}
+                                          >
+                                            {it.defer_to_next_statement === 1 ? '延至下期' : it.is_billed === 1 ? '已出帳' : '未出帳'}
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   </div>

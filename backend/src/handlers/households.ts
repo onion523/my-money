@@ -239,6 +239,7 @@ households.get('/advances', async (c) => {
     `).bind(household.id),
     c.env.DB.prepare(`
       SELECT t.id, t.user_id, t.date, t.created_at, t.category, t.note, t.amount, t.type, t.reimbursement_id,
+             t.is_billed, t.defer_to_next_statement,
              COALESCE(a.name, '個人帳戶') as account_name, COALESCE(a.type, 'other') as account_type
       FROM transactions t
       LEFT JOIN accounts a ON t.account_id = a.id
@@ -283,15 +284,19 @@ households.get('/advances', async (c) => {
     // 待報銷明細（未結清項目，包含未結清支出與退款抵扣）
     const advanceItems = myTxs
       .filter(r => !r.reimbursement_id || String(r.reimbursement_id).trim() === '')
-      .map(({ id, date, created_at, category, note, amount, account_name, account_type, type }) => ({
-        id, date, created_at, category, note, amount, account_name, account_type, type
+      .map(({ id, date, created_at, category, note, amount, account_name, account_type, type, is_billed, defer_to_next_statement }) => ({
+        id, date, created_at, category, note, amount, account_name, account_type, type,
+        is_billed: Number(is_billed || 0),
+        defer_to_next_statement: Number(defer_to_next_statement || 0)
       }));
 
     // 已結清明細（已報銷項目）
     const settledItems = myTxs
       .filter(r => r.reimbursement_id && String(r.reimbursement_id).trim() !== '')
-      .map(({ id, date, created_at, category, note, amount, account_name, account_type, type, reimbursement_id }) => ({
-        id, date, created_at, category, note, amount, account_name, account_type, type, reimbursement_id
+      .map(({ id, date, created_at, category, note, amount, account_name, account_type, type, reimbursement_id, is_billed, defer_to_next_statement }) => ({
+        id, date, created_at, category, note, amount, account_name, account_type, type, reimbursement_id,
+        is_billed: Number(is_billed || 0),
+        defer_to_next_statement: Number(defer_to_next_statement || 0)
       }));
 
     // 已結清項目之淨加總

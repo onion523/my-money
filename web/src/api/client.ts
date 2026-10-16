@@ -99,6 +99,7 @@ export const accountsApi = {
       is_billed?: number;
       is_prior_deferred?: boolean;
       is_initially_deferred?: boolean;
+      reimbursement_id?: string | null;
     }>;
   }>(`/accounts/${id}/rollover-preview`),
   rolloverStatement: (id: string, deferredTxIds?: string[]) => post<{
@@ -439,6 +440,8 @@ export interface HouseholdAdvanceItem {
   account_type: string;
   type?: 'expense' | 'income';
   reimbursement_id?: string | null;
+  is_billed?: number;
+  defer_to_next_statement?: number;
 }
 
 export interface HouseholdReimbursementItem {

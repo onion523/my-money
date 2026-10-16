@@ -93,13 +93,16 @@ _Avoid_: 隱藏排除特定分類導致畫面明細與上方總計數字兜不�
    - **結帳日到達後常態出帳（`currDay >= statementDay`）**：顯示發卡機構法定結算週期（如 `9/26 ～ 10/25`），同樣完整納入該週期內之所有消費與歷史延入款。
    - **全週期明細透視**：涵蓋已出帳與未出帳明細，不因先前已執行過出帳而變為空清單，隨時支援重複檢視與核對。
 2. **統計與公私帳拆解預覽**：清晰揭露本期結算起訖區間、消費筆數與總計、刷退折抵淨額、本期預計出帳淨額，並即時拆解本期款項中之「家庭代墊公帳小計」與「個人私帳消費小計」。
+   - **公帳代墊報銷狀態與責任分流（Household Reimbursement Liability Shift）**：
+     - **待報銷代墊（`is_shared = 1 且未報銷`）**：標示 `[公帳 · 待報銷]` 徽章，計入本期公帳應付欠款（`sharedDebt`），公帳刷退優先折抵此項。
+     - **已報銷代墊（`is_shared = 1 且已於家庭報銷結清`）**：清單中標示 `[公帳 · 家庭已報銷]` 徽章。因家庭共同基金已先行撥款補償持卡人，故在出帳預覽拆解中**不重複計入公帳欠款（`sharedDebt` 為 0）**，全額轉列為持卡人個人應繳私債（`personalDebt`），由持卡人自負向發卡機構繳費責任。
 3. **明細檢視與動態延期暫存（Interactive Defer Toggle & Status Badges）**：
    - 清單依交易日期排列，並以語意徽章明確標示：`[上期延入]`（歷史週期遞延而來、預設納入本期出帳結算）、`[延至下期]`（於當期被指定遞延至下一週期並劃線扣除）。
    - **延期項目自動喚醒納入結算（Default Inclusion of Prior Deferred Items）**：
      - 若當期**尚未執行出帳作業**（包含未到結帳日提前預覽、或結帳日到期首度出帳）：所有自歷史週期遞延而來之項目（包含收支明細手動勾選「延至下期帳單」或前次出帳指定延期之款項，`defer_to_next_statement = 1` 或 `date <= prevStatementDate 且 is_billed = 0`），在彈窗中**一律預設為「納入出帳」（`is_initially_deferred = false`）**，不預設劃線排除，直接計入出帳淨額；持卡人若欲繼續延後，可手動點擊「延至下期」。
      - 若當期**已執行過出帳作業**（再次開啟彈窗二次檢視或調整）：當期仍為 `is_billed = 0 且 defer_to_next_statement = 1` 之款項，代表已於前次出帳中確認延期，維持勾選為 `[延至下期]`，其餘已出帳款項（`is_billed = 1`）維持納入。
 4. **真實明細冪等重算（Ground-Truth Recalculation）**：使用者確認出帳時，系統更新明細之出帳與延期狀態（非延期項目寫入 `defer_to_next_statement = 0, is_billed = 1`，延期項目寫入 `defer_to_next_statement = 1, is_billed = 0`），並**根據整張卡片之所有已出帳消費、已出帳刷退及歷史還款紀錄全量精確重算 `balance`（已出帳待繳款）與 `unbilled`（未出帳款）**，徹底捨棄盲目的純增量累加（`balance = balance + rolled`），確保即使多次重複點選出帳作業、補登消費或修改延期，帳單數字永遠與底層交易明細 100% 精準吻合，絕不重複疊加。
-_Avoid_: 盲目累加導致重複點擊出帳金額疊加 (blind incremental balance addition causing double-count)、未到結帳日硬卡歷史區間排擠當前消費 (locking to legacy statement cycle before statement day and omitting current unbilled charges)、上期延入款進入本期被持續排除導致永久無法出帳 (perpetually excluding prior-cycle deferred items from current statement)、出帳後即變為空清單無法重新檢視調整 (empty list blocking re-inspection after initial rollover)、盲目確認無明細預覽之黑盒子出帳 (black-box rollover without preview)、結帳日未經手動出帳即自動歸零未出帳 (auto-zeroing unbilled on statement day before manual rollover)
+_Avoid_: 盲目累加導致重複點擊出帳金額疊加 (blind incremental balance addition causing double-count)、未到結帳日硬卡歷史區間排擠當前消費 (locking to legacy statement cycle before statement day and omitting current unbilled charges)、上期延入款進入本期被持續排除導致永久無法出帳 (perpetually excluding prior-cycle deferred items from current statement)、出帳後即變為空清單無法重新檢視調整 (empty list blocking re-inspection after initial rollover)、盲目確認無明細預覽之黑盒子出帳 (black-box rollover without preview)、結帳日未經手動出帳即自動歸零未出帳 (auto-zeroing unbilled on statement day before manual rollover)、公帳代墊已於家庭報銷出帳時仍算作公帳欠款導致雙重討債 (counting already-reimbursed shared advances as sharedDebt during rollover causing double-claim)
 
 **Deferred Statement Billing (延至下期帳單與跨期延入生命週期)**:
 在記錄或編輯信用卡消費、或於出帳作業預覽彈窗中，標記該筆收支延至下個結帳週期再行出帳與沖抵的屬性（`defer_to_next_statement`），適用於商家延遲請款、爭議款或跨期退款。其生命週期嚴格劃分為兩大情境：
@@ -181,7 +184,15 @@ _Avoid_: 結算 (settlement)、退款 (refund)、還錢 (payback)、一鍵報銷
    - **個人私帳／私卡／現金墊付且尚未撥款之公帳（待報銷）**：標示 **`[公帳 · 待報銷]`** 暖橘色徽章。
    - **個人墊付且已由共同基金撥款報銷之公帳（已結清）**：標示 **`[公帳 · 已撥款]`** 柔綠色徽章。
    - **個人私帳**：維持 **`[私帳]`** 紅色鎖頭徽章。
-_Avoid_: 盲目手動輸入任意金額導致對不起來哪些項目已結清 (opaque lump-sum reimbursement without item linkage)、缺乏帳戶分組導致多卡代墊難以單卡結清 (lack of account grouping for card-specific settlement)、已結清代墊持續堆疊在待報銷清單中 (retained settled items cluttering pending advance list)、無法分辨公帳是共同基金扣款還是個人代墊 (inability to distinguish joint direct payments from personal advances)
+4. **代墊報銷與出帳解耦並行及狀態透視（Decoupled Parallel Lifecycle & Status Transparency）**：
+   - **隨刷隨報**：個人信用卡代墊公帳時，家庭代墊報銷與信用卡出帳各自獨立並行，不強制等待信用卡出帳日，隨時可於家庭協同申請撥款實報實銷。
+   - **出帳狀態透明透視**：待報銷明細清單與報銷彈窗中，信用卡代墊款項完整透視其出帳狀態，清楚標示 **`[未出帳]`**、**`[已出帳]`** 或 **`[延至下期]`** 語意徽章；即使款項在信用卡端被標記為「延至下期」，仍允許正常勾選報銷，不剝奪成員請款權益。
+   - **公帳退款與負數抵扣防線**：公帳刷退／退款（`type = 'income', is_shared = 1`）作為負數項目即時抵減成員待報銷總額。若累計待報銷淨額小於 0，系統明確標示為「公帳待抵扣」，並停用撥款報銷按鈕，留待成員後續代墊時自動平帳沖抵。
+   - **帳戶列表與家庭淨可用資金獨立解耦**：帳戶列表卡片之公私帳債務矩陣（`shared_debt`）與頂部淨可用資金，維持依底層交易原始之 `is_shared` 屬性計算，不與家庭內部報銷轉帳連動。
+   - **清償雙軌並行互補**：家庭共同基金償付成員個人信用卡代墊款支援雙軌：
+     - **軌道一（家庭協同報銷）**：自共同基金撥款至成員個人銀行／現金帳戶，款項結清後於信用卡出帳時轉由成員個人自負向發卡機構繳費。
+     - **軌道二（帳戶列表繳家庭代墊）**：自共同基金直接還款至信用卡，直接沖減信用卡之公帳待繳債務（`billed_shared_debt`）。
+_Avoid_: 盲目手動輸入任意金額導致對不起來哪些項目已結清 (opaque lump-sum reimbursement without item linkage)、缺乏帳戶分組導致多卡代墊難以單卡結清 (lack of account grouping for card-specific settlement)、已結清代墊持續堆疊在待報銷清單中 (retained settled items cluttering pending advance list)、無法分辨公帳是共同基金扣款還是個人代墊 (inability to distinguish joint direct payments from personal advances)、強制卡片出帳方可報銷導致報帳延宕與漏單 (blocking advance reimbursement until credit card statement cuts causing delays)
 
 **Advance Items Breakdown (代墊與報銷明細)**:
 家庭頁面中各成員的透明流水帳明細，包含「個人墊付公帳待報銷消費清單（日期、類別、備註、扣款個人帳戶、金額）」以及「共同基金撥款報銷沖帳紀錄」，便於雙方隨時核帳與檢驗結清狀態。

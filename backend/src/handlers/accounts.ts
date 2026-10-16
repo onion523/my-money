@@ -1,5 +1,5 @@
 import { getTaipeiDateString } from '../utils/date';
-import { getStatementCycleDates, determineEnrichedTransactionStates } from '../utils/cycle';
+import { getStatementCycleDates, determineEnrichedTransactionStates, calculateRolloverDebtBreakdown } from '../utils/cycle';
 
 let accountsMigrated = false;
 let accountsMigratePromise: Promise<void> | null = null;
@@ -346,7 +346,7 @@ accounts.post('/pay-credit-card', async (c) => {
 });
 
 
-export { getStatementCycleDates, determineEnrichedTransactionStates };
+export { getStatementCycleDates, determineEnrichedTransactionStates, calculateRolloverDebtBreakdown };
 
 export async function recalculateCardBalances(db: D1Database, cardId: string): Promise<{ balance: number; unbilled: number }> {
   const [billedExpRes, billedRefRes, repayRes, unbilledExpRes, unbilledRefRes] = await db.batch([
@@ -418,7 +418,7 @@ accounts.get('/:id/rollover-preview', async (c) => {
 
   // 撈取結帳週期全量明細（含已出帳與未出帳，支援重複檢視與重算）
   let txQuery = `
-    SELECT id, amount, is_shared, type, category, note, date, defer_to_next_statement, is_billed
+    SELECT id, amount, is_shared, type, category, note, date, defer_to_next_statement, is_billed, reimbursement_id
     FROM transactions
     WHERE account_id = ?
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
@@ -448,6 +448,7 @@ accounts.get('/:id/rollover-preview', async (c) => {
     date: string;
     defer_to_next_statement: number;
     is_billed: number;
+    reimbursement_id: string | null;
   }>;
 
   // 基礎歷史數據（排除本期候選 txs，供動態預覽精準試算）
@@ -491,13 +492,8 @@ accounts.get('/:id/rollover-preview', async (c) => {
   const expenseTxs = activeTxs.filter(t => t.type === 'expense');
   const refundTxs = activeTxs.filter(t => t.type === 'income');
 
-  const totalExpense = expenseTxs.reduce((s, t) => s + Number(t.amount || 0), 0);
-  const totalRefund = refundTxs.reduce((s, t) => s + Number(t.amount || 0), 0);
-  const netRolledAmount = Math.max(0, totalExpense - totalRefund);
-
-  // 計算公私帳拆解
-  const sharedDebt = expenseTxs.filter(t => Number(t.is_shared) === 1).reduce((s, t) => s + Number(t.amount || 0), 0);
-  const personalDebt = Math.max(0, netRolledAmount - sharedDebt);
+  // 計算總支出、刷退、出帳淨額與公私帳拆解（ADR-0029：公帳已報銷者轉列個人自負，刷退優先折抵公帳）
+  const { totalExpense, totalRefund, netRolledAmount, sharedDebt, personalDebt } = calculateRolloverDebtBreakdown(activeTxs);
 
   const currentBalance = Number(card.balance || 0);
   const currentUnbilled = Number(card.unbilled || 0);

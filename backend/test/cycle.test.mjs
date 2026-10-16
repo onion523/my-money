@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getStatementCycleDates, determineEnrichedTransactionStates } from '../src/utils/cycle.ts';
+import { getStatementCycleDates, determineEnrichedTransactionStates, calculateRolloverDebtBreakdown } from '../src/utils/cycle.ts';
 
 test('Cycle Suite - 未到當期結帳日提前出帳 (Pre-Statement Rollover)', () => {
   // 今日 2026-10-16，結帳日 25 號 (未到結帳日提前結算)
@@ -85,3 +85,27 @@ test('Cycle Suite - 卡片未設定結帳日情境 (Card without Statement Day)'
   const item = enriched.find(t => t.id === 'tx-no-day-deferred');
   assert.equal(item.is_initially_deferred, false, '未設定結帳日之卡片出帳時，未出帳項目應預設納入結算');
 });
+
+test('Cycle Suite - 出帳公私帳責任拆解與已報銷責任轉移 (ADR-0029)', () => {
+  const activeTxs = [
+    { amount: 1000, type: 'expense', is_shared: 0 }, // 個人私帳 $1000
+    { amount: 2000, type: 'expense', is_shared: 1, reimbursement_id: null }, // 未報銷公帳代墊 $2000
+    { amount: 1500, type: 'expense', is_shared: 1, reimbursement_id: 'reimb-123' }, // 已於家庭報銷之公帳代墊 $1500
+    { amount: 300, type: 'income', is_shared: 1 }, // 公帳刷退 $300
+    { amount: 200, type: 'income', is_shared: 0 }, // 個人私帳退款 $200
+  ];
+
+  const breakdown = calculateRolloverDebtBreakdown(activeTxs);
+
+  // 總消費: 1000 + 2000 + 1500 = 4500
+  assert.equal(breakdown.totalExpense, 4500, '總消費應為 4500');
+  // 總刷退: 300 + 200 = 500
+  assert.equal(breakdown.totalRefund, 500, '總刷退應為 500');
+  // 總出帳淨額: 4500 - 500 = 4000
+  assert.equal(breakdown.netRolledAmount, 4000, '總出帳淨額應為 4000');
+  // 公帳欠款: 未報銷公帳 2000 - 公帳刷退 300 = 1700 (已報銷的 1500 不計入 sharedDebt)
+  assert.equal(breakdown.sharedDebt, 1700, '未報銷公帳扣除刷退後公帳欠款應為 1700');
+  // 個人欠款: 總出帳 4000 - 公帳欠款 1700 = 2300 (包含個人私帳淨額 800 + 已由家庭補償但需向銀行繳納的 1500)
+  assert.equal(breakdown.personalDebt, 2300, '個人欠款應為 2300 (含已報銷公帳轉列個人)');
+});
+

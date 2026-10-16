@@ -154,3 +154,56 @@ export function determineEnrichedTransactionStates<T extends TransactionWithDefe
     };
   });
 }
+
+export interface RolloverDebtBreakdown {
+  totalExpense: number;
+  totalRefund: number;
+  netRolledAmount: number;
+  sharedDebt: number;
+  personalDebt: number;
+}
+
+/**
+ * 計算出帳作業中之總支出、總刷退、出帳淨額與公私帳拆解 (ADR-0029)
+ * 核心原則：
+ * 1. 僅未在家庭報銷之公帳代墊計入 sharedDebt
+ * 2. 已在家庭報銷結清之公帳代墊轉列 personalDebt（由持卡人自負繳費向銀行繳款）
+ * 3. 公帳刷退優先折抵 sharedDebt
+ */
+export function calculateRolloverDebtBreakdown(
+  activeTxs: Array<{
+    amount: number;
+    type: string;
+    is_shared?: number;
+    reimbursement_id?: string | null;
+  }>
+): RolloverDebtBreakdown {
+  const expenseTxs = activeTxs.filter(t => t.type === 'expense');
+  const refundTxs = activeTxs.filter(t => t.type === 'income');
+
+  const totalExpense = expenseTxs.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const totalRefund = refundTxs.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const netRolledAmount = Math.max(0, totalExpense - totalRefund);
+
+  // 公帳未報銷支出（已於家庭報銷結清者，轉由持卡人個人自負繳費，不計入 sharedDebt）
+  const sharedExpense = expenseTxs
+    .filter(t => Number(t.is_shared) === 1 && (!t.reimbursement_id || String(t.reimbursement_id).trim() === ''))
+    .reduce((s, t) => s + Number(t.amount || 0), 0);
+
+  // 公帳刷退優先折抵公帳欠款
+  const sharedRefund = refundTxs
+    .filter(t => Number(t.is_shared) === 1)
+    .reduce((s, t) => s + Number(t.amount || 0), 0);
+
+  const sharedDebt = Math.max(0, sharedExpense - sharedRefund);
+  const personalDebt = Math.max(0, netRolledAmount - sharedDebt);
+
+  return {
+    totalExpense,
+    totalRefund,
+    netRolledAmount,
+    sharedDebt,
+    personalDebt,
+  };
+}
+
