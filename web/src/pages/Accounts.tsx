@@ -1567,6 +1567,7 @@ export default function Accounts() {
       {/* 結帳日出帳作業預覽 Modal (ADR-0024) */}
       {rolloverModalCard && (
         <Modal
+          maxWidth={640}
           onClose={() => {
             if (!rolloverSubmitting) {
               setRolloverModalCard(null)

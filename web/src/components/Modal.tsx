@@ -30,7 +30,9 @@ export default function Modal({ title, onClose, children, maxWidth = 480 }: Moda
             <X size={20} />
           </button>
         </div>
-        {children}
+        <div className="modal-body">
+          {children}
+        </div>
       </div>
     </div>
   )

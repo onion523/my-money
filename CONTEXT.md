@@ -368,6 +368,19 @@ _Avoid_: 容器位移 (element translation)、生硬刷光 (hard sweep)、呼吸
 在行動端小螢幕（`<= 640px`）下，所有新增與編輯表單彈窗（`.modal-box`）由螢幕置中轉化為貼齊螢幕底部向上滑出之抽屜式面板（頂部大圓角、適配動態視窗高度 `dvh` 與底部安全區 `safe-area-inset-bottom`）。標題列吸頂固定並提供至少 `44x44px` 之關閉觸控熱區，表單輸入框字級不小於 `16px` 以防止 iOS Safari 強制放大畫面，並針對窄螢幕自動將易擠壓之並排欄位（如日期選擇器）調整為單欄滿寬，同時保留二選一歸屬切換鈕（如公帳／私帳）之水平雙欄並排。
 _Avoid_: 手機置中懸浮彈窗 (centered floating modal on mobile)、低於 16px 觸發強制縮放之輸入框 (sub-16px auto-zoom inputs)、誤將二元切換鈕垂直拆行 (stacked binary toggle buttons)
 
+**Modal Layout & Tiered Sizing Architecture (彈窗分層滾動與分級寬度架構)**:
+全站彈窗採用外框防護、固定標題與內部獨立滾動層的三層分離架構，杜絕直角原生卷軸穿透 24px 大圓角，並依內容複雜度落實電腦版分級寬度規範：
+1. **結構分層重構（Three-Tier Modal Frame）**：
+   - `.modal-box`（外框容器）：配置 `border-radius: var(--radius-xl)`（24px），啟用 `overflow: hidden;` 作為外層圓角遮罩防線，以 `display: flex; flex-direction: column;` 控制縱向排版，徹底杜絕原生卷軸或子容器穿透 24px 圓角。
+   - `.modal-header`（固定標題列）：固定於彈窗頂部，不隨內容滾動，包含標題與關閉按鈕，享有專屬內距，關閉按鈕（`modal-close-btn`）不再受卷軸擠壓或遮擋。
+   - `.modal-body`（獨立滾動層）：`flex: 1; min-height: 0; overflow-y: auto;` 承載表單或清單內容。在電腦版下套用日系輕量 6px 細圓角半透明卷軸，並設定 `scrollbar-gutter: stable;`，徹底消除卷軸出現時彈窗內容橫向跳動。
+2. **電腦版彈窗分級寬度規範（Tiered Modal Sizing）**：
+   - **小型確認/數值彈窗**：`maxWidth: 400px`（如預算設定、存入目標）。
+   - **標準表單彈窗**：`maxWidth: 480px`（預設值，如新增/編輯帳戶、轉帳、信用卡還款、快速記帳、新增週期性收支、目標設定等）。
+   - **複雜明細與清單彈窗**：`maxWidth: 640px`（如「結帳日出帳作業預覽」與「家庭代墊報銷清單」），提供充裕水平空間給統計卡片、公私拆解與勾選明細，消除內部雙重嵌套卷軸與擁擠換行。
+   - **行動端自適應**：在 `<= 640px` 下，所有分級彈窗統一自動自適應為 100% 滿寬之底部抽屜（Bottom Sheet），維持安全區與吸頂標題列體驗。
+_Avoid_: 外框直接設 overflow-y 導致直角卷軸刺穿圓角 (overflow-y directly on rounded modal-box piercing 24px corners)、Header 隨內容滾走 (header scrolling away with content)、複雜清單塞入 480px 窄彈窗造成雙重卷軸 (cramping wide tables into 480px modal causing nested double scrollbars)、卷軸出現時內容橫向跳動 (content layout shifting without scrollbar-gutter)
+
 **Collapsible Mobile Filter Bar (行動端可收合進階篩選列)**:
 在收支明細頁（Transactions）的行動端視角（`<= 640px`）下，篩選工具列預設僅常駐顯示「三態帳本視角等寬切換器」、「關鍵字搜尋框」與附帶已啟用篩選數徽章之「進階篩選收合按鈕」，將起始／結束日期、收支類型、分類、帳戶等次要篩選條件預設折疊收合（展開時日期採雙欄並排），並將篩選結果統計列之「總收入、總支出、淨收支」轉為三欄等寬網格，確保使用者進入頁面第一屏即可直接檢視收支明細。
 _Avoid_: 手機首屏全展開篩選牆 (full-screen uncollapsed filter wall)、篩選總計文字擠壓斷行 (cramped summary text wrapping)

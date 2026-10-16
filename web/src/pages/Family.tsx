@@ -755,7 +755,7 @@ export default function Family() {
       {/* 共同基金撥款報銷 Modal */}
       {reimburseModalTarget && (
         <Modal
-          
+          maxWidth={640}
           onClose={() => setReimburseModalTarget(null)}
           title={`從共同基金撥款報銷給 ${reimburseModalTarget.user_name}`}
         >
