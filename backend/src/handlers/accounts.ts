@@ -1,4 +1,5 @@
 import { getTaipeiDateString } from '../utils/date';
+import { getStatementCycleDates, determineEnrichedTransactionStates } from '../utils/cycle';
 
 let accountsMigrated = false;
 let accountsMigratePromise: Promise<void> | null = null;
@@ -345,41 +346,7 @@ accounts.post('/pay-credit-card', async (c) => {
 });
 
 
-export function getStatementCycleDates(statementDay: number | null | undefined): { statementDate: string; prevStatementDate: string } {
-  let statementDate = '';
-  let prevStatementDate = '';
-
-  if (statementDay && statementDay >= 1 && statementDay <= 31) {
-    const taipeiDateStr = getTaipeiDateString();
-    const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
-    let statementYear = currYear;
-    let statementMonth = currMonth;
-
-    if (currDay < statementDay) {
-      statementMonth -= 1;
-      if (statementMonth === 0) {
-        statementMonth = 12;
-        statementYear -= 1;
-      }
-    }
-    const lastDayOfMonth = new Date(statementYear, statementMonth, 0).getDate();
-    const day = Math.min(statementDay, lastDayOfMonth);
-    statementDate = `${statementYear}-${String(statementMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-    // 推算上一個結帳日
-    let prevYear = statementYear;
-    let prevMonth = statementMonth - 1;
-    if (prevMonth === 0) {
-      prevMonth = 12;
-      prevYear -= 1;
-    }
-    const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
-    const pDay = Math.min(statementDay, prevLastDay);
-    prevStatementDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`;
-  }
-
-  return { statementDate, prevStatementDate };
-}
+export { getStatementCycleDates, determineEnrichedTransactionStates };
 
 export async function recalculateCardBalances(db: D1Database, cardId: string): Promise<{ balance: number; unbilled: number }> {
   const [billedExpRes, billedRefRes, repayRes, unbilledExpRes, unbilledRefRes] = await db.batch([
@@ -438,7 +405,7 @@ accounts.get('/:id/rollover-preview', async (c) => {
 
   const card = await c.env.DB.prepare(
     `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
-  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; payment_due_day: number | null; is_joint: number; user_id: string }>();
+  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; payment_due_day: number | null; is_joint: number; user_id: string; last_rollover_at?: string | null }>();
 
   if (!card) return c.json({ success: false, error: '信用卡不存在' }, 404);
 
@@ -447,7 +414,7 @@ accounts.get('/:id/rollover-preview', async (c) => {
     return c.json({ success: false, error: '權限不足：個人信用卡出帳作業僅限持卡人本人操作' }, 403);
   }
 
-  const { statementDate, prevStatementDate } = getStatementCycleDates(card.statement_day);
+  const { statementDate, prevStatementDate, isPreStatement, preStatementDate } = getStatementCycleDates(card.statement_day, card.last_rollover_at);
 
   // 撈取結帳週期全量明細（含已出帳與未出帳，支援重複檢視與重算）
   let txQuery = `
@@ -516,30 +483,8 @@ accounts.get('/:id/rollover-preview', async (c) => {
   // 判定本期是否已執行過出帳作業 (是否有任何本期消費已是 is_billed = 1)
   const hasRolledCycle = rawTxs.some(t => Number(t.is_billed) === 1);
 
-  // 標記交易的上期延入與初始延期狀態
-  const enrichedTxs = rawTxs.map(t => {
-    // 交易日早於或等於上期結帳日且未出帳者，屬於上期延入款
-    const isPriorDeferred = Boolean(statementDate && t.date <= prevStatementDate && Number(t.is_billed) === 0);
-    let isInitiallyDeferred = false;
-    if (hasRolledCycle) {
-      // 若當期已執行過出帳：仍為未出帳且標記延期者，代表上次出帳時已明確選擇延期
-      isInitiallyDeferred = Number(t.is_billed) === 0 && Number(t.defer_to_next_statement) === 1;
-    } else {
-      // 若當期尚未出帳：
-      // 上期延入款自動喚醒為納入本期出帳 (isInitiallyDeferred = false)
-      // 當期消費則維持是否被預先標記延期
-      if (isPriorDeferred) {
-        isInitiallyDeferred = false;
-      } else {
-        isInitiallyDeferred = Number(t.defer_to_next_statement) === 1;
-      }
-    }
-    return {
-      ...t,
-      is_prior_deferred: isPriorDeferred,
-      is_initially_deferred: isInitiallyDeferred,
-    };
-  });
+  // 標記交易的上期延入與初始延期狀態 (ADR-0028)
+  const enrichedTxs = determineEnrichedTransactionStates(rawTxs, statementDate, prevStatementDate, hasRolledCycle);
 
   // 本期未被標記為延期之項目
   const activeTxs = enrichedTxs.filter(t => !t.is_initially_deferred);
@@ -578,6 +523,8 @@ accounts.get('/:id/rollover-preview', async (c) => {
       },
       statementDate,
       prevStatementDate,
+      isPreStatement,
+      preStatementDate,
       totalExpense,
       totalRefund,
       netRolledAmount,
@@ -606,7 +553,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
 
   const card = await c.env.DB.prepare(
     `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
-  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; is_joint: number; user_id: string }>();
+  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; is_joint: number; user_id: string; last_rollover_at?: string | null }>();
 
   if (!card) return c.json({ success: false, error: '信用卡不存在' }, 404);
 
@@ -627,7 +574,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
   }
   const deferredSet = new Set(deferredTxIds);
 
-  const { statementDate, prevStatementDate } = getStatementCycleDates(card.statement_day);
+  const { statementDate, prevStatementDate } = getStatementCycleDates(card.statement_day, card.last_rollover_at);
 
   // 撈取結帳週期全量明細（含已出帳與未出帳）
   let cycleQuery = `
@@ -972,17 +919,15 @@ export async function reconcileCreditCardUnbilled(db: D1Database, cardId: string
             OR (date > ? AND date <= ? AND defer_to_next_statement = 1)
           )
       `).bind(cardId, cutoffStatementDate, prevCutoffStatementDate, cutoffStatementDate),
-      // 早於當期未出帳區間之歷史已結算週期交易對齊為 is_billed = 1
+      // 早於當期未出帳區間之歷史已結算週期交易對齊為 is_billed = 1（嚴格保留標記延至下期者維持未出帳，ADR-0028）
       db.prepare(`
         UPDATE transactions
         SET is_billed = 1
         WHERE account_id = ?
           AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-          AND (
-            (date <= ? AND defer_to_next_statement = 0)
-            OR (date <= ?)
-          )
-      `).bind(cardId, cutoffStatementDate, prevCutoffStatementDate),
+          AND date <= ?
+          AND defer_to_next_statement = 0
+      `).bind(cardId, cutoffStatementDate),
     ]);
   } else {
     // 若未設定結帳日，確保勾選延至下期之交易重置為未出帳 (is_billed = 0)

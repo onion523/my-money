@@ -1,6 +1,6 @@
-﻿import { Hono } from 'hono';
+import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { Env } from './types';
+import type { Env } from './types';
 import auth from './handlers/auth';
 import accounts from './handlers/accounts';
 import transactions from './handlers/transactions';

@@ -71,6 +71,8 @@ export const accountsApi = {
     };
     statementDate: string;
     prevStatementDate: string;
+    isPreStatement?: boolean;
+    preStatementDate?: string;
     totalExpense: number;
     totalRefund: number;
     netRolledAmount: number;

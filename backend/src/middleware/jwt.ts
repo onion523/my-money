@@ -1,5 +1,5 @@
-import { Context, Next } from 'hono';
-import { Env, JWTPayload } from '../types';
+import type { Context, Next } from 'hono';
+import type { Env, JWTPayload } from '../types';
 
 // Base64URL 編碼 (支援 UTF-8 字串及 Uint8Array)
 function base64urlEncode(data: string | Uint8Array): string {

@@ -1615,9 +1615,11 @@ export default function Accounts() {
                   <Calendar size={16} />
                   <span>
                     本期結算區間：
-                    {rolloverPreview.prevStatementDate
-                      ? `${rolloverPreview.prevStatementDate} 次日 ～ ${rolloverPreview.statementDate}`
-                      : `至 ${rolloverPreview.statementDate || today()}`}
+                    {rolloverPreview.isPreStatement
+                      ? `${rolloverPreview.prevStatementDate ? `${rolloverPreview.prevStatementDate} 次日` : '自起始'} ～ 今日（提前結算）`
+                      : rolloverPreview.prevStatementDate
+                        ? `${rolloverPreview.prevStatementDate} 次日 ～ ${rolloverPreview.statementDate}`
+                        : `至 ${rolloverPreview.statementDate || today()}`}
                   </span>
                   {Number(rolloverPreview.priorDeferredCount || 0) > 0 && (
                     <span
@@ -1632,7 +1634,7 @@ export default function Accounts() {
                         border: '1px solid rgba(99, 102, 241, 0.25)',
                       }}
                     >
-                      含 {rolloverPreview.priorDeferredCount} 筆上期延入款（已預設納入結算）
+                      含 {rolloverPreview.priorDeferredCount} 筆歷史延入款（已預設納入結算）
                     </span>
                   )}
                 </div>
