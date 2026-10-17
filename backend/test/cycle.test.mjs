@@ -93,6 +93,14 @@ test('Cycle Suite - 上期延入預設列入計算（取消勾選延至下期）
       is_billed: 0,
     },
     {
+      id: 'tx-prior-already-billed-in-this-cycle',
+      date: '2026-08-20', // 早於起始日 8/26 且於本期已按過一次出帳 (is_billed = 1, billed_statement_date = '2026-09-25') -> 仍須標示為上期延入且預設列入計算
+      amount: 3528,
+      defer_to_next_statement: 0,
+      is_billed: 1,
+      billed_statement_date: '2026-09-25',
+    },
+    {
       id: 'tx-cycle-billed',
       date: '2026-09-01', // 區間內先前已出帳項目 -> 重複出帳時預設納入結算
       amount: 2000,
@@ -125,6 +133,10 @@ test('Cycle Suite - 上期延入預設列入計算（取消勾選延至下期）
   const priorNoFlag = enriched.find(t => t.id === 'tx-prior-unbilled-no-flag');
   assert.equal(priorNoFlag.is_prior_deferred, true);
   assert.equal(priorNoFlag.is_initially_deferred, false);
+
+  const priorAlreadyBilled = enriched.find(t => t.id === 'tx-prior-already-billed-in-this-cycle');
+  assert.equal(priorAlreadyBilled.is_prior_deferred, true, '本期已出帳過一次的上期延入款再次打開視窗時仍應標示為上期延入');
+  assert.equal(priorAlreadyBilled.is_initially_deferred, false);
 
   const billedItem = enriched.find(t => t.id === 'tx-cycle-billed');
   assert.equal(billedItem.is_prior_deferred, false);

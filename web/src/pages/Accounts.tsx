@@ -268,7 +268,7 @@ export default function Accounts() {
           .filter((t: any) => {
             const isPrior = Boolean(
               t.is_prior_deferred ||
-                (res.prevStatementDate && t.date <= res.prevStatementDate && Number(t.is_billed) === 0)
+                (res.prevStatementDate && t.date <= res.prevStatementDate)
             )
             if (isPrior) {
               return false
@@ -1654,12 +1654,31 @@ export default function Accounts() {
 
               {(() => {
                 const allTxs = rolloverPreview.transactions || []
+                const isPriorTx = (t: any) =>
+                  Boolean(t.is_prior_deferred || (rolloverPreview.prevStatementDate && t.date <= rolloverPreview.prevStatementDate))
+
                 const activeTxs = allTxs.filter((t: any) => !rolloverDeferredIds.has(t.id))
                 const activeExp = activeTxs.filter((t: any) => t.type === 'expense')
                 const activeRef = activeTxs.filter((t: any) => t.type === 'income')
                 const curExp = activeExp.reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
                 const curRef = activeRef.reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
                 const curNet = Math.max(0, curExp - curRef)
+                const activeCount = activeTxs.length
+
+                // 方案 B 固定總額基準：本期新增（當期區間內全部交易）、本期延後（勾選延至下期）、上期延入（早於起始日之延入交易）
+                const cycleNewTxs = allTxs.filter((t: any) => !isPriorTx(t))
+                const cycleNewNet = cycleNewTxs.reduce(
+                  (s: number, t: any) => s + (t.type === 'expense' ? Number(t.amount || 0) : -Number(t.amount || 0)),
+                  0
+                )
+                const cycleNewCount = cycleNewTxs.length
+
+                const priorDeferredTxs = allTxs.filter((t: any) => isPriorTx(t))
+                const priorDeferredNet = priorDeferredTxs.reduce(
+                  (s: number, t: any) => s + (t.type === 'expense' ? Number(t.amount || 0) : -Number(t.amount || 0)),
+                  0
+                )
+                const priorDeferredTxCount = priorDeferredTxs.length
 
                 // ADR-0029：公帳已報銷者轉列個人自負，公帳刷退優先折抵公帳欠款
                 const sharedExpUnreimbursed = activeExp
@@ -1675,57 +1694,40 @@ export default function Accounts() {
                 const deferredExp = allTxs.filter((t: any) => rolloverDeferredIds.has(t.id) && t.type === 'expense').reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
                 const deferredRef = allTxs.filter((t: any) => rolloverDeferredIds.has(t.id) && t.type === 'income').reduce((s: number, t: any) => s + Number(t.amount || 0), 0)
                 const curDeferredNet = deferredExp - deferredRef
+                const deferredCount = rolloverDeferredIds.size
 
-                const curProjBal = rolloverPreview.baseNetBilled !== undefined
-                  ? Math.max(0, (rolloverPreview.baseNetBilled || 0) + (curExp - curRef) - (rolloverPreview.totalRepay || 0))
-                  : (rolloverModalCard.balance || 0) + curNet
                 const curProjUnb = rolloverPreview.baseNetUnbilled !== undefined
                   ? Math.max(0, (rolloverPreview.baseNetUnbilled || 0) + curDeferredNet)
                   : Math.max(0, (rolloverModalCard.unbilled || 0) - curNet)
-                const deferredCount = rolloverDeferredIds.size
+                const baseUnbilledCount = Number(rolloverPreview.baseUnbilledCount || 0)
+                const projUnbilledCount = baseUnbilledCount + deferredCount
 
                 return (
                   <>
-                    {/* 統計指標卡片 */}
-                    <div className="grid grid-2 gap-sm" style={{ marginBottom: 14 }}>
-                      <div
-                        style={{
-                          background: '#F9FAFB',
-                          border: '1px solid rgba(0,0,0,0.06)',
-                          borderRadius: 8,
-                          padding: '10px 14px',
-                        }}
-                      >
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 2 }}>
-                          本期刷卡消費 ({activeExp.length} 筆)
-                        </div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {formatCurrency(curExp)}
-                        </div>
-                        {curRef > 0 && (
-                          <div style={{ fontSize: '0.75rem', color: '#10B981', marginTop: 2 }}>
-                            刷退折抵 ({activeRef.length} 筆)：-{formatCurrency(curRef)}
-                          </div>
-                        )}
+                    {/* 四層統計摘要卡片 (ADR-0030) */}
+                    <div
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.05)',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        borderRadius: 8,
+                        padding: '12px 16px',
+                        marginBottom: 14,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-danger)' }}>
+                        本期出帳淨額 {formatCurrency(curNet)}({activeCount} 筆)
                       </div>
-
-                      <div
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.06)',
-                          border: '1px solid rgba(239, 68, 68, 0.2)',
-                          borderRadius: 8,
-                          padding: '10px 14px',
-                        }}
-                      >
-                        <div style={{ fontSize: '0.78rem', color: '#B91C1C', marginBottom: 2 }}>
-                          預計本期出帳淨額
-                        </div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-danger)' }}>
-                          {formatCurrency(curNet)}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                          出帳後待繳：{formatCurrency(curProjBal)} · 剩餘未出帳：{formatCurrency(curProjUnb)}
-                        </div>
+                      <div style={{ fontSize: '0.86rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                        刷卡金額：{formatCurrency(curExp)}({activeExp.length} 筆)，刷退折抵：-{formatCurrency(curRef)}({activeRef.length} 筆)
+                      </div>
+                      <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                        本期新增：{formatCurrency(cycleNewNet)}({cycleNewCount} 筆)，本期延後：{formatCurrency(curDeferredNet)} ({deferredCount} 筆)，上期延入：{formatCurrency(priorDeferredNet)}({priorDeferredTxCount} 筆)
+                      </div>
+                      <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        剩餘未出帳：{formatCurrency(curProjUnb)}({projUnbilledCount} 筆)
                       </div>
                     </div>
 
@@ -1856,7 +1858,7 @@ export default function Accounts() {
                                           私帳
                                         </span>
                                       )}
-                                      {Boolean(t.is_prior_deferred || (rolloverPreview.prevStatementDate && t.date <= rolloverPreview.prevStatementDate && Number(t.is_billed) === 0)) && (
+                                      {isPriorTx(t) && (
                                         <span
                                           className="badge"
                                           style={{

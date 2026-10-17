@@ -155,8 +155,8 @@ export function determineEnrichedTransactionStates<T extends TransactionWithDefe
   return rawTxs.map(t => {
     let isPriorDeferred = false;
     if (prevStatementDate) {
-      // 交易日早於或等於上期/上上期判定基準日且未出帳者，屬於歷史延入款
-      isPriorDeferred = Boolean(t.date <= prevStatementDate && Number(t.is_billed) === 0);
+      // 凡進入本期出帳候選池且交易日早於結算起始日 (t.date <= prevStatementDate) 者，均屬上期延入款
+      isPriorDeferred = Boolean(t.date <= prevStatementDate);
     } else {
       isPriorDeferred = Boolean(Number(t.defer_to_next_statement) === 1 && Number(t.is_billed) === 0);
     }

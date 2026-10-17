@@ -26,6 +26,9 @@ export async function ensureAccountsSchema(db: any) {
         await db.prepare('ALTER TABLE transactions ADD COLUMN reimbursement_id TEXT').run();
       } catch (_) {}
       try {
+        await db.prepare('ALTER TABLE transactions ADD COLUMN billed_statement_date TEXT').run();
+      } catch (_) {}
+      try {
         await db.prepare("UPDATE transactions SET reimbursement_id = NULL WHERE reimbursement_id = 'historical_reimbursement'").run();
       } catch (_) {}
       try {
@@ -396,8 +399,70 @@ export async function recalculateCardBalances(db: D1Database, cardId: string): P
   return { balance: newBalance, unbilled: newUnbilled };
 }
 
+// 自動匹配並修復既有已轉為 is_billed = 1 但尚未綁定 billed_statement_date 之上期延入款 (ADR-0030)
+function findMatchingPriorCarryoverTxs<T extends { id: string; amount: number; type: string }>(
+  candidates: T[],
+  targetNet: number
+): T[] {
+  const target = Math.round(targetNet);
+  if (target <= 0 || candidates.length === 0) return [];
+  const vals = candidates.map(c => Math.round(c.type === 'expense' ? Number(c.amount || 0) : -Number(c.amount || 0)));
+
+  // 1. 檢查最新連續前綴是否剛好等於 target
+  let prefixSum = 0;
+  for (let i = 0; i < candidates.length; i++) {
+    prefixSum += vals[i];
+    if (prefixSum === target) {
+      return candidates.slice(0, i + 1);
+    }
+  }
+
+  // 2. 檢查單筆完全吻合
+  for (let i = 0; i < candidates.length; i++) {
+    if (vals[i] === target) return [candidates[i]];
+  }
+
+  // 3. 檢查雙筆組合完全吻合
+  for (let i = 0; i < candidates.length; i++) {
+    for (let j = i + 1; j < candidates.length; j++) {
+      if (vals[i] + vals[j] === target) return [candidates[i], candidates[j]];
+    }
+  }
+
+  // 4. 檢查三筆組合完全吻合
+  const limit3 = Math.min(candidates.length, 25);
+  for (let i = 0; i < limit3; i++) {
+    for (let j = i + 1; j < limit3; j++) {
+      for (let k = j + 1; k < limit3; k++) {
+        if (vals[i] + vals[j] + vals[k] === target) return [candidates[i], candidates[j], candidates[k]];
+      }
+    }
+  }
+
+  // 5. 檢查前 18 筆任意子集組合是否等於 target
+  const limitSub = Math.min(candidates.length, 18);
+  let foundIndices: number[] | null = null;
+  function dfs(idx: number, currentSum: number, chosen: number[]) {
+    if (foundIndices) return;
+    if (currentSum === target && chosen.length > 0) {
+      foundIndices = [...chosen];
+      return;
+    }
+    if (idx >= limitSub) return;
+    dfs(idx + 1, currentSum + vals[idx], [...chosen, idx]);
+    dfs(idx + 1, currentSum, chosen);
+  }
+  dfs(0, 0, []);
+  if (foundIndices) {
+    return (foundIndices as number[]).map(idx => candidates[idx]);
+  }
+
+  return [];
+}
+
 // GET /accounts/:id/rollover-preview — 取得結帳日出帳預覽數據與週期全量明細 (ADR-0024, ADR-0030)
 accounts.get('/:id/rollover-preview', async (c) => {
+  await ensureAccountsSchema(c.env.DB);
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
@@ -422,22 +487,22 @@ accounts.get('/:id/rollover-preview', async (c) => {
   const cycleResult = getStatementCycleDates(card.statement_day, card.last_rollover_at);
   const { startDate, endDate, statementDate, prevStatementDate, isPreStatement, preStatementDate, displayText, statusLabel } = cycleResult;
 
-  // 撈取結帳週期全量明細（含已出帳與未出帳，以及早於起始日的歷史未結款項，ADR-0030）
+  // 撈取結帳週期全量明細（含已出帳與未出帳，以及早於起始日的歷史未結或本期已歸屬延入款項，ADR-0030）
   const txQuery = `
-    SELECT id, amount, is_shared, type, category, note, date, defer_to_next_statement, is_billed, reimbursement_id
+    SELECT id, amount, is_shared, type, category, note, date, defer_to_next_statement, is_billed, reimbursement_id, billed_statement_date
     FROM transactions
     WHERE account_id = ?
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
       AND (
         (date >= ? AND date <= ?)
-        OR (date <= ? AND is_billed = 0)
+        OR (date <= ? AND (is_billed = 0 OR billed_statement_date = ?))
       )
     ORDER BY date DESC, created_at DESC
   `;
-  const txParams: (string | number)[] = [id, startDate, endDate, prevStatementDate];
+  const txParams: (string | number)[] = [id, startDate, endDate, prevStatementDate, statementDate];
 
   const txsResult = await c.env.DB.prepare(txQuery).bind(...txParams).all();
-  const rawTxs = (txsResult.results || []) as Array<{
+  let rawTxs = (txsResult.results || []) as Array<{
     id: string;
     amount: number;
     is_shared: number;
@@ -448,11 +513,12 @@ accounts.get('/:id/rollover-preview', async (c) => {
     defer_to_next_statement: number;
     is_billed: number;
     reimbursement_id: string | null;
+    billed_statement_date?: string | null;
   }>;
 
   // 基礎歷史數據（排除本期候選 txs，供動態預覽精準試算）
-  const cycleTxIdList = rawTxs.map(t => t.id);
-  const cycleIdPlaceholders = cycleTxIdList.length > 0 ? cycleTxIdList.map(() => '?').join(',') : '';
+  let cycleTxIdList = rawTxs.map(t => t.id);
+  let cycleIdPlaceholders = cycleTxIdList.length > 0 ? cycleTxIdList.map(() => '?').join(',') : '';
 
   const [baseBilledRes, repayRes, baseUnbilledRes] = await c.env.DB.batch([
     c.env.DB.prepare(`
@@ -468,7 +534,9 @@ accounts.get('/:id/rollover-preview', async (c) => {
       WHERE account_id = ? AND type = 'income' AND category = '信用卡還款'
     `).bind(id),
     c.env.DB.prepare(`
-      SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE -amount END), 0) as net_unbilled
+      SELECT
+        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE -amount END), 0) as net_unbilled,
+        COUNT(*) as unbilled_count
       FROM transactions
       WHERE account_id = ? AND (is_billed = 0 OR defer_to_next_statement = 1)
         AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
@@ -476,14 +544,50 @@ accounts.get('/:id/rollover-preview', async (c) => {
     `).bind(...(cycleTxIdList.length > 0 ? [id, ...cycleTxIdList] : [id])),
   ]);
 
-  const baseNetBilled = Number((baseBilledRes.results?.[0] as any)?.net_billed || 0);
+  let baseNetBilled = Number((baseBilledRes.results?.[0] as any)?.net_billed || 0);
   const totalRepay = Number((repayRes.results?.[0] as any)?.total_repay || 0);
   const baseNetUnbilled = Number((baseUnbilledRes.results?.[0] as any)?.net_unbilled || 0);
+  const baseUnbilledCount = Number((baseUnbilledRes.results?.[0] as any)?.unbilled_count || 0);
+
+  // 若存在尚未標記 billed_statement_date 的前期未結清差額（如稍早測試出帳時已轉為 is_billed = 1 之上期延入款），自動匹配歸入本期上期延入
+  const unpaidPriorCarryover = Math.round(baseNetBilled - totalRepay);
+  if (unpaidPriorCarryover > 0) {
+    const priorCandidatesRes = await c.env.DB.prepare(`
+      SELECT id, amount, is_shared, type, category, note, date, defer_to_next_statement, is_billed, reimbursement_id, billed_statement_date
+      FROM transactions
+      WHERE account_id = ?
+        AND date <= ?
+        AND is_billed = 1
+        AND (billed_statement_date IS NULL OR billed_statement_date = '')
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+      ORDER BY date DESC, created_at DESC
+      LIMIT 40
+    `).bind(id, prevStatementDate).all();
+
+    const priorCandidates = (priorCandidatesRes.results || []) as typeof rawTxs;
+    const matchedPriorTxs = findMatchingPriorCarryoverTxs(priorCandidates, unpaidPriorCarryover);
+    if (matchedPriorTxs.length > 0) {
+      await c.env.DB.batch(
+        matchedPriorTxs.map(t =>
+          c.env.DB.prepare('UPDATE transactions SET billed_statement_date = ? WHERE id = ?').bind(statementDate, t.id)
+        )
+      );
+      const matchedNet = matchedPriorTxs.reduce(
+        (s, t) => s + (t.type === 'expense' ? Number(t.amount || 0) : -Number(t.amount || 0)),
+        0
+      );
+      baseNetBilled -= matchedNet;
+      rawTxs = [
+        ...rawTxs,
+        ...matchedPriorTxs.map(t => ({ ...t, billed_statement_date: statementDate })),
+      ].sort((a, b) => b.date.localeCompare(a.date));
+    }
+  }
 
   // 判定本期是否已執行過出帳作業 (是否有任何本期消費已是 is_billed = 1)
   const hasRolledCycle = rawTxs.some(t => Number(t.is_billed) === 1);
 
-  // 標記交易的上期延入與初始延期狀態 (ADR-0030: 維持目前標記，其餘納入出帳)
+  // 標記交易的上期延入與初始延期狀態 (ADR-0030: 上期延入預設列入計算，當期維持目前標記)
   const enrichedTxs = determineEnrichedTransactionStates(rawTxs, statementDate, prevStatementDate, hasRolledCycle);
 
   // 本期未被標記為延期之項目
@@ -532,6 +636,7 @@ accounts.get('/:id/rollover-preview', async (c) => {
       baseNetBilled,
       totalRepay,
       baseNetUnbilled,
+      baseUnbilledCount,
       projectedBalance,
       projectedUnbilled,
       hasRolledCycle,
@@ -543,8 +648,9 @@ accounts.get('/:id/rollover-preview', async (c) => {
   });
 });
 
-// POST /accounts/:id/rollover-statement — 結帳日出帳作業 (週期全量透視與真實明細冪等重算，ADR-0024)
+// POST /accounts/:id/rollover-statement — 結帳日出帳作業 (週期全量透視與真實明細冪等重算，ADR-0024, ADR-0030)
 accounts.post('/:id/rollover-statement', async (c) => {
+  await ensureAccountsSchema(c.env.DB);
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
@@ -580,7 +686,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
 
   const { startDate, endDate, statementDate, prevStatementDate, displayText, statusLabel } = getStatementCycleDates(card.statement_day, card.last_rollover_at);
 
-  // 撈取結帳週期全量明細（含已出帳與未出帳，以及早於起始日的歷史未結款項，ADR-0030）
+  // 撈取結帳週期全量明細（含已出帳與未出帳，以及早於起始日的歷史未結或本期已歸屬延入款項，ADR-0030）
   const cycleQuery = `
     SELECT id, amount, is_shared, type
     FROM transactions
@@ -588,10 +694,10 @@ accounts.post('/:id/rollover-statement', async (c) => {
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
       AND (
         (date >= ? AND date <= ?)
-        OR (date <= ? AND is_billed = 0)
+        OR (date <= ? AND (is_billed = 0 OR billed_statement_date = ?))
       )
   `;
-  const cycleParams: (string | number)[] = [id, startDate, endDate, prevStatementDate];
+  const cycleParams: (string | number)[] = [id, startDate, endDate, prevStatementDate, statementDate];
 
   const cycleTxsResult = await c.env.DB.prepare(cycleQuery).bind(...cycleParams).all();
   const cycleTxs = (cycleTxsResult.results || []) as Array<{ id: string; amount: number; is_shared: number; type: string }>;
@@ -602,18 +708,18 @@ accounts.post('/:id/rollover-statement', async (c) => {
 
   const batchStatements: any[] = [];
 
-  // 1. 更新指定延期之項目：defer_to_next_statement = 1, is_billed = 0
+  // 1. 更新指定延期之項目：defer_to_next_statement = 1, is_billed = 0, billed_statement_date = NULL
   for (const deferredId of deferredTxIds) {
     batchStatements.push(
-      c.env.DB.prepare('UPDATE transactions SET defer_to_next_statement = 1, is_billed = 0 WHERE id = ? AND account_id = ?').bind(deferredId, id)
+      c.env.DB.prepare('UPDATE transactions SET defer_to_next_statement = 1, is_billed = 0, billed_statement_date = NULL WHERE id = ? AND account_id = ?').bind(deferredId, id)
     );
   }
 
-  // 2. 更新本期其餘非延期項目：defer_to_next_statement = 0, is_billed = 1
+  // 2. 更新本期其餘非延期項目：defer_to_next_statement = 0, is_billed = 1, billed_statement_date = statementDate
   const nonDeferredTxs = cycleTxs.filter(t => !deferredSet.has(t.id));
   for (const tx of nonDeferredTxs) {
     batchStatements.push(
-      c.env.DB.prepare('UPDATE transactions SET defer_to_next_statement = 0, is_billed = 1 WHERE id = ? AND account_id = ?').bind(tx.id, id)
+      c.env.DB.prepare('UPDATE transactions SET defer_to_next_statement = 0, is_billed = 1, billed_statement_date = ? WHERE id = ? AND account_id = ?').bind(statementDate, tx.id, id)
     );
   }
 
