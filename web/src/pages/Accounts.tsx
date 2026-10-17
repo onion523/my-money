@@ -249,6 +249,12 @@ export default function Accounts() {
   const [rolloverError, setRolloverError] = useState('')
 
   const handleOpenRollover = async (card: Account) => {
+    // 強制要求設定結帳日防呆 (ADR-0030)
+    if (!card.statement_day || card.statement_day < 1 || card.statement_day > 31) {
+      alert(`「${card.name}」尚未設定每月結帳日。\n請先點擊該卡片的「編輯」設定每月結帳日，方可執行出帳作業。`)
+      return
+    }
+
     setRolloverModalCard(card)
     setRolloverLoading(true)
     setRolloverError('')
@@ -262,10 +268,6 @@ export default function Accounts() {
           .filter((t: any) => {
             if (t.is_initially_deferred !== undefined) {
               return Boolean(t.is_initially_deferred)
-            }
-            const isPrior = Boolean(res.prevStatementDate && t.date <= res.prevStatementDate && Number(t.is_billed) === 0)
-            if (isPrior && !res.hasRolledCycle) {
-              return false
             }
             return Number(t.defer_to_next_statement) === 1
           })
@@ -1615,11 +1617,11 @@ export default function Accounts() {
                   <Calendar size={16} />
                   <span>
                     本期結算區間：
-                    {rolloverPreview.isPreStatement
-                      ? `${rolloverPreview.prevStatementDate ? `${rolloverPreview.prevStatementDate} 次日` : '自起始'} ～ 今日（提前結算）`
-                      : rolloverPreview.prevStatementDate
-                        ? `${rolloverPreview.prevStatementDate} 次日 ～ ${rolloverPreview.statementDate}`
-                        : `至 ${rolloverPreview.statementDate || today()}`}
+                    {rolloverPreview.displayText || (
+                      rolloverPreview.isPreStatement
+                        ? `上上期次日 ${rolloverPreview.startDate || `${rolloverPreview.prevStatementDate} 次日`} ～ 今日 ${rolloverPreview.endDate || today()}（結帳日 ${rolloverModalCard.statement_day || '--'} 號未到）`
+                        : `上期次日 ${rolloverPreview.startDate || `${rolloverPreview.prevStatementDate} 次日`} ～ 今日 ${rolloverPreview.endDate || today()}（結帳日 ${rolloverModalCard.statement_day || '--'} 號已過）`
+                    )}
                   </span>
                   {Number(rolloverPreview.priorDeferredCount || 0) > 0 && (
                     <span

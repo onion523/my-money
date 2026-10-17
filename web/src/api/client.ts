@@ -69,6 +69,10 @@ export const accountsApi = {
       balance: number;
       unbilled: number;
     };
+    startDate?: string;
+    endDate?: string;
+    displayText?: string;
+    statusLabel?: string;
     statementDate: string;
     prevStatementDate: string;
     isPreStatement?: boolean;
@@ -112,6 +116,10 @@ export const accountsApi = {
     txCount: number;
     refundCount: number;
     deferredCount: number;
+    startDate?: string;
+    endDate?: string;
+    displayText?: string;
+    statusLabel?: string;
     statementDate: string;
     prevStatementDate: string;
     message: string;

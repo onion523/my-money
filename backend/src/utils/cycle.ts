@@ -1,97 +1,123 @@
 import { getTaipeiDateString } from './date.js';
 
 export interface StatementCycleResult {
+  isValid: boolean;
+  statementDay: number;
+  startDate: string;
+  endDate: string;
   statementDate: string;
   prevStatementDate: string;
   isPreStatement: boolean;
   preStatementDate: string;
+  statusLabel: 'before_statement' | 'after_statement';
+  displayText: string;
+}
+
+export function getMonthStatementDate(year: number, month: number, statementDay: number): string {
+  const lastDay = new Date(year, month, 0).getDate();
+  const day = Math.min(statementDay, lastDay);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+export function getNextDay(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  const ny = next.getUTCFullYear();
+  const nm = next.getUTCMonth() + 1;
+  const nd = next.getUTCDate();
+  return `${ny}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`;
 }
 
 /**
- * 依據卡片結帳日 (statement_day) 與上次出帳紀錄 (last_rollover_at)，精確推算當前出帳作業之結算區間
- * 支援未到結帳日提前出帳 (Pre-statement rollover)，並在已出帳後自動推進至下一期 (ADR-0028)
+ * 依據卡片結帳日 (statement_day) 與客觀日曆天，精確推算當前出帳作業之結算區間 (ADR-0030)
+ * 1. 當期結帳日未到 (currDay < statementDay)：
+ *    - 起始日：上上期結帳日隔天
+ *    - 截止日：今日 (當日)
+ *    - 頂部標籤：「上上期次日 YYYY-MM-DD ～ 今日 YYYY-MM-DD（結帳日 N 號未到）」
+ * 2. 當期結帳日已達或已過 (currDay >= statementDay)：
+ *    - 起始日：上期結帳日隔天
+ *    - 截止日：今日 (當日)
+ *    - 頂部標籤：「上期次日 YYYY-MM-DD ～ 今日 YYYY-MM-DD（結帳日 N 號已過/已達）」
+ * 3. 不依賴歷史出帳時間戳記推進月份，支援隨時重複開啟與重新覆蓋出帳
  */
 export function getStatementCycleDates(
   statementDay: number | null | undefined,
-  lastRolloverAt?: string | null,
+  _lastRolloverAt?: string | null,
   targetDate: Date = new Date()
 ): StatementCycleResult {
   const taipeiDateStr = getTaipeiDateString(targetDate);
   if (!statementDay || statementDay < 1 || statementDay > 31) {
     return {
+      isValid: false,
+      statementDay: 0,
+      startDate: '',
+      endDate: taipeiDateStr,
       statementDate: '',
       prevStatementDate: '',
       isPreStatement: false,
       preStatementDate: taipeiDateStr,
+      statusLabel: 'before_statement',
+      displayText: '未設定每月結帳日',
     };
   }
 
   const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
-  let statementYear = currYear;
-  let statementMonth = currMonth;
-  let isPreStatement = false;
+  const isPreStatement = currDay < statementDay;
 
-  let lastRolloverDateStr = '';
-  if (lastRolloverAt) {
-    const raw = String(lastRolloverAt).trim();
-    const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z';
-    const d = new Date(iso);
-    if (!isNaN(d.getTime())) {
-      lastRolloverDateStr = getTaipeiDateString(d);
-    }
-  }
+  // 1. 本期結帳日 (目標結帳日)
+  const statementDate = getMonthStatementDate(currYear, currMonth, statementDay);
 
-  // 計算本月結帳日
-  const curMonthLastDay = new Date(currYear, currMonth, 0).getDate();
-  const curMonthStatementDay = Math.min(statementDay, curMonthLastDay);
-  const curMonthStatementDate = `${currYear}-${String(currMonth).padStart(2, '0')}-${String(curMonthStatementDay).padStart(2, '0')}`;
-
-  if (currDay < statementDay) {
-    // 1. 未到當期結帳日 (例如今日 10/16，結帳日 25 號)：
-    // 當前正在累積的週期目標結帳日即為「本月結帳日」(2026-10-25)，上期結帳日為「上月結帳日」(2026-09-25)
-    // 判定為提前出帳 (isPreStatement = true)
-    isPreStatement = true;
-    statementYear = currYear;
-    statementMonth = currMonth;
-  } else {
-    // 2. 當日已達或超過當月結帳日 (currDay >= statementDay)：
-    // 檢查本月結帳日是否已經執行過出帳 (lastRolloverDateStr >= curMonthStatementDate)
-    if (lastRolloverDateStr && lastRolloverDateStr >= curMonthStatementDate) {
-      // 本期已出帳過，再次點擊出帳作業代表提前檢視／預覽「下個月週期」
-      isPreStatement = true;
-      statementMonth += 1;
-      if (statementMonth === 13) {
-        statementMonth = 1;
-        statementYear += 1;
-      }
-    } else {
-      // 本期尚未出帳，結帳日已到達，屬於常態出帳
-      isPreStatement = false;
-      statementYear = currYear;
-      statementMonth = currMonth;
-    }
-  }
-
-  const lastDayOfMonth = new Date(statementYear, statementMonth, 0).getDate();
-  const day = Math.min(statementDay, lastDayOfMonth);
-  const statementDate = `${statementYear}-${String(statementMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-  // 推算上一個結帳日
-  let prevYear = statementYear;
-  let prevMonth = statementMonth - 1;
+  // 2. 上期結帳日 S_prev1
+  let prevYear = currYear;
+  let prevMonth = currMonth - 1;
   if (prevMonth === 0) {
     prevMonth = 12;
     prevYear -= 1;
   }
-  const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
-  const pDay = Math.min(statementDay, prevLastDay);
-  const prevStatementDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(pDay).padStart(2, '0')}`;
+  const prev1StatementDate = getMonthStatementDate(prevYear, prevMonth, statementDay);
+
+  // 3. 上上期結帳日 S_prev2
+  let prev2Year = prevYear;
+  let prev2Month = prevMonth - 1;
+  if (prev2Month === 0) {
+    prev2Month = 12;
+    prev2Year -= 1;
+  }
+  const prev2StatementDate = getMonthStatementDate(prev2Year, prev2Month, statementDay);
+
+  let startDate = '';
+  let prevStatementDate = '';
+  let statusLabel: 'before_statement' | 'after_statement' = 'before_statement';
+  let displayText = '';
+
+  const endDate = taipeiDateStr;
+
+  if (isPreStatement) {
+    // 當期結帳日未到：上上期結帳日隔天 ～ 今日
+    startDate = getNextDay(prev2StatementDate);
+    prevStatementDate = prev2StatementDate;
+    statusLabel = 'before_statement';
+    displayText = `上上期次日 ${startDate} ～ 今日 ${endDate}（結帳日 ${statementDay} 號未到）`;
+  } else {
+    // 當期結帳日已達或已過：上期結帳日隔天 ～ 今日
+    startDate = getNextDay(prev1StatementDate);
+    prevStatementDate = prev1StatementDate;
+    statusLabel = 'after_statement';
+    const dayDesc = currDay === statementDay ? `今日為結帳日 ${statementDay} 號` : `結帳日 ${statementDay} 號已過`;
+    displayText = `上期次日 ${startDate} ～ 今日 ${endDate}（${dayDesc}）`;
+  }
 
   return {
+    isValid: true,
+    statementDay,
+    startDate,
+    endDate,
     statementDate,
     prevStatementDate,
     isPreStatement,
     preStatementDate: taipeiDateStr,
+    statusLabel,
+    displayText,
   };
 }
 
@@ -110,42 +136,30 @@ export interface EnrichedTransactionState extends TransactionWithDeferral {
 }
 
 /**
- * 判定出帳預覽中每筆交易的上期延入標籤與預設延期狀態 (ADR-0028)
- * 核心原則：所有歷史週期延入款（包含日常記帳勾選延期或前次出帳延期者），在首度出帳預覽時「一律預設自動喚醒納入結算」
+ * 判定出帳預覽中每筆交易的上期延入標籤與預設延期狀態 (ADR-0028, ADR-0030)
+ * 核心原則：
+ * 1. 凡早於結算起始日且未出帳者，標示為上期延入款 (is_prior_deferred = true)
+ * 2. 延期勾選狀態維持：若在資料庫中已被標記為延至下期 (defer_to_next_statement = 1 且 is_billed = 0)，維持勾選延期 (is_initially_deferred = true)；其餘預設納入結算 (is_initially_deferred = false)
  */
 export function determineEnrichedTransactionStates<T extends TransactionWithDeferral>(
   rawTxs: T[],
-  statementDate: string,
-  prevStatementDate: string,
-  hasRolledCycle: boolean
+  _statementDate?: string,
+  prevStatementDate?: string,
+  _hasRolledCycle?: boolean
 ): Array<T & { is_prior_deferred: boolean; is_initially_deferred: boolean }> {
   return rawTxs.map(t => {
     let isPriorDeferred = false;
-    if (statementDate && prevStatementDate) {
-      // 交易日早於或等於上期結帳日且未出帳者，屬於上期延入款
+    if (prevStatementDate) {
+      // 交易日早於或等於上期/上上期判定基準日且未出帳者，屬於歷史延入款
       isPriorDeferred = Boolean(t.date <= prevStatementDate && Number(t.is_billed) === 0);
     } else {
-      // 未設定結帳日卡片：曾標記延期且未出帳者視同延入款
       isPriorDeferred = Boolean(Number(t.defer_to_next_statement) === 1 && Number(t.is_billed) === 0);
     }
 
-    let isInitiallyDeferred = false;
-    if (hasRolledCycle) {
-      // 若當期已執行過出帳（二次開啟檢視）：仍為未出帳且標記延期者，代表上次出帳時已明確選擇延期
-      isInitiallyDeferred = Number(t.is_billed) === 0 && Number(t.defer_to_next_statement) === 1;
-    } else {
-      // 若當期尚未出帳（首度出帳預覽）：
-      // 歷史延入款一律自動喚醒為納入本期出帳 (isInitiallyDeferred = false)
-      // 未設定結帳日卡片之未出帳項目亦預設納入出帳
-      if (isPriorDeferred) {
-        isInitiallyDeferred = false;
-      } else if (!statementDate) {
-        isInitiallyDeferred = false;
-      } else {
-        // 當期刷卡且被手動指定延期者，維持延至下期
-        isInitiallyDeferred = Number(t.defer_to_next_statement) === 1;
-      }
-    }
+    // 重複出帳覆蓋機制：維持當前真實標記 (ADR-0030)
+    // 若在資料庫中已被標記為延至下期 (defer_to_next_statement = 1 且未出帳)，維持勾選延期
+    // 其餘項目預設納入出帳結算
+    const isInitiallyDeferred = Boolean(Number(t.is_billed) === 0 && Number(t.defer_to_next_statement) === 1);
 
     return {
       ...t,
