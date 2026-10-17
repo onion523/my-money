@@ -255,6 +255,8 @@ export const householdApi = {
     to_balance: number;
   }>('/households/reimburse', body),
   unlinkAdvance: (id: string) => post<{ success: boolean; message: string }>(`/households/advances/${id}/unlink`),
+  markAdvancesSettled: (body: { target_user_id: string; advance_ids: string[] }) =>
+    post<{ message: string; count: number }>('/households/advances/mark-settled', body),
 };
 
 // Bot (LINE & Telegram 璈鈭?

@@ -38,7 +38,7 @@ export default function TransactionRow({ tx, showDate = false, actions }: Transa
           ) : tx.reimbursement_id ? (
             <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--color-success)', fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>
               <CheckCircle2 size={11} style={{ flexShrink: 0 }} />
-              <span>公帳 · 已撥款</span>
+              <span>{tx.reimbursement_id === 'EXTERNAL_SETTLED' ? '公帳 · 已額外處理' : '公帳 · 已撥款'}</span>
             </span>
           ) : (
             <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--color-amber-text)', fontSize: '0.7rem', padding: '1px 6px', gap: 3 }}>

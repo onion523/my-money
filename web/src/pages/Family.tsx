@@ -69,16 +69,82 @@ export default function Family() {
   const [reimburseError, setReimburseError] = useState('')
   const [memberAdvanceTabs, setMemberAdvanceTabs] = useState<Record<string, 'pending' | 'settled'>>({})
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null)
+  const [inlineSelectedIds, setInlineSelectedIds] = useState<Record<string, string[]>>({})
+  const [markingSettled, setMarkingSettled] = useState(false)
+
+  const toggleInlineSelect = (userId: string, itemId: string) => {
+    setInlineSelectedIds(prev => {
+      const curr = prev[userId] || []
+      const next = curr.includes(itemId) ? curr.filter(id => id !== itemId) : [...curr, itemId]
+      return { ...prev, [userId]: next }
+    })
+  }
+
+  const toggleInlineSelectAll = (userId: string, allItemIds: string[]) => {
+    setInlineSelectedIds(prev => {
+      const curr = prev[userId] || []
+      const next = curr.length === allItemIds.length ? [] : [...allItemIds]
+      return { ...prev, [userId]: next }
+    })
+  }
+
+  const handleInlineMarkSettled = async (adv: HouseholdAdvance) => {
+    const ids = inlineSelectedIds[adv.user_id] || []
+    if (ids.length === 0) return
+    if (!window.confirm(`確定要將勾選的 ${ids.length} 筆公帳代墊項目直接標記為「已額外處理完成」並移出待報銷清單嗎？\n（此操作不會從家庭共同基金扣款或產生轉帳紀錄，移出後仍可於「已結清明細」退回）`)) {
+      return
+    }
+    try {
+      setMarkingSettled(true)
+      const res = await householdApi.markAdvancesSettled({
+        target_user_id: adv.user_id,
+        advance_ids: ids,
+      })
+      setInlineSelectedIds(prev => ({ ...prev, [adv.user_id]: [] }))
+      await loadData()
+      alert(res.message || '已將勾選項目移出待報銷清單！')
+    } catch (err: any) {
+      alert(err.message || '標記已額外處理失敗')
+    } finally {
+      setMarkingSettled(false)
+    }
+  }
+
+  const handleMarkSettledInModal = async () => {
+    if (!reimburseModalTarget) return
+    if (selectedAdvanceIds.length === 0) {
+      setReimburseError('請至少勾選一筆要標記已額外處理的代墊明細')
+      return
+    }
+    if (!window.confirm(`確定要將勾選的 ${selectedAdvanceIds.length} 筆公帳代墊項目直接標記為「已額外處理完成」並移出待報銷清單嗎？\n（此操作不會從家庭共同基金扣款或產生轉帳紀錄，移出後仍可於「已結清明細」退回）`)) {
+      return
+    }
+    try {
+      setMarkingSettled(true)
+      setReimburseError('')
+      const res = await householdApi.markAdvancesSettled({
+        target_user_id: reimburseModalTarget.user_id,
+        advance_ids: selectedAdvanceIds,
+      })
+      setReimburseModalTarget(null)
+      await loadData()
+      alert(res.message || '已將勾選項目移出待報銷清單！')
+    } catch (err: any) {
+      setReimburseError(err.message || '標記已額外處理失敗')
+    } finally {
+      setMarkingSettled(false)
+    }
+  }
 
   const handleUnlinkAdvance = async (itemId: string) => {
-    if (!window.confirm('確定要將此筆代墊收支解除報銷，退回「待報銷代墊明細」清單嗎？')) return
+    if (!window.confirm('確定要將此筆代墊收支解除結清，退回「待報銷代墊明細」清單嗎？')) return
     try {
       setUnlinkingId(itemId)
       const res = await householdApi.unlinkAdvance(itemId)
       await loadData()
-      alert(res.message || '已成功解除報銷並退回待報銷明細！')
+      alert(res.message || '已成功解除結清並退回待報銷明細！')
     } catch (err: any) {
-      alert(err.message || '解除報銷失敗')
+      alert(err.message || '解除結清失敗')
     } finally {
       setUnlinkingId(null)
     }
@@ -620,77 +686,154 @@ export default function Family() {
                           </div>
 
                           {/* 1. 待報銷代墊明細清單 */}
-                          {currentAdvTab === 'pending' && (
-                            <div style={{ marginBottom: 20 }}>
-                              <div className="flex items-center justify-between" style={{ marginBottom: 10, flexWrap: 'wrap', gap: 4 }}>
-                                <h4 style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                                  <Receipt size={16} color="var(--color-primary)" />
-                                  個人待報銷代墊明細 ({advanceItems.length} 筆)
-                                </h4>
-                                <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                                  僅計入自個人私帳、私卡或現金錢包支付且尚未報銷之公帳（含退款抵扣）
-                                </span>
-                              </div>
+                          {currentAdvTab === 'pending' && (() => {
+                            const canManageAdv = data?.myRole === 'admin' || user?.id === adv.user_id
+                            const myInlineSelected = inlineSelectedIds[adv.user_id] || []
+                            const allAdvIds = advanceItems.map(it => it.id)
+                            const isAllInlineSelected = advanceItems.length > 0 && myInlineSelected.length === advanceItems.length
 
-                              {advanceItems.length === 0 ? (
-                                <div className="text-xs text-secondary" style={{ padding: '12px 14px', background: 'var(--bg-surface-2)', borderRadius: 8 }}>
-                                  目前無待報銷之代墊紀錄（已結清款項移至「已結清明細」分頁，可隨時查驗）。
-                                </div>
-                              ) : (
-                                <div className="family-breakdown-table">
-                                  <div className="family-breakdown-header advance-cols">
-                                    <div>消費日期</div>
-                                    <div>類別與備註</div>
-                                    <div>墊付扣款帳戶</div>
-                                    <div style={{ textAlign: 'right' }}>代墊金額</div>
+                            return (
+                              <div style={{ marginBottom: 20 }}>
+                                <div className="flex items-center justify-between" style={{ marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                                  <div>
+                                    <h4 style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                                      <Receipt size={16} color="var(--color-primary)" />
+                                      個人待報銷代墊明細 ({advanceItems.length} 筆)
+                                    </h4>
+                                    <span className="text-xs" style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 2 }}>
+                                      僅計入自個人私帳、私卡或現金錢包支付且尚未報銷之公帳（含退款抵扣）
+                                    </span>
                                   </div>
-                                  {advanceItems.map(item => (
-                                    <div key={item.id} className="family-breakdown-row advance-cols">
-                                      <div className="fb-cell-date">{formatTxDateTime(item.date, item.created_at)}</div>
-                                      <div className="fb-cell-main">
-                                        <span style={{ fontWeight: 600, marginRight: 6 }}>{item.category}</span>
-                                        {item.type === 'income' && (
-                                          <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontSize: '0.68rem', padding: '1px 5px', marginRight: 4 }}>
-                                            公帳退款
-                                          </span>
-                                        )}
-                                        {item.note && <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.note}</span>}
-                                      </div>
-                                      <div className="fb-cell-account">
-                                        <span>{item.account_name}</span>
-                                        {item.account_type === 'credit_card' && (
-                                          <span
-                                            className="badge"
-                                            style={{
-                                              fontSize: '0.68rem',
-                                              padding: '1px 5px',
-                                              marginLeft: 5,
-                                              background: item.is_billed === 1
-                                                ? 'rgba(99, 102, 241, 0.15)'
-                                                : 'rgba(245, 158, 11, 0.15)',
-                                              color: item.is_billed === 1
-                                                ? 'var(--color-indigo-text)'
-                                                : 'var(--color-amber-text)',
-                                              fontWeight: 600,
-                                              border: `1px solid ${item.is_billed === 1 ? 'rgba(99, 102, 241, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
-                                            }}
-                                          >
-                                            {item.defer_to_next_statement === 1 ? '延至下期' : item.is_billed === 1 ? '已出帳' : '未出帳'}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div
-                                        className="fb-cell-amount"
-                                        style={{ color: item.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)' }}
+                                  {canManageAdv && advanceItems.length > 0 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                      <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                                        onClick={() => toggleInlineSelectAll(adv.user_id, allAdvIds)}
                                       >
-                                        {item.type === 'income' ? '-' : ''}{formatCurrency(item.amount)}
-                                      </div>
+                                        {isAllInlineSelected ? '取消全選' : '全選'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-primary btn-sm"
+                                        style={{
+                                          padding: '4px 10px',
+                                          fontSize: '0.78rem',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 4,
+                                          opacity: myInlineSelected.length === 0 ? 0.55 : 1,
+                                        }}
+                                        disabled={myInlineSelected.length === 0 || markingSettled}
+                                        onClick={() => handleInlineMarkSettled(adv)}
+                                        title="將勾選之公帳代墊項目直接標記為已額外處理完成並移出待報銷清單（不動支共同基金扣款）"
+                                      >
+                                        <CheckCircle2 size={13} />
+                                        <span>
+                                          {markingSettled
+                                            ? '處理中...'
+                                            : `已額外處理・移出清單${myInlineSelected.length > 0 ? ` (${myInlineSelected.length} 筆)` : ''}`}
+                                        </span>
+                                      </button>
                                     </div>
-                                  ))}
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          )}
+
+                                {advanceItems.length === 0 ? (
+                                  <div className="text-xs text-secondary" style={{ padding: '12px 14px', background: 'var(--bg-surface-2)', borderRadius: 8 }}>
+                                    目前無待報銷之代墊紀錄（已結清款項移至「已結清明細」分頁，可隨時查驗）。
+                                  </div>
+                                ) : (
+                                  <div className="family-breakdown-table">
+                                    <div className="family-breakdown-header advance-cols">
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {canManageAdv && (
+                                          <input
+                                            type="checkbox"
+                                            checked={isAllInlineSelected}
+                                            onChange={() => toggleInlineSelectAll(adv.user_id, allAdvIds)}
+                                            style={{ cursor: 'pointer', accentColor: 'var(--color-success)' }}
+                                          />
+                                        )}
+                                        <span>消費日期</span>
+                                      </div>
+                                      <div>類別與備註</div>
+                                      <div>墊付扣款帳戶</div>
+                                      <div style={{ textAlign: 'right' }}>代墊金額</div>
+                                    </div>
+                                    {advanceItems.map(item => {
+                                      const isChecked = myInlineSelected.includes(item.id)
+                                      return (
+                                        <div
+                                          key={item.id}
+                                          className="family-breakdown-row advance-cols"
+                                          onClick={() => {
+                                            if (canManageAdv) toggleInlineSelect(adv.user_id, item.id)
+                                          }}
+                                          style={{
+                                            cursor: canManageAdv ? 'pointer' : 'default',
+                                            background: isChecked ? 'rgba(85, 197, 149, 0.12)' : undefined,
+                                            border: isChecked ? '1px solid rgba(85, 197, 149, 0.35)' : undefined,
+                                          }}
+                                        >
+                                          <div className="fb-cell-date" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            {canManageAdv && (
+                                              <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                onChange={() => {}}
+                                                style={{ cursor: 'pointer', accentColor: 'var(--color-success)', flexShrink: 0 }}
+                                              />
+                                            )}
+                                            <span>{formatTxDateTime(item.date, item.created_at)}</span>
+                                          </div>
+                                          <div className="fb-cell-main">
+                                            <span style={{ fontWeight: 600, marginRight: 6 }}>{item.category}</span>
+                                            {item.type === 'income' && (
+                                              <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontSize: '0.68rem', padding: '1px 5px', marginRight: 4 }}>
+                                                公帳退款
+                                              </span>
+                                            )}
+                                            {item.note && <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.note}</span>}
+                                          </div>
+                                          <div className="fb-cell-account">
+                                            <span>{item.account_name}</span>
+                                            {item.account_type === 'credit_card' && (
+                                              <span
+                                                className="badge"
+                                                style={{
+                                                  fontSize: '0.68rem',
+                                                  padding: '1px 5px',
+                                                  marginLeft: 5,
+                                                  background: item.is_billed === 1
+                                                    ? 'rgba(99, 102, 241, 0.15)'
+                                                    : 'rgba(245, 158, 11, 0.15)',
+                                                  color: item.is_billed === 1
+                                                    ? 'var(--color-indigo-text)'
+                                                    : 'var(--color-amber-text)',
+                                                  fontWeight: 600,
+                                                  border: `1px solid ${item.is_billed === 1 ? 'rgba(99, 102, 241, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                                                }}
+                                              >
+                                                {item.defer_to_next_statement === 1 ? '延至下期' : item.is_billed === 1 ? '已出帳' : '未出帳'}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div
+                                            className="fb-cell-amount"
+                                            style={{ color: item.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)' }}
+                                          >
+                                            {item.type === 'income' ? '-' : ''}{formatCurrency(item.amount)}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
 
                           {/* 1.2 已結清代墊明細清單 */}
                           {currentAdvTab === 'settled' && (
@@ -701,7 +844,7 @@ export default function Family() {
                                   個人已結清代墊明細 ({settledItems.length} 筆)
                                 </h4>
                                 <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                                  已由家庭共同基金撥款報銷結清之代墊消費或退款紀錄
+                                  已由家庭共同基金撥款報銷或標記已額外處理完成之代墊紀錄
                                 </span>
                               </div>
 
@@ -715,7 +858,7 @@ export default function Family() {
                                     <div>消費日期</div>
                                     <div>類別與備註</div>
                                     <div>墊付扣款帳戶</div>
-                                    <div style={{ textAlign: 'right' }}>已報銷金額</div>
+                                    <div style={{ textAlign: 'right' }}>已結清金額</div>
                                     <div style={{ textAlign: 'right' }}>操作</div>
                                   </div>
                                   {settledItems.map(item => (
@@ -723,6 +866,36 @@ export default function Family() {
                                       <div className="fb-cell-date">{formatTxDateTime(item.date, item.created_at)}</div>
                                       <div className="fb-cell-main">
                                         <span style={{ fontWeight: 600, marginRight: 6 }}>{item.category}</span>
+                                        {item.reimbursement_id === 'EXTERNAL_SETTLED' ? (
+                                          <span
+                                            className="badge"
+                                            style={{
+                                              background: 'rgba(99, 102, 241, 0.15)',
+                                              color: 'var(--color-indigo-text)',
+                                              border: '1px solid rgba(99, 102, 241, 0.3)',
+                                              fontSize: '0.68rem',
+                                              padding: '1px 5px',
+                                              marginRight: 4,
+                                              fontWeight: 600,
+                                            }}
+                                          >
+                                            已額外處理
+                                          </span>
+                                        ) : (
+                                          <span
+                                            className="badge"
+                                            style={{
+                                              background: 'rgba(16, 185, 129, 0.15)',
+                                              color: 'var(--color-success)',
+                                              fontSize: '0.68rem',
+                                              padding: '1px 5px',
+                                              marginRight: 4,
+                                              fontWeight: 600,
+                                            }}
+                                          >
+                                            共同基金撥款
+                                          </span>
+                                        )}
                                         {item.type === 'income' && (
                                           <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontSize: '0.68rem', padding: '1px 5px', marginRight: 4 }}>
                                             公帳退款
@@ -767,7 +940,7 @@ export default function Family() {
                                             style={{ padding: '3px 8px', fontSize: '0.75rem', height: '24px', display: 'flex', alignItems: 'center', gap: 3 }}
                                             disabled={unlinkingId === item.id}
                                             onClick={() => handleUnlinkAdvance(item.id)}
-                                            title="將此筆代墊收支解除報銷，退回待報銷清單"
+                                            title="將此筆代墊收支解除結清，退回待報銷清單"
                                           >
                                             <RotateCcw size={12} />
                                             {unlinkingId === item.id ? '處理中' : '退回'}
@@ -1142,9 +1315,46 @@ export default function Family() {
                   </div>
                 );
               })()}
-              <div className="text-xs flex items-center justify-between" style={{ marginTop: 6, color: 'var(--text-secondary)' }}>
+              <div className="text-xs flex items-center justify-between" style={{ marginTop: 6, color: 'var(--text-secondary)', flexWrap: 'wrap', gap: 6 }}>
                 <span>已勾選：<strong>{selectedAdvanceIds.length}</strong> 筆</span>
                 <span>勾選項目合計：<strong style={{ color: 'var(--color-success)', fontSize: '0.95rem' }}>{formatCurrency(parseFloat(reimburseForm.amount) || 0)}</strong></span>
+              </div>
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  background: 'var(--bg-surface-2)',
+                  border: '1px dashed var(--border-color)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                }}
+              >
+                <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  若勾選項目已於場外結清或透過「繳家庭代墊」還款，可直接移出清單（不動支共同基金扣款）：
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '0.8rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    color: 'var(--color-indigo-text)',
+                    borderColor: 'rgba(99, 102, 241, 0.35)',
+                    background: 'rgba(99, 102, 241, 0.1)',
+                  }}
+                  disabled={selectedAdvanceIds.length === 0 || markingSettled || reimbursing}
+                  onClick={handleMarkSettledInModal}
+                >
+                  <CheckCircle2 size={14} />
+                  <span>{markingSettled ? '移出處理中...' : `已額外處理・移出清單 (${selectedAdvanceIds.length} 筆)`}</span>
+                </button>
               </div>
             </div>
 
@@ -1217,11 +1427,23 @@ export default function Family() {
               />
             </div>
 
-            <div className="flex justify-end gap-sm" style={{ marginTop: 24 }}>
+            <div className="flex justify-end gap-sm" style={{ marginTop: 24, flexWrap: 'wrap' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setReimburseModalTarget(null)}>
                 取消
               </button>
-              <button type="submit" className="btn btn-primary" disabled={reimbursing}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={selectedAdvanceIds.length === 0 || markingSettled || reimbursing}
+                onClick={handleMarkSettledInModal}
+                style={{
+                  color: 'var(--color-indigo-text)',
+                  borderColor: 'rgba(99, 102, 241, 0.35)',
+                }}
+              >
+                {markingSettled ? '移出處理中...' : '已額外處理 (僅移出清單)'}
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={reimbursing || markingSettled}>
                 {reimbursing ? '撥款報銷中...' : '確認撥款沖帳'}
               </button>
             </div>

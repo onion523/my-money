@@ -1448,6 +1448,10 @@ a { text-decoration: none; color: inherit; }
   padding: 6px;
   border-radius: 6px;
 }
+.family-breakdown-header.advance-cols,
+.family-breakdown-row.advance-cols {
+  grid-template-columns: 120px 1fr 120px 100px;
+}
 .family-breakdown-header.reimb-cols,
 .family-breakdown-row.reimb-cols {
   grid-template-columns: 95px 130px 1fr 100px;
@@ -1668,11 +1672,13 @@ a { text-decoration: none; color: inherit; }
 
   /* 家庭代墊與報銷雙層明細列 */
   .family-breakdown-header,
+  .family-breakdown-header.advance-cols,
   .family-breakdown-header.reimb-cols,
   .family-breakdown-header.settled-cols {
     display: none;
   }
   .family-breakdown-row,
+  .family-breakdown-row.advance-cols,
   .family-breakdown-row.reimb-cols {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:

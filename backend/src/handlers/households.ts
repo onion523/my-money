@@ -299,8 +299,10 @@ households.get('/advances', async (c) => {
         defer_to_next_statement: Number(defer_to_next_statement || 0)
       }));
 
-    // 已結清項目之淨加總
-    const linkedTotal = settledItems.reduce((s, it) => s + (it.type === 'expense' ? Number(it.amount || 0) : -Number(it.amount || 0)), 0);
+    // 共同基金撥款關聯之已結清項目淨加總（排除 EXTERNAL_SETTLED 已額外處理項目，確保溢撥預收計算精準）
+    const linkedTotal = settledItems
+      .filter(it => it.reimbursement_id !== 'EXTERNAL_SETTLED')
+      .reduce((s, it) => s + (it.type === 'expense' ? Number(it.amount || 0) : -Number(it.amount || 0)), 0);
 
     // 待報銷總額（明細實報實銷：待報銷支出 － 待報銷退款）
     const pendingReimburse = advanceItems.reduce((s, it) => s + (it.type === 'expense' ? Number(it.amount || 0) : -Number(it.amount || 0)), 0);
@@ -329,6 +331,45 @@ households.get('/advances', async (c) => {
   });
 
   return c.json({ success: true, data: advances });
+});
+
+// POST /households/advances/mark-settled (勾選公帳代墊項目直接標記為已額外處理完成，移出待報銷清單且不動支共同基金)
+households.post('/advances/mark-settled', async (c) => {
+  await ensureAccountsSchema(c.env.DB);
+  const userId = c.get('userId');
+  const { household, memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
+  if (!household) return c.json({ success: false, error: '尚未建立或加入家庭群組' }, 400);
+
+  const body = await c.req.json();
+  const { target_user_id, advance_ids } = body;
+
+  if (!target_user_id || !Array.isArray(advance_ids) || advance_ids.length === 0) {
+    return c.json({ success: false, error: '請至少勾選一筆要標記已額外處理的代墊明細' }, 400);
+  }
+
+  if (!memberUserIds.includes(target_user_id)) {
+    return c.json({ success: false, error: '目標成員不屬於此家庭群組' }, 404);
+  }
+
+  if (myRole !== 'admin' && target_user_id !== userId) {
+    return c.json({ success: false, error: '權限不足：一般成員僅能操作本人之代墊明細' }, 403);
+  }
+
+  const writeStmts = advance_ids.map((advId: string) =>
+    c.env.DB.prepare(
+      "UPDATE transactions SET reimbursement_id = 'EXTERNAL_SETTLED' WHERE id = ? AND user_id = ? AND is_shared = 1"
+    ).bind(advId, target_user_id)
+  );
+
+  await c.env.DB.batch(writeStmts);
+
+  return c.json({
+    success: true,
+    data: {
+      message: `已將 ${advance_ids.length} 筆公帳代墊項目移出待報銷清單（標記為已額外處理完成）！`,
+      count: advance_ids.length,
+    }
+  });
 });
 
 // POST /households/advances/:id/unlink (將已結清報銷之代墊明細解除關聯，退回待報銷)

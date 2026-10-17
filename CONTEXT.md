@@ -205,7 +205,15 @@ _Avoid_: 結算 (settlement)、退款 (refund)、還錢 (payback)、一鍵報銷
    - **清償雙軌並行互補**：家庭共同基金償付成員個人信用卡代墊款支援雙軌：
      - **軌道一（家庭協同報銷）**：自共同基金撥款至成員個人銀行／現金帳戶，款項結清後於信用卡出帳時轉由成員個人自負向發卡機構繳費。
      - **軌道二（帳戶列表繳家庭代墊）**：自共同基金直接還款至信用卡，直接沖減信用卡之公帳待繳債務（`billed_shared_debt`）。
-_Avoid_: 盲目手動輸入任意金額導致對不起來哪些項目已結清 (opaque lump-sum reimbursement without item linkage)、缺乏帳戶分組導致多卡代墊難以單卡結清 (lack of account grouping for card-specific settlement)、已結清代墊持續堆疊在待報銷清單中 (retained settled items cluttering pending advance list)、無法分辨公帳是共同基金扣款還是個人代墊 (inability to distinguish joint direct payments from personal advances)、強制卡片出帳方可報銷導致報帳延宕與漏單 (blocking advance reimbursement until credit card statement cuts causing delays)
+5. **已額外處理直接結清移出清單（External Advance Settlement without Joint Fund Transfer）**：
+   - **雙入口勾選與一鍵移出**：
+     - **入口一（「報銷沖帳」彈窗內）**：勾選公帳代墊項目後，除「確認撥款沖帳」外，提供「已額外處理（僅移出清單・不扣款）」操作按鈕，無須選擇共同基金與收款帳戶即可將勾選項目移出待報銷清單。
+     - **入口二（家庭協同頁面展開之「待報銷明細」列表）**：列表支援單筆勾選與全選／取消全選，勾選後可直接點擊「標記已額外處理（移出清單）」批次結清。
+   - **獨立結清標記與可逆退回（`reimbursement_id = 'EXTERNAL_SETTLED'`）**：
+     - 被標記為已額外處理之項目寫入 `reimbursement_id = 'EXTERNAL_SETTLED'`，即刻從「待報銷明細」移入「已結清明細」分頁，並於「已結清明細」及「收支明細」標示 `[已額外處理]`／`[公帳 · 已額外處理]` 語意徽章。
+     - **零資金扣款與不虛增撥款總額**：此操作**不扣減任何共同基金或個人帳戶餘額、不產生 `公帳代墊報銷` 轉帳流水**，且在計算 `溢撥預收（unlinked_reimbursed）` 時，僅針對實際關聯共同基金撥款單之結清項目（`reimbursement_id != 'EXTERNAL_SETTLED'`）與 `total_reimbursed` 比對，避免虛減溢撥預收或虛增已獲撥款報銷金額。
+     - **完整支援誤按退回**：移入「已結清明細」後，管理員或該成員本人仍可隨時點擊「退回」（`POST /households/advances/:id/unlink`）將其還原回「待報銷明細」。
+_Avoid_: 盲目手動輸入任意金額導致對不起來哪些項目已結清 (opaque lump-sum reimbursement without item linkage)、缺乏帳戶分組導致多卡代墊難以單卡結清 (lack of account grouping for card-specific settlement)、已結清代墊持續堆疊在待報銷清單中 (retained settled items cluttering pending advance list)、無法分辨公帳是共同基金扣款還是個人代墊 (inability to distinguish joint direct payments from personal advances)、強制卡片出帳方可報銷導致報帳延宕與漏單 (blocking advance reimbursement until credit card statement cuts causing delays)、已透過場外或繳家庭代墊處理卻強制要求動支共同基金轉帳才能移出待報銷清單 (forcing joint fund transfer to clear externally settled advances)
 
 **Advance Items Breakdown (代墊與報銷明細)**:
 家庭頁面中各成員的透明流水帳明細，包含「個人墊付公帳待報銷消費清單（日期、類別、備註、扣款個人帳戶、金額）」以及「共同基金撥款報銷沖帳紀錄」，便於雙方隨時核帳與檢驗結清狀態。
