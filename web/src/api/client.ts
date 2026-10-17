@@ -278,6 +278,8 @@ export interface Account {
   credit_limit?: number | null;
   statement_day?: number | null;
   payment_due_day?: number | null;
+  payment_account_id?: string | null;
+  payment_account_name?: string | null;
   unbilled: number;
   color: string;
   is_joint?: number;

@@ -335,7 +335,14 @@ export default function Dashboard() {
                 {displayAccounts.map(acc => {
                   const isCc = acc.type === 'credit_card';
                   const isCash = acc.type === 'cash';
+                  const isBank = acc.type === 'bank';
                   const totalDue = isCc ? (acc.balance || 0) + (acc.unbilled || 0) : acc.balance;
+                  const boundCards = isBank
+                    ? accounts.filter(c => c.type === 'credit_card' && c.payment_account_id === acc.id)
+                    : [];
+                  const boundBilled = boundCards.reduce((sum, c) => sum + (c.balance || 0), 0);
+                  const boundTotal = boundCards.reduce((sum, c) => sum + (c.balance || 0) + (c.unbilled || 0), 0);
+                  const afterBilled = acc.balance - boundBilled;
 
                   return (
                     <div
@@ -387,6 +394,37 @@ export default function Dashboard() {
                         {formatCurrency(totalDue)}
                       </div>
 
+                      {/* 銀行帳戶綁定信用卡待扣款提醒 */}
+                      {isBank && boundCards.length > 0 && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            padding: '5px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(0,0,0,0.03)',
+                            border: '1px dashed var(--border-color)',
+                            fontSize: '0.74rem',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: 4 }}>
+                            <span>
+                              待扣卡費 ({boundCards.length} 張)：已出帳{' '}
+                              <strong style={{ color: boundBilled > 0 ? 'var(--color-danger)' : 'var(--text-primary)' }}>
+                                {formatCurrency(boundBilled)}
+                              </strong>
+                            </span>
+                            <span>總待繳 {formatCurrency(boundTotal)}</span>
+                          </div>
+                          <div className="flex items-center justify-between" style={{ marginTop: 2, flexWrap: 'wrap', gap: 4 }}>
+                            <span>扣已出帳後餘額：</span>
+                            <strong style={{ color: afterBilled < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                              {formatCurrency(afterBilled)}
+                            </strong>
+                          </div>
+                        </div>
+                      )}
+
                       {/* 信用卡公私拆解與未出帳/繳款狀態 */}
                       {isCc && (
                         <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -408,6 +446,7 @@ export default function Dashboard() {
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
                             未出帳 {formatCurrency(acc.unbilled || 0)}
                             {acc.payment_due_day ? ` · 每月 ${acc.payment_due_day} 日繳款` : ''}
+                            {acc.payment_account_name ? ` · 扣款：${acc.payment_account_name}` : ''}
                           </div>
                         </div>
                       )}

@@ -148,6 +148,21 @@ _Avoid_: 讀取帳戶列表或餘額時夾帶資料庫寫入與逐卡 N+1 迴圈
 6. **他人私卡公帳視角脫敏防線**：在家庭公帳視角或非持卡人檢視伴侶之個人私卡時，清楚揭露 `billed_shared_debt` 與 `unbilled_shared_debt`，並提供「繳家庭代墊」操作；而個人私帳金額（`credit_limit`、`billed_personal_debt`、`unbilled_personal_debt`、`balance`）全面落實隱私脫敏遮蔽。
 _Avoid_: 混淆已出帳與未出帳導致公帳盲目全額溢繳 (mixing billed and unbilled causing premature joint fund payment)、他人私卡揭露個人私帳金額 (leaking personal debt details of other members' cards)
 
+**Credit Card Default Payment Account & Bank Auto-Debit Liability Projection (信用卡預設扣款帳戶與銀行待扣款負債預覽)**:
+在信用卡帳戶（`type = 'credit_card'`）上支援綁定「預設扣款銀行帳戶（`payment_account_id`）」，串聯信用卡繳費預設帶入與銀行存款卡片之待扣款負債預警：
+1. **信用卡預設扣款帳戶設定**：
+   - 於新增或編輯信用卡彈窗中，提供「預設扣款銀行帳戶（選填）」下拉選單（可選擇銀行存款帳戶 `type = 'bank'` 或「不綁定」）。
+   - 於信用卡卡片之帳單週期資訊列同步顯示所綁定之扣款銀行名稱（例如 `扣款帳戶：台新活存`）。
+2. **結清還款彈窗預設帶入**：
+   - 點擊信用卡之「繳家庭代墊」、「繳個人私帳」或「全額結清」開啟還款彈窗時，系統**一律優先自動帶入該信用卡所綁定之 `payment_account_id`**（只要該銀行帳戶在當前可用扣款銀行清單中）；僅當協助他人私卡繳納家庭代墊款（看不到對方私帳銀行）或未設定預設扣款帳戶時，才退回帶入家庭共同基金帳戶或請使用者選擇。
+3. **扣款銀行卡片待扣款金額與扣後餘額預覽**：
+   - 當某銀行存款帳戶被一張或多張信用卡設為 `payment_account_id` 時，於該銀行存款卡片（含「帳戶管理 `Accounts.tsx`」與「儀表板 `Dashboard.tsx`」）即時聚合顯示綁定信用卡之待扣款資訊：
+     - **已出帳待扣款**：加總綁定信用卡之當期已出帳待繳金額（`billed`），代表即將到期扣款之確定負債。
+     - **含未出帳總待繳**：加總綁定信用卡之總負債（`billed + unbilled`）。
+     - **扣款後預估餘額**：顯示 `存款餘額 － 已出帳待扣款`（及 `扣總待繳後預估餘額`），若存款餘額不足以支付已出帳待扣款（或總待繳）時，以醒目危險紅字（`var(--color-danger)`）警示餘額不足差額。
+     - **綁定卡片明細**：列出綁定於此銀行帳戶之各張信用卡名稱與待繳金額。
+_Avoid_: 每次繳卡費都需手動重選固定扣款銀行 (forcing manual bank selection on every repayment when auto-debit bank is fixed)、銀行存款餘額看似充裕卻忽略即將自動扣繳之綁定卡費導致餘額不足違約 (ignoring bound credit card auto-debit liabilities on bank cards)
+
 ---
 
 ### 家庭公帳與共同基金 (Household & Joint Fund)

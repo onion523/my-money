@@ -25,6 +25,7 @@ export interface Account {
   credit_limit?: number;
   statement_day?: number;
   payment_due_day?: number;
+  payment_account_id?: string | null;
   unbilled: number;
   color: string;
   is_joint?: number;

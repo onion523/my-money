@@ -58,6 +58,7 @@ export default function Accounts() {
     credit_limit: '',
     statement_day: '',
     payment_due_day: '',
+    payment_account_id: '',
     unbilled: '',
     is_joint: 0,
     color: ACCOUNT_COLORS[0],
@@ -147,6 +148,7 @@ export default function Accounts() {
       credit_limit: type === 'credit_card' ? '100000' : '',
       statement_day: type === 'credit_card' ? '15' : '',
       payment_due_day: type === 'credit_card' ? '5' : '',
+      payment_account_id: '',
       unbilled: '0',
       is_joint: 0,
       color: type === 'cash' ? '#10B981' : ACCOUNT_COLORS[Math.floor(Math.random() * ACCOUNT_COLORS.length)],
@@ -164,6 +166,7 @@ export default function Accounts() {
       credit_limit: acc.credit_limit?.toString() || '',
       statement_day: acc.statement_day?.toString() || '',
       payment_due_day: acc.payment_due_day?.toString() || '',
+      payment_account_id: acc.payment_account_id || '',
       unbilled: acc.unbilled?.toString() || '0',
       is_joint: acc.is_joint || 0,
       color: acc.color || ACCOUNT_COLORS[0],
@@ -185,6 +188,7 @@ export default function Accounts() {
     const limit = form.credit_limit ? parseFloat(form.credit_limit) : undefined
     const stmtDay = form.statement_day ? parseInt(form.statement_day) : undefined
     const dueDay = form.payment_due_day ? parseInt(form.payment_due_day) : undefined
+    const payAccId = form.type === 'credit_card' ? (form.payment_account_id || null) : null
 
     try {
       setSubmitting(true)
@@ -197,6 +201,7 @@ export default function Accounts() {
           credit_limit: limit,
           statement_day: stmtDay,
           payment_due_day: dueDay,
+          payment_account_id: payAccId,
           is_joint: form.is_joint,
           color: form.color,
         })
@@ -209,6 +214,7 @@ export default function Accounts() {
           credit_limit: limit,
           statement_day: stmtDay,
           payment_due_day: dueDay,
+          payment_account_id: payAccId,
           is_joint: form.is_joint,
           color: form.color,
         })
@@ -337,8 +343,17 @@ export default function Accounts() {
       isSharedTarget = 0
     }
 
+    const isOtherMemberPrivateCard = card.is_joint === 0 && Boolean(user && card.user_id !== user.id)
+    const availableBanks = accounts.filter(a => a.type === 'bank' && (!isOtherMemberPrivateCard || a.is_joint === 1))
+    let defaultBankId = ''
+    if (card.payment_account_id && availableBanks.some(b => b.id === card.payment_account_id)) {
+      defaultBankId = card.payment_account_id
+    } else if (isOtherMemberPrivateCard) {
+      defaultBankId = availableBanks[0]?.id || ''
+    }
+
     setPayForm({
-      bank_account_id: '',
+      bank_account_id: defaultBankId,
       amount: defaultAmount > 0 ? defaultAmount.toString() : '',
       date: today(),
       note: `扣繳【${card.name}】卡費 (${payType === 'shared' ? '家庭公帳代墊' : payType === 'personal' ? '個人私帳' : '全額'})`,
@@ -745,62 +760,163 @@ export default function Accounts() {
           </div>
         ) : (
           <div className="grid grid-3">
-            {bankAccounts.map(acc => (
-              <div key={acc.id} className="card account-card" style={{ borderTop: `4px solid ${acc.color}` }}>
-                <div className="account-card-header">
-                  <div className="account-name-group">
-                    <span className="account-color-dot" style={{ backgroundColor: acc.color }} />
-                    <h3 className="account-name">{acc.name}</h3>
+            {bankAccounts.map(acc => {
+              const boundCards = creditCards.filter(c => c.payment_account_id === acc.id)
+              const boundBilled = boundCards.reduce((sum, c) => sum + (c.balance || 0), 0)
+              const boundUnbilled = boundCards.reduce((sum, c) => sum + (c.unbilled || 0), 0)
+              const boundTotal = boundBilled + boundUnbilled
+              const afterBilled = acc.balance - boundBilled
+              const afterTotal = acc.balance - boundTotal
+
+              return (
+                <div key={acc.id} className="card account-card" style={{ borderTop: `4px solid ${acc.color}` }}>
+                  <div className="account-card-header">
+                    <div className="account-name-group">
+                      <span className="account-color-dot" style={{ backgroundColor: acc.color }} />
+                      <h3 className="account-name">{acc.name}</h3>
+                    </div>
+                    {canModifyAccount(acc) && (
+                      <div className="flex gap-xs">
+                        <button className="btn-icon" title="編輯" onClick={() => handleOpenEdit(acc)}>
+                          <Edit2 size={16} />
+                        </button>
+                        <button className="btn-icon danger" title="刪除" onClick={() => handleDelete(acc.id, acc.name)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {canModifyAccount(acc) && (
-                    <div className="flex gap-xs">
-                      <button className="btn-icon" title="編輯" onClick={() => handleOpenEdit(acc)}>
-                        <Edit2 size={16} />
-                      </button>
-                      <button className="btn-icon danger" title="刪除" onClick={() => handleDelete(acc.id, acc.name)}>
-                        <Trash2 size={16} />
-                      </button>
+
+                  <div className="account-balance-group" style={{ margin: '14px 0' }}>
+                    <span className="account-balance-label">存款餘額</span>
+                    <div className="account-balance" style={{ color: 'var(--color-primary)', fontSize: '1.75rem', fontWeight: 700 }}>
+                      {formatCurrency(acc.balance)}
+                    </div>
+                  </div>
+
+                  {boundCards.length > 0 && (
+                    <div
+                      style={{
+                        background: 'var(--bg-surface-2)',
+                        border: `1px solid ${afterBilled < 0 ? 'rgba(239, 68, 68, 0.45)' : 'var(--border-color)'}`,
+                        borderRadius: 8,
+                        padding: '10px 12px',
+                        marginBottom: 12,
+                        fontSize: '0.8rem',
+                      }}
+                    >
+                      <div className="flex items-center justify-between" style={{ marginBottom: 6, flexWrap: 'wrap', gap: 4 }}>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                          <CreditCard size={13} color="var(--color-danger)" />
+                          <span>待扣款信用卡 ({boundCards.length} 張)</span>
+                        </span>
+                        {afterBilled < 0 && (
+                          <span className="badge badge-danger" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>
+                            存款不足扣繳已出帳
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between" style={{ marginBottom: 3 }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>已出帳待扣款：</span>
+                        <strong style={{ color: boundBilled > 0 ? 'var(--color-danger)' : 'var(--text-primary)', fontSize: '0.88rem' }}>
+                          {formatCurrency(boundBilled)}
+                        </strong>
+                      </div>
+
+                      <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>含未出帳總待繳：</span>
+                        <strong style={{ color: boundTotal > 0 ? 'var(--color-amber-text)' : 'var(--text-secondary)' }}>
+                          {formatCurrency(boundTotal)}
+                        </strong>
+                      </div>
+
+                      <div
+                        style={{
+                          borderTop: '1px dashed var(--border-color)',
+                          paddingTop: 6,
+                          marginTop: 4,
+                        }}
+                      >
+                        <div className="flex items-center justify-between" style={{ marginBottom: 2 }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>扣已出帳後餘額：</span>
+                          <strong style={{ color: afterBilled < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                            {formatCurrency(afterBilled)}
+                          </strong>
+                        </div>
+                        <div className="flex items-center justify-between" style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                          <span>扣總待繳後預估餘額：</span>
+                          <span style={{ fontWeight: 600, color: afterTotal < 0 ? 'var(--color-danger)' : 'var(--text-secondary)' }}>
+                            {formatCurrency(afterTotal)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          borderTop: '1px dashed var(--border-color)',
+                          paddingTop: 6,
+                          marginTop: 6,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 3,
+                        }}
+                      >
+                        {boundCards.map(bc => {
+                          const bcBilled = bc.balance || 0
+                          const bcTotal = bcBilled + (bc.unbilled || 0)
+                          return (
+                            <div
+                              key={bc.id}
+                              className="flex items-center justify-between"
+                              style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', gap: 6 }}
+                            >
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: bc.color || 'var(--color-danger)', flexShrink: 0 }} />
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{bc.name}</span>
+                              </span>
+                              <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                已出帳 <strong style={{ color: bcBilled > 0 ? 'var(--color-danger)' : 'var(--text-primary)' }}>{formatCurrency(bcBilled)}</strong>
+                                {' · '}總待繳 {formatCurrency(bcTotal)}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
-                </div>
 
-                <div className="account-balance-group" style={{ margin: '14px 0' }}>
-                  <span className="account-balance-label">存款餘額</span>
-                  <div className="account-balance" style={{ color: 'var(--color-primary)', fontSize: '1.75rem', fontWeight: 700 }}>
-                    {formatCurrency(acc.balance)}
+                  <div className="flex items-center justify-between pt-sm border-t" style={{ marginTop: 12 }}>
+                    <div className="flex gap-xs">
+                      {acc.is_joint === 1 ? (
+                        <span className="badge badge-primary" style={{ gap: 3 }}>
+                          <Home size={11} />
+                          <span>公帳</span>
+                        </span>
+                      ) : (
+                        <span className="badge badge-secondary" style={{ gap: 3 }}>
+                          <Lock size={11} />
+                          <span>私帳</span>
+                        </span>
+                      )}
+                      {acc.owner_name && (
+                        <span className="badge" style={{ background: 'rgba(0,0,0,0.06)' }}>
+                          {acc.owner_name}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      title="以此銀行轉帳或提款"
+                      onClick={() => handleOpenTransfer(acc.id, undefined)}
+                    >
+                      <ArrowRightLeft size={14} style={{ marginRight: 2 }} />
+                      轉帳 / 提款
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex items-center justify-between pt-sm border-t" style={{ marginTop: 12 }}>
-                  <div className="flex gap-xs">
-                    {acc.is_joint === 1 ? (
-                      <span className="badge badge-primary" style={{ gap: 3 }}>
-                        <Home size={11} />
-                        <span>公帳</span>
-                      </span>
-                    ) : (
-                      <span className="badge badge-secondary" style={{ gap: 3 }}>
-                        <Lock size={11} />
-                        <span>私帳</span>
-                      </span>
-                    )}
-                    {acc.owner_name && (
-                      <span className="badge" style={{ background: 'rgba(0,0,0,0.06)' }}>
-                        {acc.owner_name}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    className="btn btn-sm btn-secondary"
-                    title="以此銀行轉帳或提款"
-                    onClick={() => handleOpenTransfer(acc.id, undefined)}
-                  >
-                    <ArrowRightLeft size={14} style={{ marginRight: 2 }} />
-                    轉帳 / 提款
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -1006,12 +1122,22 @@ export default function Accounts() {
                   </div>
 
                   {/* 帳單週期資訊 */}
-                  <div className="flex items-center justify-between" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
-                    <span>每月 {card.statement_day || '--'} 日結帳 · {card.payment_due_day || '--'} 日繳款</span>
-                    {remainingLimit !== null ? (
-                      <span>剩餘額度：{formatCurrency(remainingLimit)}</span>
-                    ) : (
-                      <span>剩餘額度：--</span>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
+                    <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: 4 }}>
+                      <span>每月 {card.statement_day || '--'} 日結帳 · {card.payment_due_day || '--'} 日繳款</span>
+                      {remainingLimit !== null ? (
+                        <span>剩餘額度：{formatCurrency(remainingLimit)}</span>
+                      ) : (
+                        <span>剩餘額度：--</span>
+                      )}
+                    </div>
+                    {!isMasked && card.payment_account_id && (
+                      <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 5, color: 'var(--color-blue-text)', fontWeight: 600 }}>
+                        <Landmark size={13} />
+                        <span>
+                          預設扣款帳戶：{card.payment_account_name || bankAccounts.find(b => b.id === card.payment_account_id)?.name || '已綁定銀行帳戶'}
+                        </span>
+                      </div>
                     )}
                   </div>
 
@@ -1197,6 +1323,25 @@ export default function Accounts() {
                       onChange={e => setForm(p => ({ ...p, payment_due_day: e.target.value }))}
                     />
                   </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">預設扣款銀行帳戶 (選填)</label>
+                  <select
+                    className="input"
+                    value={form.payment_account_id}
+                    onChange={e => setForm(p => ({ ...p, payment_account_id: e.target.value }))}
+                  >
+                    <option value="">-- 不綁定預設扣款帳戶 --</option>
+                    {bankAccounts.map(b => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.is_joint === 1 ? '公帳' : '私帳'} · 餘額: {formatCurrency(b.balance)})
+                      </option>
+                    ))}
+                  </select>
+                  <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 4 }}>
+                    設定後，點擊「繳款結清」時將預設帶入此扣款帳戶，並於該銀行卡片顯示待扣款信用卡金額。
+                  </small>
                 </div>
               </>
             )}
@@ -1420,12 +1565,19 @@ export default function Accounts() {
                 required
               >
                 <option value="" disabled>-- 請選擇扣款銀行 --</option>
-                {bankAccounts.map(b => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} (目前存款餘額: {formatCurrency(b.balance)})
-                  </option>
-                ))}
+                {bankAccounts
+                  .filter(b => !(payCardModal.is_joint === 0 && user && payCardModal.user_id !== user.id) || b.is_joint === 1)
+                  .map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}{payCardModal.payment_account_id === b.id ? ' [預設扣款帳戶]' : ''} (目前存款餘額: {formatCurrency(b.balance)})
+                    </option>
+                  ))}
               </select>
+              {payCardModal.payment_account_id && payForm.bank_account_id === payCardModal.payment_account_id && (
+                <small style={{ color: 'var(--color-blue-text)', display: 'block', marginTop: 4, fontWeight: 600 }}>
+                  已自動帶入此信用卡設定之預設扣款銀行帳戶
+                </small>
+              )}
             </div>
 
             <div className="grid grid-2 gap-sm">

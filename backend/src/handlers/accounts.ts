@@ -14,6 +14,9 @@ export async function ensureAccountsSchema(db: any) {
         await db.prepare('ALTER TABLE accounts ADD COLUMN last_rollover_at DATETIME').run();
       } catch (_) {}
       try {
+        await db.prepare('ALTER TABLE accounts ADD COLUMN payment_account_id TEXT').run();
+      } catch (_) {}
+      try {
         await db.prepare('ALTER TABLE transactions ADD COLUMN unbilled_offset REAL DEFAULT 0').run();
       } catch (_) {}
       try {
@@ -104,9 +107,10 @@ accounts.get('/', async (c) => {
   }
 
   const rows = await c.env.DB.prepare(`
-    SELECT a.*, u.name as owner_name
+    SELECT a.*, u.name as owner_name, pa.name as payment_account_name
     FROM accounts a
     LEFT JOIN users u ON a.user_id = u.id
+    LEFT JOIN accounts pa ON a.payment_account_id = pa.id
     WHERE ${sqlCondition}
     ORDER BY a.created_at ASC
   `).bind(...sqlParams).all();
@@ -176,13 +180,14 @@ accounts.get('/', async (c) => {
 accounts.post('/', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.json();
-  const { name, type, balance = 0, credit_limit, statement_day, payment_due_day, unbilled = 0, color = '#FF8A8A', is_joint = 0 } = body;
+  const { name, type, balance = 0, credit_limit, statement_day, payment_due_day, payment_account_id, unbilled = 0, color = '#FF8A8A', is_joint = 0 } = body;
   await ensureAccountsSchema(c.env.DB);
   if (!name || !type) return c.json({ success: false, error: '請填寫帳戶名稱和類型' }, 400);
   const id = generateId();
+  const resolvedPayAccId = type === 'credit_card' && payment_account_id ? String(payment_account_id) : null;
   await c.env.DB.prepare(
-    'INSERT INTO accounts (id, user_id, name, type, balance, credit_limit, statement_day, payment_due_day, unbilled, color, is_joint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, userId, name, type, balance, credit_limit ?? null, statement_day ?? null, payment_due_day ?? null, unbilled, color, is_joint ? 1 : 0).run();
+    'INSERT INTO accounts (id, user_id, name, type, balance, credit_limit, statement_day, payment_due_day, payment_account_id, unbilled, color, is_joint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, userId, name, type, balance, credit_limit ?? null, statement_day ?? null, payment_due_day ?? null, resolvedPayAccId, unbilled, color, is_joint ? 1 : 0).run();
   const row = await c.env.DB.prepare('SELECT * FROM accounts WHERE id = ?').bind(id).first();
   return c.json({ success: true, data: row }, 201);
 });
@@ -195,7 +200,7 @@ accounts.put('/:id', async (c) => {
 
   const { id } = c.req.param();
   const body = await c.req.json();
-  const { name, balance, credit_limit, statement_day, payment_due_day, unbilled, color, is_joint } = body;
+  const { name, balance, credit_limit, statement_day, payment_due_day, payment_account_id, unbilled, color, is_joint } = body;
   await ensureAccountsSchema(c.env.DB);
   const existing = await c.env.DB.prepare(`SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders})`).bind(id, ...memberUserIds).first<any>();
   if (!existing) return c.json({ success: false, error: '帳戶不存在' }, 404);
@@ -208,14 +213,19 @@ accounts.put('/:id', async (c) => {
     return c.json({ success: false, error: '權限不足：家庭共同帳戶僅限建立者或家庭管理員修改' }, 403);
   }
 
+  const nextPayAccId = payment_account_id !== undefined
+    ? (payment_account_id ? String(payment_account_id) : null)
+    : existing.payment_account_id;
+
   await c.env.DB.prepare(
-    'UPDATE accounts SET name = ?, balance = ?, credit_limit = ?, statement_day = ?, payment_due_day = ?, unbilled = ?, color = ?, is_joint = ? WHERE id = ?'
+    'UPDATE accounts SET name = ?, balance = ?, credit_limit = ?, statement_day = ?, payment_due_day = ?, payment_account_id = ?, unbilled = ?, color = ?, is_joint = ? WHERE id = ?'
   ).bind(
     name ?? existing.name,
     balance !== undefined ? balance : existing.balance,
     credit_limit !== undefined ? (credit_limit ?? null) : existing.credit_limit,
     statement_day !== undefined ? (statement_day ?? null) : existing.statement_day,
     payment_due_day !== undefined ? (payment_due_day ?? null) : existing.payment_due_day,
+    nextPayAccId ?? null,
     unbilled !== undefined ? unbilled : existing.unbilled,
     color ?? existing.color,
     is_joint !== undefined ? (Number(is_joint) ? 1 : 0) : existing.is_joint,
