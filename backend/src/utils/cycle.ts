@@ -64,8 +64,8 @@ export function getStatementCycleDates(
   const [currYear, currMonth, currDay] = taipeiDateStr.split('-').map(Number);
   const isPreStatement = currDay < statementDay;
 
-  // 1. 本期結帳日 (目標結帳日)
-  const statementDate = getMonthStatementDate(currYear, currMonth, statementDay);
+  // 1. 本月結帳日 S_curr
+  const curMonthStatementDate = getMonthStatementDate(currYear, currMonth, statementDay);
 
   // 2. 上期結帳日 S_prev1
   let prevYear = currYear;
@@ -86,25 +86,29 @@ export function getStatementCycleDates(
   const prev2StatementDate = getMonthStatementDate(prev2Year, prev2Month, statementDay);
 
   let startDate = '';
+  let endDate = '';
+  let statementDate = '';
   let prevStatementDate = '';
   let statusLabel: 'before_statement' | 'after_statement' = 'before_statement';
   let displayText = '';
 
-  const endDate = taipeiDateStr;
-
   if (isPreStatement) {
-    // 當期結帳日未到：上上期結帳日隔天 ～ 今日
+    // 當月結帳日未到：結算上一個已完整結束的帳期（上上期結帳日隔天 ～ 上期結帳日）
     startDate = getNextDay(prev2StatementDate);
+    endDate = prev1StatementDate;
+    statementDate = prev1StatementDate;
     prevStatementDate = prev2StatementDate;
     statusLabel = 'before_statement';
-    displayText = `上上期次日 ${startDate} ～ 今日 ${endDate}（結帳日 ${statementDay} 號未到）`;
+    displayText = `${startDate} ～ ${endDate}（當月 ${statementDay} 號結帳日未到，結算上期帳單）`;
   } else {
-    // 當期結帳日已達或已過：上期結帳日隔天 ～ 今日
+    // 當月結帳日已達或已過：結算本期已完整結束的帳期（上期結帳日隔天 ～ 本月結帳日）
     startDate = getNextDay(prev1StatementDate);
+    endDate = curMonthStatementDate;
+    statementDate = curMonthStatementDate;
     prevStatementDate = prev1StatementDate;
     statusLabel = 'after_statement';
-    const dayDesc = currDay === statementDay ? `今日為結帳日 ${statementDay} 號` : `結帳日 ${statementDay} 號已過`;
-    displayText = `上期次日 ${startDate} ～ 今日 ${endDate}（${dayDesc}）`;
+    const dayDesc = currDay === statementDay ? `今日為 ${statementDay} 號結帳日` : `當月 ${statementDay} 號結帳日已過`;
+    displayText = `${startDate} ～ ${endDate}（${dayDesc}，結算本期帳單）`;
   }
 
   return {
@@ -138,8 +142,9 @@ export interface EnrichedTransactionState extends TransactionWithDeferral {
 /**
  * 判定出帳預覽中每筆交易的上期延入標籤與預設延期狀態 (ADR-0028, ADR-0030)
  * 核心原則：
- * 1. 凡早於結算起始日且未出帳者，標示為上期延入款 (is_prior_deferred = true)
- * 2. 延期勾選狀態維持：若在資料庫中已被標記為延至下期 (defer_to_next_statement = 1 且 is_billed = 0)，維持勾選延期 (is_initially_deferred = true)；其餘預設納入結算 (is_initially_deferred = false)
+ * 1. 凡早於結算起始日 (t.date <= prevStatementDate) 且未出帳者，標示為上期延入款 (is_prior_deferred = true)
+ * 2. 上期延入款 (is_prior_deferred = true) 一律預設列入本期出帳計算、取消勾選延至下期 (is_initially_deferred = false)
+ * 3. 本期區間內 (startDate <= t.date <= endDate) 交易：若為未出帳且已被標記延至下期 (defer_to_next_statement = 1)，維持勾選延至下期 (is_initially_deferred = true)；其餘預設列入結算
  */
 export function determineEnrichedTransactionStates<T extends TransactionWithDeferral>(
   rawTxs: T[],
@@ -156,10 +161,11 @@ export function determineEnrichedTransactionStates<T extends TransactionWithDefe
       isPriorDeferred = Boolean(Number(t.defer_to_next_statement) === 1 && Number(t.is_billed) === 0);
     }
 
-    // 重複出帳覆蓋機制：維持當前真實標記 (ADR-0030)
-    // 若在資料庫中已被標記為延至下期 (defer_to_next_statement = 1 且未出帳)，維持勾選延期
-    // 其餘項目預設納入出帳結算
-    const isInitiallyDeferred = Boolean(Number(t.is_billed) === 0 && Number(t.defer_to_next_statement) === 1);
+    // 上期延入款一律預設列入本期出帳結算 (is_initially_deferred = false)
+    // 僅針對本期區間內的交易維持其當前的延後標記 (ADR-0030)
+    const isInitiallyDeferred = isPriorDeferred
+      ? false
+      : Boolean(Number(t.is_billed) === 0 && Number(t.defer_to_next_statement) === 1);
 
     return {
       ...t,

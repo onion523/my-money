@@ -266,6 +266,13 @@ export default function Accounts() {
       if (Array.isArray(res?.transactions)) {
         const deferred = res.transactions
           .filter((t: any) => {
+            const isPrior = Boolean(
+              t.is_prior_deferred ||
+                (res.prevStatementDate && t.date <= res.prevStatementDate && Number(t.is_billed) === 0)
+            )
+            if (isPrior) {
+              return false
+            }
             if (t.is_initially_deferred !== undefined) {
               return Boolean(t.is_initially_deferred)
             }
@@ -1619,8 +1626,8 @@ export default function Accounts() {
                     本期結算區間：
                     {rolloverPreview.displayText || (
                       rolloverPreview.isPreStatement
-                        ? `上上期次日 ${rolloverPreview.startDate || `${rolloverPreview.prevStatementDate} 次日`} ～ 今日 ${rolloverPreview.endDate || today()}（結帳日 ${rolloverModalCard.statement_day || '--'} 號未到）`
-                        : `上期次日 ${rolloverPreview.startDate || `${rolloverPreview.prevStatementDate} 次日`} ～ 今日 ${rolloverPreview.endDate || today()}（結帳日 ${rolloverModalCard.statement_day || '--'} 號已過）`
+                        ? `${rolloverPreview.startDate || `${rolloverPreview.prevStatementDate} 次日`} ～ ${rolloverPreview.endDate || rolloverPreview.statementDate}（當月 ${rolloverModalCard.statement_day || '--'} 號結帳日未到，結算上期帳單）`
+                        : `${rolloverPreview.startDate || `${rolloverPreview.prevStatementDate} 次日`} ～ ${rolloverPreview.endDate || rolloverPreview.statementDate}（當月 ${rolloverModalCard.statement_day || '--'} 號結帳日已過，結算本期帳單）`
                     )}
                   </span>
                   {Number(rolloverPreview.priorDeferredCount || 0) > 0 && (

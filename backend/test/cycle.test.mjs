@@ -2,33 +2,33 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getStatementCycleDates, determineEnrichedTransactionStates, calculateRolloverDebtBreakdown } from '../src/utils/cycle.ts';
 
-test('Cycle Suite - 未到當期結帳日結算區間 (ADR-0030: currDay < statementDay)', () => {
+test('Cycle Suite - 未到當月結帳日結算區間 (ADR-0030: currDay < statementDay)', () => {
   // 今日 2026-10-17，結帳日 25 號 (未到 25 號)
   // 上期為 2026-09-25，上上期為 2026-08-25
-  // 起始日應為上上期隔天 2026-08-26，截止日為今日 2026-10-17
+  // 起始日應為上上期隔天 2026-08-26，結束日應為上期結帳日 2026-09-25
   const result = getStatementCycleDates(25, null, new Date('2026-10-17T12:00:00+08:00'));
   assert.equal(result.isValid, true);
   assert.equal(result.startDate, '2026-08-26', '起始日應為上上期結帳日隔天 2026-08-26');
-  assert.equal(result.endDate, '2026-10-17', '截止日應為今日 2026-10-17');
-  assert.equal(result.statementDate, '2026-10-25', '當期目標結帳日應為 2026-10-25');
+  assert.equal(result.endDate, '2026-09-25', '結束日應為上期結帳日 2026-09-25');
+  assert.equal(result.statementDate, '2026-09-25', '本次結帳日應為 2026-09-25');
   assert.equal(result.prevStatementDate, '2026-08-25', '歷史延入款判斷基準應為上上期結帳日 2026-08-25');
   assert.equal(result.isPreStatement, true);
   assert.equal(result.statusLabel, 'before_statement');
-  assert.equal(result.displayText, '上上期次日 2026-08-26 ～ 今日 2026-10-17（結帳日 25 號未到）');
+  assert.equal(result.displayText, '2026-08-26 ～ 2026-09-25（當月 25 號結帳日未到，結算上期帳單）');
 });
 
-test('Cycle Suite - 已達或已過當期結帳日結算區間 (ADR-0030: currDay >= statementDay)', () => {
+test('Cycle Suite - 已達或已過當月結帳日結算區間 (ADR-0030: currDay >= statementDay)', () => {
   // 今日 2026-10-17，結帳日 15 號 (已過 15 號)
-  // 上期為 2026-09-15，起始日應為上期隔天 2026-09-16，截止日為今日 2026-10-17
+  // 上期為 2026-09-15，起始日應為上期隔天 2026-09-16，結束日應為本月結帳日 2026-10-15
   const result = getStatementCycleDates(15, null, new Date('2026-10-17T12:00:00+08:00'));
   assert.equal(result.isValid, true);
   assert.equal(result.startDate, '2026-09-16', '起始日應為上期結帳日隔天 2026-09-16');
-  assert.equal(result.endDate, '2026-10-17', '截止日應為今日 2026-10-17');
+  assert.equal(result.endDate, '2026-10-15', '結束日應為本月結帳日 2026-10-15');
   assert.equal(result.statementDate, '2026-10-15', '本期結帳日應為 2026-10-15');
   assert.equal(result.prevStatementDate, '2026-09-15', '歷史延入款判斷基準應為上期結帳日 2026-09-15');
   assert.equal(result.isPreStatement, false);
   assert.equal(result.statusLabel, 'after_statement');
-  assert.equal(result.displayText, '上期次日 2026-09-16 ～ 今日 2026-10-17（結帳日 15 號已過）');
+  assert.equal(result.displayText, '2026-09-16 ～ 2026-10-15（當月 15 號結帳日已過，結算本期帳單）');
 });
 
 test('Cycle Suite - 今日剛好等於結帳日當天 (ADR-0030: currDay === statementDay)', () => {
@@ -37,31 +37,31 @@ test('Cycle Suite - 今日剛好等於結帳日當天 (ADR-0030: currDay === sta
   assert.equal(result.isValid, true);
   assert.equal(result.startDate, '2026-09-16');
   assert.equal(result.endDate, '2026-10-15');
-  assert.equal(result.displayText, '上期次日 2026-09-16 ～ 今日 2026-10-15（今日為結帳日 15 號）');
+  assert.equal(result.displayText, '2026-09-16 ～ 2026-10-15（今日為 15 號結帳日，結算本期帳單）');
 });
 
 test('Cycle Suite - 跨年邊界情境 (ADR-0030: January before statement day)', () => {
   // 今日 2026-01-10，結帳日 20 號 (未到 1/20)
   // 上期為 2025-12-20，上上期為 2025-11-20
-  // 起始日應為 2025-11-21，截止日為 2026-01-10
+  // 起始日應為 2025-11-21，結束日為 2025-12-20
   const result = getStatementCycleDates(20, null, new Date('2026-01-10T12:00:00+08:00'));
   assert.equal(result.isValid, true);
   assert.equal(result.startDate, '2025-11-21', '跨年起日應為 2025-11-21');
-  assert.equal(result.endDate, '2026-01-10');
-  assert.equal(result.statementDate, '2026-01-20');
+  assert.equal(result.endDate, '2025-12-20', '跨年結束日應為 2025-12-20');
+  assert.equal(result.statementDate, '2025-12-20');
   assert.equal(result.prevStatementDate, '2025-11-20');
-  assert.equal(result.displayText, '上上期次日 2025-11-21 ～ 今日 2026-01-10（結帳日 20 號未到）');
+  assert.equal(result.displayText, '2025-11-21 ～ 2025-12-20（當月 20 號結帳日未到，結算上期帳單）');
 });
 
 test('Cycle Suite - 跨 2 月底邊界情境 (ADR-0030: March with 31st statement day)', () => {
   // 今日 2026-03-10，結帳日 31 號 (未到 3/31)
   // 2 月最後一天為 2026-02-28，1 月為 2026-01-31
-  // 上上期為 2026-01-31，隔天為 2026-02-01
+  // 上上期為 2026-01-31，隔天為 2026-02-01；上期結帳日為 2026-02-28
   const result = getStatementCycleDates(31, null, new Date('2026-03-10T12:00:00+08:00'));
   assert.equal(result.isValid, true);
   assert.equal(result.startDate, '2026-02-01', '跨 2 月起日應為 2026-02-01');
-  assert.equal(result.endDate, '2026-03-10');
-  assert.equal(result.displayText, '上上期次日 2026-02-01 ～ 今日 2026-03-10（結帳日 31 號未到）');
+  assert.equal(result.endDate, '2026-02-28', '跨 2 月結束日應為 2026-02-28');
+  assert.equal(result.displayText, '2026-02-01 ～ 2026-02-28（當月 31 號結帳日未到，結算上期帳單）');
 });
 
 test('Cycle Suite - 未設定結帳日卡片防呆 (ADR-0030: Missing statement day)', () => {
@@ -76,11 +76,18 @@ test('Cycle Suite - 未設定結帳日卡片防呆 (ADR-0030: Missing statement 
   assert.equal(result32.isValid, false);
 });
 
-test('Cycle Suite - 重複出帳覆蓋之延期狀態保持 (ADR-0030: State Overwrite Semantics)', () => {
+test('Cycle Suite - 上期延入預設列入計算（取消勾選延至下期）與當期延期保持 (ADR-0030)', () => {
   const rawTxs = [
     {
-      id: 'tx-history-unbilled',
-      date: '2026-08-20', // 早於起始日 8/26 且未出帳 -> 歷史延入款
+      id: 'tx-prior-deferred-with-flag',
+      date: '2026-08-20', // 早於起始日 8/26 且曾標記 defer_to_next_statement = 1 -> 上期延入，必須預設取消延期並列入計算！
+      amount: 1200,
+      defer_to_next_statement: 1,
+      is_billed: 0,
+    },
+    {
+      id: 'tx-prior-unbilled-no-flag',
+      date: '2026-08-22', // 早於起始日 8/26 且未出帳 -> 上期延入，預設列入計算
       amount: 1000,
       defer_to_next_statement: 0,
       is_billed: 0,
@@ -94,14 +101,14 @@ test('Cycle Suite - 重複出帳覆蓋之延期狀態保持 (ADR-0030: State Ove
     },
     {
       id: 'tx-cycle-deferred',
-      date: '2026-09-15', // 區間內曾被標記為延期之未出帳項目 -> 維持勾選延期
+      date: '2026-09-15', // 區間內當期被標記為延期之未出帳項目 -> 維持勾選延期
       amount: 800,
       defer_to_next_statement: 1,
       is_billed: 0,
     },
     {
       id: 'tx-cycle-new',
-      date: '2026-10-05', // 區間內新發生的未出帳項目 -> 預設納入結算
+      date: '2026-09-20', // 區間內新發生的未出帳項目 -> 預設納入結算
       amount: 1500,
       defer_to_next_statement: 0,
       is_billed: 0,
@@ -109,18 +116,23 @@ test('Cycle Suite - 重複出帳覆蓋之延期狀態保持 (ADR-0030: State Ove
   ];
 
   // 判定基準日設為 2026-08-25 (上上期結帳日)
-  const enriched = determineEnrichedTransactionStates(rawTxs, '2026-10-25', '2026-08-25');
+  const enriched = determineEnrichedTransactionStates(rawTxs, '2026-09-25', '2026-08-25');
 
-  const historyItem = enriched.find(t => t.id === 'tx-history-unbilled');
-  assert.equal(historyItem.is_prior_deferred, true, '早於上上期且未結應為歷史延入款');
-  assert.equal(historyItem.is_initially_deferred, false, '預設納入結算');
+  const priorWithFlag = enriched.find(t => t.id === 'tx-prior-deferred-with-flag');
+  assert.equal(priorWithFlag.is_prior_deferred, true, '早於起始日且曾標記延期者應為上期延入');
+  assert.equal(priorWithFlag.is_initially_deferred, false, '上期延入項目即使 defer_to_next_statement = 1，也必須預設取消勾選延至下期（預設列入計算）');
+
+  const priorNoFlag = enriched.find(t => t.id === 'tx-prior-unbilled-no-flag');
+  assert.equal(priorNoFlag.is_prior_deferred, true);
+  assert.equal(priorNoFlag.is_initially_deferred, false);
 
   const billedItem = enriched.find(t => t.id === 'tx-cycle-billed');
   assert.equal(billedItem.is_prior_deferred, false);
   assert.equal(billedItem.is_initially_deferred, false, '已出帳項目重複出帳時預設納入結算');
 
   const deferredItem = enriched.find(t => t.id === 'tx-cycle-deferred');
-  assert.equal(deferredItem.is_initially_deferred, true, '曾指定延期之項目維持勾選延期');
+  assert.equal(deferredItem.is_prior_deferred, false);
+  assert.equal(deferredItem.is_initially_deferred, true, '當期區間內指定延期之項目維持勾選延期');
 
   const newItem = enriched.find(t => t.id === 'tx-cycle-new');
   assert.equal(newItem.is_initially_deferred, false, '新項目預設納入結算');
@@ -137,14 +149,9 @@ test('Cycle Suite - 出帳公私帳責任拆解與已報銷責任轉移 (ADR-002
 
   const breakdown = calculateRolloverDebtBreakdown(activeTxs);
 
-  // 總消費: 1000 + 2000 + 1500 = 4500
-  assert.equal(breakdown.totalExpense, 4500, '總消費應為 4500');
-  // 總刷退: 300 + 200 = 500
-  assert.equal(breakdown.totalRefund, 500, '總刷退應為 500');
-  // 總出帳淨額: 4500 - 500 = 4000
-  assert.equal(breakdown.netRolledAmount, 4000, '總出帳淨額應為 4000');
-  // 公帳欠款: 未報銷公帳 2000 - 公帳刷退 300 = 1700 (已報銷的 1500 不計入 sharedDebt)
-  assert.equal(breakdown.sharedDebt, 1700, '未報銷公帳扣除刷退後公帳欠款應為 1700');
-  // 個人欠款: 總出帳 4000 - 公帳欠款 1700 = 2300 (包含個人私帳淨額 800 + 已由家庭補償但需向銀行繳納的 1500)
-  assert.equal(breakdown.personalDebt, 2300, '個人欠款應為 2300 (含已報銷公帳轉列個人)');
+  assert.equal(breakdown.totalExpense, 4500);
+  assert.equal(breakdown.totalRefund, 500);
+  assert.equal(breakdown.netRolledAmount, 4000);
+  assert.equal(breakdown.sharedDebt, 1700);
+  assert.equal(breakdown.personalDebt, 2300);
 });
