@@ -34,8 +34,11 @@
   /* 文字（Light Mode） */
   --text-primary: #2D3436;
   --text-secondary: #636E72;
-  --text-muted: #B2BEC3;
+  --text-muted: #8E9B9F;
   --text-on-primary: #FFFFFF;
+  --color-indigo-text: #4338CA;
+  --color-blue-text: #1E40AF;
+  --color-amber-text: #B45309;
 
   /* 邊框 */
   --border-color: #FFDEDE;
@@ -85,8 +88,11 @@
   --gradient-card: linear-gradient(135deg, rgba(255, 148, 148, 0.16) 0%, rgba(255, 212, 160, 0.10) 100%);
   --gradient-card-blue: linear-gradient(135deg, rgba(168, 216, 234, 0.18) 0%, rgba(121, 192, 255, 0.10) 100%);
   --text-primary: #ECF2F8;
-  --text-secondary: #9EA7B3;
-  --text-muted: #6E7785;
+  --text-secondary: #B4BECB;
+  --text-muted: #8B95A5;
+  --color-indigo-text: #A5B4FC;
+  --color-blue-text: #93C5FD;
+  --color-amber-text: #FCD34D;
   --border-color: #373E47;
   --border-color-2: #2D333B;
   --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.28);

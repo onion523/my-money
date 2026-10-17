@@ -665,18 +665,14 @@ export default function Family() {
                                               fontSize: '0.68rem',
                                               padding: '1px 5px',
                                               marginLeft: 5,
-                                              background: item.defer_to_next_statement === 1
-                                                ? '#FEF3C7'
-                                                : item.is_billed === 1
-                                                ? 'rgba(99, 102, 241, 0.1)'
-                                                : 'rgba(245, 158, 11, 0.1)',
-                                              color: item.defer_to_next_statement === 1
-                                                ? '#B45309'
-                                                : item.is_billed === 1
-                                                ? '#4F46E5'
-                                                : '#D97706',
+                                              background: item.is_billed === 1
+                                                ? 'rgba(99, 102, 241, 0.15)'
+                                                : 'rgba(245, 158, 11, 0.15)',
+                                              color: item.is_billed === 1
+                                                ? 'var(--color-indigo-text)'
+                                                : 'var(--color-amber-text)',
                                               fontWeight: 600,
-                                              border: `1px solid ${item.defer_to_next_statement === 1 ? 'rgba(245, 158, 11, 0.3)' : item.is_billed === 1 ? 'rgba(99, 102, 241, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                                              border: `1px solid ${item.is_billed === 1 ? 'rgba(99, 102, 241, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
                                             }}
                                           >
                                             {item.defer_to_next_statement === 1 ? '延至下期' : item.is_billed === 1 ? '已出帳' : '未出帳'}
@@ -743,18 +739,14 @@ export default function Family() {
                                               fontSize: '0.68rem',
                                               padding: '1px 5px',
                                               marginLeft: 5,
-                                              background: item.defer_to_next_statement === 1
-                                                ? '#FEF3C7'
-                                                : item.is_billed === 1
-                                                ? 'rgba(99, 102, 241, 0.1)'
-                                                : 'rgba(245, 158, 11, 0.1)',
-                                              color: item.defer_to_next_statement === 1
-                                                ? '#B45309'
-                                                : item.is_billed === 1
-                                                ? '#4F46E5'
-                                                : '#D97706',
+                                              background: item.is_billed === 1
+                                                ? 'rgba(99, 102, 241, 0.15)'
+                                                : 'rgba(245, 158, 11, 0.15)',
+                                              color: item.is_billed === 1
+                                                ? 'var(--color-indigo-text)'
+                                                : 'var(--color-amber-text)',
                                               fontWeight: 600,
-                                              border: `1px solid ${item.defer_to_next_statement === 1 ? 'rgba(245, 158, 11, 0.3)' : item.is_billed === 1 ? 'rgba(99, 102, 241, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                                              border: `1px solid ${item.is_billed === 1 ? 'rgba(99, 102, 241, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
                                             }}
                                           >
                                             {item.defer_to_next_statement === 1 ? '延至下期' : item.is_billed === 1 ? '已出帳' : '未出帳'}
@@ -944,7 +936,7 @@ export default function Family() {
           <form onSubmit={handleReimburseSubmit}>
             {reimburseError && <div className="alert alert-danger" style={{ marginBottom: 14 }}>{reimburseError}</div>}
 
-            <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.85rem', color: '#1E40AF' }}>
+            <div style={{ background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.85rem', color: 'var(--color-blue-text)' }}>
               <Lightbulb size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
               勾選本次要報銷沖帳的代墊項目，系統將自動加總金額並從家庭共同基金撥入個人帳戶，結清之項目將從待報銷清單中移出！
             </div>
@@ -1101,7 +1093,7 @@ export default function Family() {
                                       <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                         <span>{it.category}</span>
                                         {it.type === 'income' && (
-                                          <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontSize: '0.68rem', padding: '1px 5px' }}>
+                                          <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--color-success)', fontSize: '0.68rem', padding: '1px 5px' }}>
                                             公帳退款
                                           </span>
                                         )}
@@ -1115,18 +1107,14 @@ export default function Family() {
                                             style={{
                                               fontSize: '0.65rem',
                                               padding: '0px 4px',
-                                              background: it.defer_to_next_statement === 1
-                                                ? '#FEF3C7'
-                                                : it.is_billed === 1
-                                                ? 'rgba(99, 102, 241, 0.1)'
-                                                : 'rgba(245, 158, 11, 0.1)',
-                                              color: it.defer_to_next_statement === 1
-                                                ? '#B45309'
-                                                : it.is_billed === 1
-                                                ? '#4F46E5'
-                                                : '#D97706',
+                                              background: it.is_billed === 1
+                                                ? 'rgba(99, 102, 241, 0.15)'
+                                                : 'rgba(245, 158, 11, 0.15)',
+                                              color: it.is_billed === 1
+                                                ? 'var(--color-indigo-text)'
+                                                : 'var(--color-amber-text)',
                                               fontWeight: 600,
-                                              border: `1px solid ${it.defer_to_next_statement === 1 ? 'rgba(245, 158, 11, 0.3)' : it.is_billed === 1 ? 'rgba(99, 102, 241, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                                              border: `1px solid ${it.is_billed === 1 ? 'rgba(99, 102, 241, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
                                             }}
                                           >
                                             {it.defer_to_next_statement === 1 ? '延至下期' : it.is_billed === 1 ? '已出帳' : '未出帳'}

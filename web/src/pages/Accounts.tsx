@@ -857,9 +857,9 @@ export default function Accounts() {
                         <span
                           className="badge badge-secondary"
                           style={{
-                            background: 'rgba(245, 158, 11, 0.12)',
-                            color: '#B45309',
-                            border: '1px solid rgba(245, 158, 11, 0.25)',
+                            background: 'rgba(245, 158, 11, 0.14)',
+                            color: 'var(--color-amber-text)',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
                             fontWeight: 600,
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -874,7 +874,7 @@ export default function Accounts() {
                         </span>
                       )}
                       {card.owner_name && (
-                        <span className="badge" style={{ background: 'rgba(0,0,0,0.06)' }}>
+                        <span className="badge" style={{ background: 'var(--bg-surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}>
                           {card.owner_name}
                         </span>
                       )}
@@ -902,7 +902,7 @@ export default function Accounts() {
                       </span>
                     </div>
 
-                    <div className="grid grid-2 gap-sm" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed rgba(0,0,0,0.1)' }}>
+                    <div className="grid grid-2 gap-sm" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--border-color)' }}>
                       <div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                           {isMasked ? '本期公帳待繳' : '已出帳待繳款'}
@@ -920,7 +920,7 @@ export default function Accounts() {
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                             <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>公 {formatCurrency(billedShared)}</span>
                             <span style={{ opacity: 0.4 }}>·</span>
-                            <span style={{ color: '#4B5563' }}>私 {formatCurrency(billedPersonal)}</span>
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>私 {formatCurrency(billedPersonal)}</span>
                           </div>
                         )}
                       </div>
@@ -959,7 +959,7 @@ export default function Accounts() {
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                             <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>公 {formatCurrency(unbilledShared)}</span>
                             <span style={{ opacity: 0.4 }}>·</span>
-                            <span style={{ color: '#4B5563' }}>私 {formatCurrency(unbilledPersonal)}</span>
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>私 {formatCurrency(unbilledPersonal)}</span>
                           </div>
                         )}
                       </div>
@@ -967,7 +967,7 @@ export default function Accounts() {
                   </div>
 
                   {/* 公私債務即時拆解 */}
-                  <div style={{ background: '#FAFBFD', borderRadius: 8, padding: '10px 14px', marginBottom: 14, border: '1px solid rgba(0,0,0,0.05)' }}>
+                  <div style={{ background: 'var(--bg-surface-2)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, border: '1px solid var(--border-color)' }}>
                     <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <PieChart size={13} /> 負債性質拆解：
                     </div>
@@ -987,10 +987,10 @@ export default function Accounts() {
                     )}
                     <div className="flex items-center justify-between" style={{ fontSize: '0.85rem', marginBottom: 2 }}>
                       <span className="flex items-center gap-xs">
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6B7280' }} />
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text-secondary)' }} />
                         <User size={13} /> 個人私帳消費：
                       </span>
-                      <span style={{ fontWeight: 700, color: '#4B5563' }}>
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                         {isMasked ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <Lock size={12} /> 隱私遮蔽
@@ -1000,7 +1000,7 @@ export default function Accounts() {
                     </div>
                     {personalDebt > 0 && !isMasked && (
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', paddingLeft: 16 }}>
-                        本期已出帳待繳：<strong style={{ color: '#4B5563' }}>{formatCurrency(billedPersonal)}</strong> · 未出帳累計：{formatCurrency(unbilledPersonal)}
+                        本期已出帳待繳：<strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(billedPersonal)}</strong> · 未出帳累計：{formatCurrency(unbilledPersonal)}
                       </div>
                     )}
                   </div>
@@ -1276,7 +1276,7 @@ export default function Accounts() {
           <form onSubmit={handleTransferSubmit}>
             {transferError && <div className="alert alert-danger" style={{ marginBottom: 14 }}>{transferError}</div>}
 
-            <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.85rem', color: '#166534' }}>
+            <div style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.85rem', color: 'var(--color-success)' }}>
               <Lightbulb size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
               帳戶間互轉或 ATM 提領現鈔純屬資產調度，<strong>不會</strong>被列為生活消費支出，淨可用餘額維持準確！
             </div>
@@ -1620,7 +1620,7 @@ export default function Accounts() {
                   gap: 8,
                 }}
               >
-                <div className="flex items-center gap-xs" style={{ fontSize: '0.88rem', color: '#1E40AF', fontWeight: 600, flexWrap: 'wrap' }}>
+                <div className="flex items-center gap-xs" style={{ fontSize: '0.88rem', color: 'var(--color-blue-text)', fontWeight: 600, flexWrap: 'wrap' }}>
                   <Calendar size={16} />
                   <span>
                     本期結算區間：
@@ -1636,18 +1636,18 @@ export default function Accounts() {
                         marginLeft: 6,
                         fontSize: '0.73rem',
                         fontWeight: 600,
-                        background: 'rgba(99, 102, 241, 0.15)',
-                        color: '#4338CA',
+                        background: 'rgba(99, 102, 241, 0.16)',
+                        color: 'var(--color-indigo-text)',
                         padding: '1px 7px',
                         borderRadius: 10,
-                        border: '1px solid rgba(99, 102, 241, 0.25)',
+                        border: '1px solid rgba(99, 102, 241, 0.3)',
                       }}
                     >
                       含 {rolloverPreview.priorDeferredCount} 筆歷史延入款（已預設納入結算）
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: '#4B5563' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   每月 {rolloverModalCard.statement_day || '--'} 號結帳 · {rolloverModalCard.payment_due_day || '--'} 號繳款
                 </div>
               </div>
@@ -1734,8 +1734,8 @@ export default function Accounts() {
                     {/* 公私帳債務拆解 */}
                     <div
                       style={{
-                        background: '#FAFBFD',
-                        border: '1px solid rgba(0,0,0,0.05)',
+                        background: 'var(--bg-surface-2)',
+                        border: '1px solid var(--border-color)',
                         borderRadius: 8,
                         padding: '10px 14px',
                         marginBottom: 16,
@@ -1756,11 +1756,11 @@ export default function Accounts() {
                       </div>
                       <div className="flex items-center justify-between" style={{ fontSize: '0.85rem' }}>
                         <span className="flex items-center gap-xs">
-                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6B7280' }} />
-                          <Lock size={13} color="#6B7280" />
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text-secondary)' }} />
+                          <Lock size={13} color="var(--text-secondary)" />
                           <span>個人私帳消費{reimbursedSharedCount > 0 ? `（含 ${reimbursedSharedCount} 筆公帳已由家庭報銷結清）` : ''}：</span>
                         </span>
-                        <span style={{ fontWeight: 700, color: '#4B5563' }}>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                           {formatCurrency(curPersonal)}
                         </span>
                       </div>
@@ -1778,7 +1778,7 @@ export default function Accounts() {
                       </div>
 
                       {allTxs.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', background: '#F9FAFB', borderRadius: 8 }}>
+                        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', background: 'var(--bg-surface-2)', border: '1px solid var(--border-color)', borderRadius: 8 }}>
                           目前週期內無待出帳之消費記錄
                         </div>
                       ) : (
@@ -1786,7 +1786,7 @@ export default function Accounts() {
                           style={{
                             maxHeight: 'min(300px, 38vh)',
                             overflowY: 'auto',
-                            border: '1px solid rgba(0,0,0,0.08)',
+                            border: '1px solid var(--border-color)',
                             borderRadius: 8,
                             padding: '4px 8px',
                           }}
@@ -1803,9 +1803,9 @@ export default function Accounts() {
                                   alignItems: 'center',
                                   justifyContent: 'space-between',
                                   padding: '8px 6px',
-                                  borderBottom: '1px solid rgba(0,0,0,0.04)',
+                                  borderBottom: '1px solid var(--border-color-2)',
                                   opacity: isDeferred ? 0.55 : 1,
-                                  background: isDeferred ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+                                  background: isDeferred ? 'rgba(245, 158, 11, 0.08)' : 'transparent',
                                   borderRadius: 6,
                                   transition: 'all 0.15s ease',
                                 }}
@@ -1829,9 +1829,9 @@ export default function Accounts() {
                                             style={{
                                               fontSize: '0.7rem',
                                               padding: '1px 5px',
-                                              background: 'rgba(16, 185, 129, 0.12)',
-                                              color: '#059669',
-                                              border: '1px solid rgba(16, 185, 129, 0.25)',
+                                              background: 'rgba(16, 185, 129, 0.14)',
+                                              color: 'var(--color-success)',
+                                              border: '1px solid rgba(16, 185, 129, 0.3)',
                                               fontWeight: 600,
                                               display: 'inline-flex',
                                               alignItems: 'center',
@@ -1864,10 +1864,10 @@ export default function Accounts() {
                                           style={{
                                             fontSize: '0.7rem',
                                             padding: '1px 5px',
-                                            background: 'rgba(99, 102, 241, 0.1)',
-                                            color: '#4F46E5',
+                                            background: 'rgba(99, 102, 241, 0.15)',
+                                            color: 'var(--color-indigo-text)',
                                             fontWeight: 600,
-                                            border: '1px solid rgba(99, 102, 241, 0.25)',
+                                            border: '1px solid rgba(99, 102, 241, 0.3)',
                                           }}
                                           title="自上一結帳週期遞延而來，預設納入本期出帳"
                                         >
@@ -1880,10 +1880,10 @@ export default function Accounts() {
                                           style={{
                                             fontSize: '0.7rem',
                                             padding: '1px 5px',
-                                            background: '#FEF3C7',
-                                            color: '#B45309',
+                                            background: 'rgba(245, 158, 11, 0.16)',
+                                            color: 'var(--color-amber-text)',
                                             fontWeight: 600,
-                                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                                            border: '1px solid rgba(245, 158, 11, 0.32)',
                                           }}
                                         >
                                           已延至下期
@@ -1903,7 +1903,7 @@ export default function Accounts() {
                                     style={{
                                       fontSize: '0.88rem',
                                       fontWeight: 700,
-                                      color: isDeferred ? 'var(--text-secondary)' : isExpense ? 'var(--color-danger)' : '#10B981',
+                                      color: isDeferred ? 'var(--text-secondary)' : isExpense ? 'var(--color-danger)' : 'var(--color-success)',
                                       textDecoration: isDeferred ? 'line-through' : 'none',
                                       whiteSpace: 'nowrap',
                                     }}
@@ -1927,7 +1927,7 @@ export default function Accounts() {
                     </div>
 
                     {/* 底部確認按鈕組 */}
-                    <div className="flex items-center justify-between" style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                    <div className="flex items-center justify-between" style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                         切換延期僅於預覽中試算，確認出帳時統一寫入
                       </span>
