@@ -378,7 +378,7 @@ export default function Dashboard() {
                               <span>私帳</span>
                             </span>
                           )}
-                          <span className="badge" style={{ fontSize: '0.68rem', padding: '1px 5px', background: 'rgba(0,0,0,0.05)' }}>
+                          <span className="badge" style={{ fontSize: '0.68rem', padding: '1px 5px', background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}>
                             {isCash ? '現金' : isCc ? '信用卡' : '銀行存款帳戶'}
                           </span>
                         </div>
@@ -401,7 +401,7 @@ export default function Dashboard() {
                             marginTop: 6,
                             padding: '5px 8px',
                             borderRadius: 6,
-                            background: 'rgba(0,0,0,0.03)',
+                            background: 'var(--bg-surface)',
                             border: '1px dashed var(--border-color)',
                             fontSize: '0.74rem',
                             color: 'var(--text-secondary)',
@@ -429,7 +429,7 @@ export default function Dashboard() {
                       {isCc && (
                         <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                           {totalDue > 0 ? (
-                            <div className="acc-card-debt-row" style={{ background: 'rgba(0,0,0,0.03)', padding: '3px 6px', borderRadius: 4, marginBottom: 2 }}>
+                            <div className="acc-card-debt-row" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', padding: '3px 6px', borderRadius: 4, marginBottom: 2 }}>
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                                 <Home size={11} style={{ flexShrink: 0 }} />
                                 <span>代墊：<strong>{formatCurrency(acc.shared_debt || 0)}</strong></span>

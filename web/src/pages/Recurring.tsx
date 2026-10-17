@@ -426,7 +426,7 @@ export default function Recurring() {
                           </span>
                         )}
                         {item.user_name && (
-                          <span className="badge" style={{ background: 'rgba(0,0,0,0.06)', fontSize: '0.7rem' }}>
+                          <span className="badge" style={{ background: 'var(--bg-surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', fontSize: '0.7rem' }}>
                             {item.user_name}
                           </span>
                         )}
@@ -523,7 +523,7 @@ export default function Recurring() {
                           </span>
                         )}
                         {item.user_name && (
-                          <span className="badge" style={{ background: 'rgba(0,0,0,0.06)', fontSize: '0.7rem' }}>
+                          <span className="badge" style={{ background: 'var(--bg-surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', fontSize: '0.7rem' }}>
                             {item.user_name}
                           </span>
                         )}

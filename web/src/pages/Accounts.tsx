@@ -717,7 +717,7 @@ export default function Accounts() {
                       </span>
                     )}
                     {cash.owner_name && (
-                      <span className="badge" style={{ background: 'rgba(0,0,0,0.06)' }}>
+                      <span className="badge" style={{ background: 'var(--bg-surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}>
                         {cash.owner_name}
                       </span>
                     )}
@@ -900,7 +900,7 @@ export default function Accounts() {
                         </span>
                       )}
                       {acc.owner_name && (
-                        <span className="badge" style={{ background: 'rgba(0,0,0,0.06)' }}>
+                        <span className="badge" style={{ background: 'var(--bg-surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}>
                           {acc.owner_name}
                         </span>
                       )}
@@ -1390,7 +1390,7 @@ export default function Accounts() {
                       width: 28,
                       height: 28,
                       borderRadius: '50%',
-                      border: form.color === c ? '2px solid #000' : 'none',
+                      border: form.color === c ? '2px solid var(--text-primary)' : 'none',
                       cursor: 'pointer',
                     }}
                     onClick={() => setForm(p => ({ ...p, color: c }))}

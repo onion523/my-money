@@ -643,7 +643,8 @@ export default function Family() {
                               {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                               {isExpanded ? '收起明細' : '查看代墊明細'}
                               <span style={{
-                                background: 'rgba(0,0,0,0.1)',
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border-color)',
                                 borderRadius: 10,
                                 padding: '1px 6px',
                                 fontSize: '0.75rem',
