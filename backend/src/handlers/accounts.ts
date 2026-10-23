@@ -32,6 +32,12 @@ export async function ensureAccountsSchema(db: any) {
         await db.prepare('ALTER TABLE transactions ADD COLUMN billed_statement_date TEXT').run();
       } catch (_) {}
       try {
+        await db.prepare('ALTER TABLE transactions ADD COLUMN pair_tx_id TEXT').run();
+      } catch (_) {}
+      try {
+        await db.prepare('CREATE INDEX IF NOT EXISTS idx_tx_pair ON transactions(pair_tx_id)').run();
+      } catch (_) {}
+      try {
         await db.prepare("UPDATE transactions SET reimbursement_id = NULL WHERE reimbursement_id = 'historical_reimbursement'").run();
       } catch (_) {}
       try {
@@ -323,21 +329,21 @@ accounts.post('/pay-credit-card', async (c) => {
   await c.env.DB.prepare('UPDATE accounts SET balance = ?, unbilled = ? WHERE id = ?')
     .bind(newCardBalance, newCardUnbilled, credit_card_id).run();
 
-  // 3. 建立交易紀錄（記錄銀行支出，分類為「信用卡還款」）
+  // 3. 建立成對交易紀錄（銀行端支出與信用卡端還款流水）
   const txId = generateId();
+  const cardTxId = generateId();
   const txDate = date || getTaipeiDateString();
   const txNote = (note && note.trim()) ? note.trim() : `繳納【${card.name}】卡費`;
-
-  await c.env.DB.prepare(
-    'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(txId, userId, bank_account_id, 'expense', '信用卡還款', payAmount, txNote, txDate, is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : 1).run();
-
-  // 信用卡端同步建立還款流水 (雙向沖帳紀錄，記錄 unbilled_offset 供校準抵扣)
-  const cardTxId = generateId();
   const cardTxNote = `扣款還款 (來自【${bank.name}】)`;
-  await c.env.DB.prepare(
-    'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, unbilled_offset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(cardTxId, userId, credit_card_id, 'income', '信用卡還款', payAmount, cardTxNote, txDate, is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : 1, unbilledOffset).run();
+
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, pair_tx_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(txId, userId, bank_account_id, 'expense', '信用卡還款', payAmount, txNote, txDate, is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : 1, cardTxId),
+    c.env.DB.prepare(
+      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, unbilled_offset, pair_tx_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(cardTxId, userId, credit_card_id, 'income', '信用卡還款', payAmount, cardTxNote, txDate, is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : 1, unbilledOffset, txId)
+  ]);
 
   const txRow = await c.env.DB.prepare(`
     SELECT t.*, a.name as account_name, u.name as user_name
@@ -1279,11 +1285,11 @@ accounts.post('/transfer', async (c) => {
 
   await c.env.DB.batch([
     c.env.DB.prepare(
-      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(outTxId, userId, from_account_id, 'expense', category, amt, note ? `${note} (轉至 ${toAcc.name})` : `轉至 ${toAcc.name}`, date, fromAcc.is_joint ? 1 : 0),
+      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, pair_tx_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(outTxId, userId, from_account_id, 'expense', category, amt, note ? `${note} (轉至 ${toAcc.name})` : `轉至 ${toAcc.name}`, date, fromAcc.is_joint ? 1 : 0, inTxId),
     c.env.DB.prepare(
-      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(inTxId, userId, to_account_id, 'income', category, amt, note ? `${note} (來自 ${fromAcc.name})` : `來自 ${fromAcc.name}`, date, toAcc.is_joint ? 1 : 0)
+      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, pair_tx_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(inTxId, userId, to_account_id, 'income', category, amt, note ? `${note} (來自 ${fromAcc.name})` : `來自 ${fromAcc.name}`, date, toAcc.is_joint ? 1 : 0, outTxId)
   ]);
 
   return c.json({

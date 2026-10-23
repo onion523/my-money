@@ -323,6 +323,7 @@ export interface Transaction {
   account_is_joint?: number;
   account_type?: string;
   reimbursement_id?: string | null;
+  pair_tx_id?: string | null;
   user_name?: string;
 }
 
@@ -458,6 +459,8 @@ export interface HouseholdAdvanceItem {
 
 export interface HouseholdReimbursementItem {
   id: string;
+  user_id?: string;
+  account_id?: string;
   date: string;
   created_at?: string;
   amount: number;

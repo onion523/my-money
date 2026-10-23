@@ -118,8 +118,14 @@ export default function Transactions() {
     }
   }
 
-  // 權限檢查輔助函數 (ADR 0013)
+  // 權限檢查輔助函數 (ADR 0013, ADR 0031)
   const canModifyTx = (tx: Transaction) => {
+    if (['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'].includes(tx.category)) {
+      if (tx.category === '公帳代墊報銷') {
+        return (!user || tx.user_id === user.id) || myRole === 'admin'
+      }
+      return (!user || tx.user_id === user.id) || myRole === 'admin'
+    }
     if (tx.is_shared === 0) {
       return !user || tx.user_id === user.id
     }
@@ -217,9 +223,18 @@ export default function Transactions() {
     }
   }
 
-  // 刪除收支
+  // 刪除收支 (支援成對系統交易連動確認提示, ADR 0031)
   const handleDelete = async (id: string) => {
-    if (!window.confirm('確定要刪除這筆收支紀錄嗎？')) return
+    const targetTx = transactions.find(t => t.id === id)
+    let confirmMsg = '確定要刪除這筆收支紀錄嗎？'
+    if (targetTx && ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'].includes(targetTx.category)) {
+      if (targetTx.category === '公帳代墊報銷') {
+        confirmMsg = '確定要刪除此筆報銷紀錄嗎？刪除後將同時刪除轉出與轉入流水、退回帳戶餘額，並將結清之代墊明細退回待報銷清單。'
+      } else {
+        confirmMsg = `確定要刪除此筆「${targetTx.category}」紀錄嗎？刪除後將同時移除轉出與轉入雙邊流水並還原帳戶餘額。`
+      }
+    }
+    if (!window.confirm(confirmMsg)) return
     try {
       await txApi.remove(id)
       loadData(true)
@@ -506,44 +521,24 @@ export default function Transactions() {
                       tx={tx}
                       showDate={false}
                       actions={
-                        ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'].includes(tx.category) ? (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              fontSize: '0.75rem',
-                              color: 'var(--text-muted)',
-                              background: 'var(--bg-surface-2)',
-                              border: '1px solid var(--border-color)',
-                              padding: '3px 8px',
-                              borderRadius: 6,
-                            }}
-                            title="系統內部平帳還款紀錄受保護。若金額有誤，請至帳戶管理校正餘額。"
-                          >
-                            <Lock size={12} />
-                            <span>系統保護</span>
-                          </span>
-                        ) : (
-                          canModifyTx(tx) && (
-                            <>
-                              <button
-                                className="btn btn-ghost btn-sm tx-action-btn"
-                                onClick={() => handleOpenEdit(tx)}
-                                title="編輯"
-                              >
-                                <Edit2 size={15} />
-                              </button>
-                              <button
-                                className="btn btn-ghost btn-sm tx-action-btn danger"
-                                onClick={() => handleDelete(tx.id)}
-                                title="刪除"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </>
-                          )
-                        )
+                        canModifyTx(tx) ? (
+                          <>
+                            <button
+                              className="btn btn-ghost btn-sm tx-action-btn"
+                              onClick={() => handleOpenEdit(tx)}
+                              title="編輯"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-sm tx-action-btn danger"
+                              onClick={() => handleDelete(tx.id)}
+                              title="刪除"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </>
+                        ) : null
                       }
                     />
                   ))}
@@ -555,122 +550,158 @@ export default function Transactions() {
       )}
 
       {/* 新增/編輯 Modal */}
-      {showModal && (
-        <Modal
-          title={editingTx ? '編輯收支紀錄' : '新增收支紀錄'}
-          onClose={() => setShowModal(false)}
-        >
-          {errorMsg && (
-            <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, color: 'var(--color-danger)', fontSize: '0.85rem' }}>
-              {errorMsg}
-            </div>
-          )}
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* 公帳 / 個人私帳 切換 */}
-            <div className="input-group">
-              <label className="input-label" style={{ fontWeight: 600, marginBottom: 6 }}>帳本歸屬</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      {showModal && (() => {
+        const isEditingPaired = Boolean(editingTx && ['信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷'].includes(editingTx.category))
+        return (
+          <Modal
+            title={isEditingPaired ? `編輯${editingTx?.category}紀錄` : editingTx ? '編輯收支紀錄' : '新增收支紀錄'}
+            onClose={() => setShowModal(false)}
+          >
+            {errorMsg && (
+              <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, color: 'var(--color-danger)', fontSize: '0.85rem' }}>
+                {errorMsg}
+              </div>
+            )}
+            {isEditingPaired && (
+              <div style={{
+                background: 'rgba(59, 130, 246, 0.08)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                borderRadius: 8,
+                padding: '10px 12px',
+                marginBottom: 14,
+                fontSize: '0.82rem',
+                color: 'var(--text-primary)',
+                lineHeight: 1.5,
+              }}>
+                <div style={{ fontWeight: 600, color: '#3b82f6', marginBottom: 2 }}>
+                  成對移轉紀錄連動中
+                </div>
+                修改金額或日期將自動同步轉出與轉入兩端紀錄。若帳戶選擇錯誤，請刪除該紀錄後重新記帳。
+              </div>
+            )}
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* 公帳 / 個人私帳 切換 */}
+              <div className="input-group">
+                <label className="input-label" style={{ fontWeight: 600, marginBottom: 6 }}>帳本歸屬</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <button
+                    type="button"
+                    className={`btn ${form.is_shared === 1 ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px', opacity: isEditingPaired ? 0.6 : 1, cursor: isEditingPaired ? 'not-allowed' : 'pointer' }}
+                    disabled={isEditingPaired}
+                    onClick={() => !isEditingPaired && setForm(p => ({ ...p, is_shared: 1 }))}
+                  >
+                    <Home size={15} />
+                    <span>公帳</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${form.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px', opacity: isEditingPaired ? 0.6 : 1, cursor: isEditingPaired ? 'not-allowed' : 'pointer' }}
+                    disabled={isEditingPaired}
+                    onClick={() => !isEditingPaired && setForm(p => ({ ...p, is_shared: 0 }))}
+                  >
+                    <Lock size={15} />
+                    <span>私帳</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 收支類型 */}
+              <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   type="button"
-                  className={`btn ${form.is_shared === 1 ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px' }}
-                  onClick={() => setForm(p => ({ ...p, is_shared: 1 }))}
+                  className={`btn btn-full ${form.type === 'expense' ? 'btn-danger' : 'btn-secondary'}`}
+                  style={{ opacity: isEditingPaired ? 0.6 : 1, cursor: isEditingPaired ? 'not-allowed' : 'pointer' }}
+                  disabled={isEditingPaired}
+                  onClick={() => !isEditingPaired && setForm(p => ({ ...p, type: 'expense', category: '餐飲' }))}
                 >
-                  <Home size={15} />
-                  <span>公帳</span>
+                  支出
                 </button>
                 <button
                   type="button"
-                  className={`btn ${form.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px' }}
-                  onClick={() => setForm(p => ({ ...p, is_shared: 0 }))}
+                  className={`btn btn-full ${form.type === 'income' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ opacity: isEditingPaired ? 0.6 : 1, cursor: isEditingPaired ? 'not-allowed' : 'pointer', ...(form.type === 'income' ? { background: 'var(--color-success)' } : {}) }}
+                  disabled={isEditingPaired}
+                  onClick={() => !isEditingPaired && setForm(p => ({ ...p, type: 'income', category: '薪資' }))}
                 >
-                  <Lock size={15} />
-                  <span>私帳</span>
+                  收入
                 </button>
               </div>
-            </div>
 
-            {/* 收支類型 */}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                className={`btn btn-full ${form.type === 'expense' ? 'btn-danger' : 'btn-secondary'}`}
-                onClick={() => setForm(p => ({ ...p, type: 'expense', category: '餐飲' }))}
-              >
-                支出
-              </button>
-              <button
-                type="button"
-                className={`btn btn-full ${form.type === 'income' ? 'btn-primary' : 'btn-secondary'}`}
-                style={form.type === 'income' ? { background: 'var(--color-success)' } : {}}
-                onClick={() => setForm(p => ({ ...p, type: 'income', category: '薪資' }))}
-              >
-                收入
-              </button>
-            </div>
-
-            {/* 金額 */}
-            <div className="input-group">
-              <label className="input-label">金額 (NT$)</label>
-              <input
-                className="input"
-                type="number"
-                step="1"
-                min="1"
-                placeholder="例如 100"
-                required
-                autoFocus
-                value={form.amount}
-                onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
-              />
-            </div>
-
-            {/* 分類 */}
-            <div className="input-group">
-              <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
-                <label className="input-label" style={{ margin: 0 }}>分類</label>
-                {recommendationHint && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-dark)', background: 'rgba(255, 107, 107, 0.12)', padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <Sparkles size={12} />
-                    <span>{recommendationHint}</span>
-                  </span>
-                )}
+              {/* 金額 */}
+              <div className="input-group">
+                <label className="input-label">金額 (NT$)</label>
+                <input
+                  className="input"
+                  type="number"
+                  step="1"
+                  min="1"
+                  placeholder="例如 100"
+                  required
+                  autoFocus
+                  value={form.amount}
+                  onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
+                />
               </div>
-              <select
-                className="input"
-                value={form.category}
-                onChange={e => {
-                  setIsCategoryManuallyChanged(true);
-                  setRecommendationHint(null);
-                  setForm(p => ({ ...p, category: e.target.value }));
-                }}
-              >
-                {CATEGORIES[form.type].map(cat => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
 
-            {/* 帳戶選擇 */}
-            <div className="input-group">
-              <label className="input-label">扣款 / 存入帳戶</label>
-              <select
-                className="input"
-                value={form.account_id}
-                onChange={e => setForm(p => ({ ...p, account_id: e.target.value }))}
-                required
-              >
-                <option value="" disabled>-- 請選擇扣款 / 存入帳戶 --</option>
-                {accounts.map(acc => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.type === 'cash' ? '現金' : acc.type === 'bank' ? '銀行存款帳戶' : '信用卡'} - {acc.name} ({acc.is_joint === 1 ? '公帳' : '私帳'})
-                  </option>
-                ))}
-              </select>
-            </div>
+              {/* 分類 */}
+              <div className="input-group">
+                <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                  <label className="input-label" style={{ margin: 0 }}>分類</label>
+                  {recommendationHint && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-dark)', background: 'rgba(255, 107, 107, 0.12)', padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Sparkles size={12} />
+                      <span>{recommendationHint}</span>
+                    </span>
+                  )}
+                </div>
+                <select
+                  className="input"
+                  value={form.category}
+                  disabled={isEditingPaired}
+                  style={isEditingPaired ? { opacity: 0.7, cursor: 'not-allowed' } : {}}
+                  onChange={e => {
+                    setIsCategoryManuallyChanged(true);
+                    setRecommendationHint(null);
+                    setForm(p => ({ ...p, category: e.target.value }));
+                  }}
+                >
+                  {isEditingPaired && !CATEGORIES[form.type].includes(form.category) && (
+                    <option value={form.category}>{form.category}</option>
+                  )}
+                  {CATEGORIES[form.type].map(cat => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 帳戶選擇 */}
+              <div className="input-group">
+                <label className="input-label">扣款 / 存入帳戶</label>
+                <select
+                  className="input"
+                  value={form.account_id}
+                  disabled={isEditingPaired}
+                  style={isEditingPaired ? { opacity: 0.7, cursor: 'not-allowed' } : {}}
+                  onChange={e => setForm(p => ({ ...p, account_id: e.target.value }))}
+                  required
+                >
+                  <option value="" disabled>-- 請選擇扣款 / 存入帳戶 --</option>
+                  {accounts.every(a => a.id !== form.account_id) && form.account_id && (
+                    <option value={form.account_id}>
+                      {editingTx?.account_name || '原關聯帳戶'}
+                    </option>
+                  )}
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.type === 'cash' ? '現金' : acc.type === 'bank' ? '銀行存款帳戶' : '信用卡'} - {acc.name} ({acc.is_joint === 1 ? '公帳' : '私帳'})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
             {/* 信用卡專屬：列入下期帳單勾選 */}
             {(() => {
@@ -768,7 +799,8 @@ export default function Transactions() {
             </button>
           </form>
         </Modal>
-      )}
+      )
+    })()}
     </div>
   )
 }

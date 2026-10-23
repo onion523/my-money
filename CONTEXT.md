@@ -256,6 +256,16 @@ _Avoid_: 帳戶共有 (open account ownership)、隨意覆蓋 (unrestricted acco
 個人私帳交易（is_shared = 0）嚴格僅限記錄者本人改刪；家庭公帳交易（is_shared = 1）採行「建立者與管理員共治原則」，僅該筆公帳記錄者本人與家庭管理員擁有編輯與刪除權，一般成員不可竄改其他成員所登載之公帳流水。
 _Avoid_: 自由互改 (arbitrary peer edits)、單一擁有權死鎖 (creator-only lock)
 
+**Paired System Transaction Edit & Delete Synchronization (成對轉帳／報銷／還款紀錄雙邊連動編刪)**:
+系統內部成對產生的四類移轉／平帳紀錄（`公帳代墊報銷`、`內部轉帳`、`ATM提款`、`信用卡還款`）以 `pair_tx_id` 雙向綁定轉出端與轉入端，於「收支明細 (`Transactions.tsx`)」與「家庭協同 > 報銷紀錄 (`Family.tsx`)」解除唯讀鎖定、開放編輯與刪除：
+1. **可編輯欄位限縮**：僅開放修改「金額、日期、備註」，並於同一資料庫批次中同步更新另一端流水之金額與日期，依差額校正雙邊帳戶餘額。轉出／轉入帳戶不可修改，帳戶選錯一律刪除後重記（防止報銷轉出非共同基金、收款非被報銷成員本人帳戶之越權與錯帳）。
+2. **雙邊連動刪除與代墊退回**：刪除任一端即成對刪除兩筆紀錄並回滾雙邊帳戶餘額；若為 `公帳代墊報銷`，同步將綁定該報銷單之代墊消費 `reimbursement_id` 重置為 `NULL`，自動退回「待報銷明細」。
+3. **異動權限**：`公帳代墊報銷` 由家庭管理員或被報銷成員本人改刪（與「解除報銷」權限一致）；`內部轉帳`／`ATM提款`／`信用卡還款` 僅限當初操作者本人或家庭管理員改刪。
+4. **報銷金額與已勾選代墊之一致性防線**：報銷金額改大時，超出已勾選代墊合計之部分沿用「家庭基金溢撥／預收款」揭示；改小至低於已勾選代墊合計時禁止儲存，提示先至「已結清明細」退回部分項目。
+5. **信用卡還款金額重新分配**：修改還款金額時依原繳卡費規則重新分配——先抵「已出帳待繳」，超過部分才抵「未出帳」（重算 `unbilled_offset`），並以實際明細冪等重算卡片待繳金額。
+6. **歷史紀錄一次性配對**：既有無 `pair_tx_id` 之舊紀錄，以「同日、同分類、同金額、一收一支、建立時間相近」執行一次性唯一匹配並寫入配對；無法唯一配對者維持「系統保護」唯讀，避免誤改他筆。
+_Avoid_: 死鎖系統保護禁止修改誤記之轉帳或報銷 (hard-locking transfer/reimbursement records against user corrections)、單邊修改導致轉出與轉入帳戶餘額失衡 (single-legged edits breaking dual-account balance parity)、刪除報銷紀錄卻遺留孤兒已報銷標記 (deleting reimbursement without returning linked advances to pending state)、編輯時改帳戶造成越權撥款 (account reassignment on edit enabling unauthorized fund routing)、模糊配對誤改他筆歷史紀錄 (ambiguous legacy pairing editing the wrong counterpart)
+
 **Self-Discipline Reimbursement (受限自律撥款報銷)**:
 一般家庭成員僅能從家庭共同基金為「本人累積之公帳代墊款」執行撥款報銷至個人正資產私帳，嚴禁越權動支基金撥款予其他成員；家庭管理員則具備全額審批與為任一成員撥款之管理權限。
 _Avoid_: 自由提款 (unrestricted withdrawal)、代領 (proxy reimbursement)

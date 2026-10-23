@@ -1,7 +1,7 @@
 import { FamilySkeleton } from '../components/Skeleton'
 import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
-import { householdApi, HouseholdData, HouseholdMember, HouseholdAdvance, accountsApi, Account } from '../api/client'
+import { householdApi, HouseholdData, HouseholdMember, HouseholdAdvance, accountsApi, Account, txApi, HouseholdReimbursementItem } from '../api/client'
 import { formatCurrency, today, formatLocalDate, formatTxDateTime } from '../components/utils'
 import Modal from '../components/Modal'
 import FormulaTooltip from '../components/FormulaTooltip'
@@ -14,6 +14,7 @@ import {
   Check,
   LogOut,
   Trash2,
+  Edit2,
   Home,
   Sparkles,
   Info,
@@ -71,6 +72,76 @@ export default function Family() {
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null)
   const [inlineSelectedIds, setInlineSelectedIds] = useState<Record<string, string[]>>({})
   const [markingSettled, setMarkingSettled] = useState(false)
+  const [editingReimb, setEditingReimb] = useState<{
+    id: string;
+    account_id?: string;
+    amount: string;
+    date: string;
+    note: string;
+    userName: string;
+  } | null>(null)
+  const [editingReimbLoading, setEditingReimbLoading] = useState(false)
+  const [editingReimbError, setEditingReimbError] = useState('')
+  const [deletingReimbId, setDeletingReimbId] = useState<string | null>(null)
+
+  const handleDeleteReimbursement = async (reimbId: string) => {
+    if (!window.confirm('確定要刪除此筆報銷紀錄嗎？刪除後將同時刪除轉出與轉入流水、退回帳戶餘額，並將結清之代墊明細退回待報銷清單。')) return
+    try {
+      setDeletingReimbId(reimbId)
+      await txApi.remove(reimbId)
+      await loadData()
+    } catch (err: any) {
+      alert(err.message || '刪除報銷紀錄失敗')
+    } finally {
+      setDeletingReimbId(null)
+    }
+  }
+
+  const handleOpenEditReimb = (item: HouseholdReimbursementItem, userName: string) => {
+    setEditingReimb({
+      id: item.id,
+      account_id: item.account_id,
+      amount: String(item.amount),
+      date: item.date,
+      note: item.note || '',
+      userName,
+    })
+    setEditingReimbError('')
+  }
+
+  const handleSaveEditReimb = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingReimb) return
+    const amt = parseFloat(editingReimb.amount)
+    if (isNaN(amt) || amt <= 0) {
+      setEditingReimbError('請輸入大於 0 的有效金額')
+      return
+    }
+    if (!editingReimb.date) {
+      setEditingReimbError('請選擇日期')
+      return
+    }
+
+    try {
+      setEditingReimbLoading(true)
+      setEditingReimbError('')
+      await txApi.update(editingReimb.id, {
+        amount: amt,
+        date: editingReimb.date,
+        note: editingReimb.note.trim(),
+        account_id: editingReimb.account_id || '',
+        category: '公帳代墊報銷',
+        type: 'income',
+        is_shared: 0,
+      })
+      setEditingReimb(null)
+      await loadData()
+    } catch (err: any) {
+      setEditingReimbError(err.message || '修改報銷紀錄失敗')
+    } finally {
+      setEditingReimbLoading(false)
+    }
+  }
 
   const toggleInlineSelect = (userId: string, itemId: string) => {
     setInlineSelectedIds(prev => {
@@ -978,6 +1049,7 @@ export default function Family() {
                                   <div>撥入收款帳戶</div>
                                   <div>說明備註</div>
                                   <div style={{ textAlign: 'right' }}>已沖銷金額</div>
+                                  <div style={{ textAlign: 'right' }}>操作</div>
                                 </div>
                                 {reimbItems.map(item => (
                                   <div key={item.id} className="family-breakdown-row reimb-cols">
@@ -990,6 +1062,31 @@ export default function Family() {
                                     </div>
                                     <div className="fb-cell-amount" style={{ color: 'var(--color-success)' }}>
                                       +{formatCurrency(item.amount)}
+                                    </div>
+                                    <div className="fb-cell-action">
+                                      {(data?.myRole === 'admin' || user?.id === adv.user_id) && (
+                                        <div style={{ display: 'flex', gap: 4 }}>
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm tx-action-btn"
+                                            style={{ padding: '3px 6px', height: '24px' }}
+                                            onClick={() => handleOpenEditReimb(item, adv.user_name)}
+                                            title="編輯報銷紀錄"
+                                          >
+                                            <Edit2 size={13} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm tx-action-btn danger"
+                                            style={{ padding: '3px 6px', height: '24px' }}
+                                            disabled={deletingReimbId === item.id}
+                                            onClick={() => handleDeleteReimbursement(item.id)}
+                                            title="刪除報銷紀錄（還原餘額並退回代墊明細）"
+                                          >
+                                            <Trash2 size={13} />
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 ))}
@@ -1446,6 +1543,88 @@ export default function Family() {
               </button>
               <button type="submit" className="btn btn-primary" disabled={reimbursing || markingSettled}>
                 {reimbursing ? '撥款報銷中...' : '確認撥款沖帳'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* 編輯報銷紀錄 Modal (ADR 0031) */}
+      {editingReimb && (
+        <Modal
+          title={`編輯【${editingReimb.userName}】的報銷紀錄`}
+          onClose={() => setEditingReimb(null)}
+        >
+          {editingReimbError && (
+            <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, color: 'var(--color-danger)', fontSize: '0.85rem' }}>
+              {editingReimbError}
+            </div>
+          )}
+          <div style={{
+            background: 'rgba(59, 130, 246, 0.08)',
+            border: '1px solid rgba(59, 130, 246, 0.25)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            marginBottom: 14,
+            fontSize: '0.82rem',
+            color: 'var(--text-primary)',
+            lineHeight: 1.5,
+          }}>
+            <div style={{ fontWeight: 600, color: '#3b82f6', marginBottom: 2 }}>
+              成對移轉紀錄連動中
+            </div>
+            修改金額或日期將自動同步家庭共同基金支出與成員收款帳戶存入金額。
+            若金額低於已結清代墊明細合計，系統將提示先解除部分項目報銷。
+          </div>
+          <form onSubmit={handleSaveEditReimb} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="input-group">
+              <label className="input-label">報銷金額 (NT$)</label>
+              <input
+                className="input"
+                type="number"
+                step="1"
+                min="1"
+                required
+                autoFocus
+                value={editingReimb.amount}
+                onChange={e => setEditingReimb(p => p ? ({ ...p, amount: e.target.value }) : null)}
+              />
+            </div>
+            <div className="input-group">
+              <label className="input-label">撥款日期</label>
+              <input
+                className="input"
+                type="date"
+                required
+                value={editingReimb.date}
+                onChange={e => setEditingReimb(p => p ? ({ ...p, date: e.target.value }) : null)}
+              />
+            </div>
+            <div className="input-group">
+              <label className="input-label">說明備註</label>
+              <input
+                className="input"
+                type="text"
+                value={editingReimb.note}
+                placeholder="例如 撥款報銷代墊款"
+                onChange={e => setEditingReimb(p => p ? ({ ...p, note: e.target.value }) : null)}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setEditingReimb(null)}
+                disabled={editingReimbLoading}
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={editingReimbLoading}
+              >
+                {editingReimbLoading ? '儲存中...' : '儲存修改'}
               </button>
             </div>
           </form>

@@ -250,7 +250,7 @@ households.get('/advances', async (c) => {
       ORDER BY t.date DESC, t.created_at DESC, t.rowid DESC
     `).bind(...memberUserIds),
     c.env.DB.prepare(`
-      SELECT t.id, t.user_id, t.date, t.created_at, t.amount, t.note, COALESCE(a.name, '收款帳戶') as account_name
+      SELECT t.id, t.user_id, t.account_id, t.date, t.created_at, t.amount, t.note, COALESCE(a.name, '收款帳戶') as account_name
       FROM transactions t
       LEFT JOIN accounts a ON t.account_id = a.id
       WHERE t.user_id IN (${placeholders}) AND t.category = '公帳代墊報銷' AND t.type = 'income'
@@ -310,8 +310,8 @@ households.get('/advances', async (c) => {
     // 若歷史撥款大於已結清明細淨額，差額為公帳預收/溢撥款
     const unlinkedReimbursed = Math.max(0, totalReimbursed - linkedTotal);
 
-    const reimbursementItems = myReimbs.map(({ id, date, created_at, amount, note, account_name }) => ({
-      id, date, created_at, amount, note, account_name
+    const reimbursementItems = myReimbs.map(({ id, user_id, account_id, date, created_at, amount, note, account_name }) => ({
+      id, user_id, account_id, date, created_at, amount, note, account_name
     }));
 
     return {
@@ -458,11 +458,11 @@ households.post('/reimburse', async (c) => {
     c.env.DB.prepare('UPDATE accounts SET balance = balance - ? WHERE id = ?').bind(amt, from_account_id),
     c.env.DB.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(amt, to_account_id),
     c.env.DB.prepare(
-      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(outTxId, userId, from_account_id, 'expense', '公帳代墊報銷', amt, note ? `${note} (撥款至 ${targetName} ${toAcc.name})` : `撥款報銷代墊款給 ${targetName} (${toAcc.name})`, date, 1),
+      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, pair_tx_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(outTxId, userId, from_account_id, 'expense', '公帳代墊報銷', amt, note ? `${note} (撥款至 ${targetName} ${toAcc.name})` : `撥款報銷代墊款給 ${targetName} (${toAcc.name})`, date, 1, inTxId),
     c.env.DB.prepare(
-      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(inTxId, target_user_id, to_account_id, 'income', '公帳代墊報銷', amt, note ? `${note} (來自家庭基金 ${fromAcc.name})` : `收到公帳代墊報銷款 (來自 ${fromAcc.name})`, date, 0),
+      'INSERT INTO transactions (id, user_id, account_id, type, category, amount, note, date, is_shared, pair_tx_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(inTxId, target_user_id, to_account_id, 'income', '公帳代墊報銷', amt, note ? `${note} (來自家庭基金 ${fromAcc.name})` : `收到公帳代墊報銷款 (來自 ${fromAcc.name})`, date, 0, outTxId),
   ];
 
   // 關聯結清選定之代墊明細

@@ -1474,7 +1474,7 @@ a { text-decoration: none; color: inherit; }
 }
 .family-breakdown-header.reimb-cols,
 .family-breakdown-row.reimb-cols {
-  grid-template-columns: 95px 130px 1fr 100px;
+  grid-template-columns: 95px 120px 1fr 90px 75px;
 }
 .family-breakdown-header.settled-cols,
 .family-breakdown-row.settled-cols {
@@ -1700,8 +1700,7 @@ a { text-decoration: none; color: inherit; }
     display: none;
   }
   .family-breakdown-row,
-  .family-breakdown-row.advance-cols,
-  .family-breakdown-row.reimb-cols {
+  .family-breakdown-row.advance-cols {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "main amount"
@@ -1712,6 +1711,7 @@ a { text-decoration: none; color: inherit; }
     background: var(--bg-surface);
     border: 1px solid var(--border-color-2);
   }
+  .family-breakdown-row.reimb-cols,
   .family-breakdown-row.settled-cols {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
