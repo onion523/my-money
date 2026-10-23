@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/jwt';
 import { getTaipeiForecastDays } from '../utils/date';
 import { getUserHousehold } from './households';
 import { ensureRecurringSchema } from './recurring';
+import { computeCreditCardsReadOnlyMetrics, ensureAccountsSchema } from './accounts';
 
 type Vars = { userId: string; userEmail: string; userName: string };
 const forecast = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -173,6 +174,7 @@ async function getForecastStartingBalance(
   settledKeys: Set<string> = new Set(),
   myRole: string | null = 'member'
 ) {
+  await ensureAccountsSchema(db);
   const placeholders = memberUserIds.map(() => '?').join(',');
   let sqlCondition = `(user_id = ? OR (user_id IN (${placeholders}) AND is_joint = 1))`;
   let sqlParams: any[] = [userId, ...memberUserIds];
@@ -192,7 +194,7 @@ async function getForecastStartingBalance(
 
   // 信用卡：依視角計算歸屬本視角之「已出帳 (balance)」與「未出帳 (unbilled)」
   const cardRows = await db.prepare(
-    `SELECT id, user_id, name, balance, unbilled, is_joint, statement_day, payment_due_day FROM accounts WHERE type = 'credit_card' AND (user_id = ? OR user_id IN (${placeholders}))`
+    `SELECT id, user_id, name, balance, unbilled, is_joint, statement_day, payment_due_day, last_rollover_at FROM accounts WHERE type = 'credit_card' AND (user_id = ? OR user_id IN (${placeholders}))`
   ).bind(userId, ...memberUserIds).all();
   const cards = (cardRows.results || []) as Array<{
     id: string;
@@ -203,6 +205,7 @@ async function getForecastStartingBalance(
     is_joint: number;
     statement_day: number | null;
     payment_due_day: number | null;
+    last_rollover_at?: string | null;
   }>;
 
   const forecastDays = getTaipeiForecastDays(days);
@@ -277,36 +280,15 @@ async function getForecastStartingBalance(
   let immediateCardDeduct = 0;
   const cardEvents: ForecastEvent[] = [];
 
-  const cardsNeedingSplit = cards.filter(c => {
-    const totalDue = Math.max(0, c.balance || 0) + Math.max(0, c.unbilled || 0);
-    if (totalDue <= 0) return false;
-    if (c.is_joint === 1) return false;
-    if (scope === 'all' && c.user_id === userId) return false;
-    if (scope === 'personal' && c.user_id !== userId) return false;
-    return true;
-  });
-
-  const txsByCard = new Map<string, Array<{ amount: number; is_shared: number; is_billed: number }>>();
-  if (cardsNeedingSplit.length > 0) {
-    const cardPlaceholders = cardsNeedingSplit.map(() => '?').join(',');
-    const batchTxs = await db.prepare(
-      `SELECT account_id, amount, is_shared, COALESCE(is_billed, 0) as is_billed FROM transactions WHERE account_id IN (${cardPlaceholders}) AND type = 'expense' ORDER BY date DESC, created_at DESC`
-    ).bind(...cardsNeedingSplit.map(c => c.id)).all();
-    for (const row of ((batchTxs.results || []) as Array<{ account_id: string; amount: number; is_shared: number; is_billed: number }>)) {
-      let list = txsByCard.get(row.account_id);
-      if (!list) {
-        list = [];
-        txsByCard.set(row.account_id, list);
-      }
-      if (list.length < 50) list.push(row);
-    }
-  }
+  // 統一透過 computeCreditCardsReadOnlyMetrics 計算各卡之公私帳待繳分流（已於家庭協同報銷／沖銷之公帳消費自動轉列 personal_debt）
+  const cardMetricsMap = await computeCreditCardsReadOnlyMetrics(db, cards);
 
   for (const card of cards) {
+    const m = cardMetricsMap.get(card.id);
     const isOwn = card.user_id === userId;
     const isJoint = card.is_joint === 1;
-    const rawBilled = Math.max(0, card.balance || 0);
-    const rawUnbilled = Math.max(0, card.unbilled || 0);
+    const rawBilled = Math.max(0, m ? m.balance : (card.balance || 0));
+    const rawUnbilled = Math.max(0, m ? m.unbilled : (card.unbilled || 0));
     const totalDue = rawBilled + rawUnbilled;
     if (totalDue <= 0) continue;
 
@@ -325,29 +307,15 @@ async function getForecastStartingBalance(
       billed = 0;
       unbilled = 0;
     } else {
-      // 私卡於公帳或個人私帳視角：依交易之 is_billed 與 is_shared 精確拆分已出帳與未出帳歸屬
-      const txList = txsByCard.get(card.id) || [];
+      // 私卡於公帳或個人私帳視角（或全視角下他人私卡）：
+      // 未報銷之公帳消費計入 shared_debt (公帳扣款)；已於家庭協同報銷／沖銷之公帳消費與個人消費計入 personal_debt (私帳扣款)
+      const sharedBilled = m ? m.billed_shared_debt : 0;
+      const sharedUnbilled = m ? m.unbilled_shared_debt : 0;
+      const personalBilled = m ? m.billed_personal_debt : Math.max(0, rawBilled - sharedBilled);
+      const personalUnbilled = m ? m.unbilled_personal_debt : Math.max(0, rawUnbilled - sharedUnbilled);
 
-      let remUnbilled = rawUnbilled;
-      let sharedUnbilled = 0;
-      for (const tx of txList.filter(t => t.is_billed === 0)) {
-        if (remUnbilled <= 0) break;
-        const take = Math.min(remUnbilled, tx.amount);
-        if (tx.is_shared === 1) sharedUnbilled += take;
-        remUnbilled -= take;
-      }
-
-      let remBilled = rawBilled;
-      let sharedBilled = 0;
-      for (const tx of txList.filter(t => t.is_billed === 1)) {
-        if (remBilled <= 0) break;
-        const take = Math.min(remBilled, tx.amount);
-        if (tx.is_shared === 1) sharedBilled += take;
-        remBilled -= take;
-      }
-
-      billed = scope === 'household' ? sharedBilled : Math.max(0, rawBilled - sharedBilled);
-      unbilled = scope === 'household' ? sharedUnbilled : Math.max(0, rawUnbilled - sharedUnbilled);
+      billed = (scope === 'household' || !isOwn) ? sharedBilled : personalBilled;
+      unbilled = (scope === 'household' || !isOwn) ? sharedUnbilled : personalUnbilled;
     }
 
     billed = Math.round(billed * 100) / 100;

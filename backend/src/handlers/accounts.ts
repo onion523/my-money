@@ -874,7 +874,7 @@ export async function computeCreditCardsReadOnlyMetrics(
   const placeholders = uniqueCardIds.map(() => '?').join(',');
 
   const txRowsResult = await db.prepare(`
-    SELECT account_id, type, category, amount, date, is_shared, is_billed, defer_to_next_statement, unbilled_offset
+    SELECT account_id, type, category, amount, date, is_shared, is_billed, defer_to_next_statement, unbilled_offset, reimbursement_id
     FROM transactions
     WHERE account_id IN (${placeholders})
     ORDER BY date DESC, created_at DESC, rowid DESC
@@ -888,6 +888,7 @@ export async function computeCreditCardsReadOnlyMetrics(
     is_billed: number;
     defer_to_next_statement: number;
     unbilled_offset: number | null;
+    reimbursement_id: string | null;
   }>();
 
   const txsByCard = new Map<string, Array<{
@@ -899,6 +900,7 @@ export async function computeCreditCardsReadOnlyMetrics(
     is_billed: number;
     defer_to_next_statement: number;
     unbilled_offset: number | null;
+    reimbursement_id: string | null;
   }>>();
 
   for (const row of (txRowsResult.results || [])) {
@@ -954,7 +956,10 @@ export async function computeCreditCardsReadOnlyMetrics(
         isUnbilledWindow = Number(tx.is_billed) === 0 || Number(tx.defer_to_next_statement) === 1;
       }
 
-      const isShared = Number(tx.is_shared) === 1;
+      // ADR-0029：公帳刷卡支出若已於家庭協同完成報銷沖帳或標記已額外處理 (reimbursement_id 非空)，
+      // 對信用卡待繳而言不再記入公帳，轉列為持卡人私帳待繳 (personal_debt)
+      const isReimbursed = Boolean(tx.reimbursement_id && String(tx.reimbursement_id).trim() !== '');
+      const isShared = Number(tx.is_shared) === 1 && !(tx.type === 'expense' && isReimbursed);
       const amt = Number(tx.amount || 0);
 
       if (isUnbilledWindow) {
@@ -1184,23 +1189,29 @@ accounts.get('/balance', async (c) => {
     if (acc.type === 'credit_card') {
       const m = cardMetricsMap.get(acc.id);
       if (m) {
-        acc.balance = m.balance;
-        acc.unbilled = m.unbilled;
+        if (scope === 'personal') {
+          acc.balance = m.billed_personal_debt;
+          acc.unbilled = m.unbilled_personal_debt;
+        } else {
+          acc.balance = m.balance;
+          acc.unbilled = m.unbilled;
+        }
       }
     }
   }
 
   const cashTotal = accs.filter(a => a.type === 'cash').reduce((s, a) => s + (a.balance || 0), 0);
   const bankTotal = accs.filter(a => a.type === 'bank').reduce((s, a) => s + (a.balance || 0), 0);
-  const ccBilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.balance || 0), 0);
+  let ccBilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.balance || 0), 0);
   let ccUnbilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.unbilled || 0), 0);
 
-  // ADR 0015 精準會計責任法：在公帳視角下，加總全體成員個人私卡上的家庭代墊公帳欠款 (shared_debt)
+  // ADR 0015 & ADR 0029 精準會計責任法：在公帳視角下，加總全體成員個人私卡上尚未報銷沖帳的家庭代墊公帳欠款
   if (scope === 'household') {
     for (const card of personalCardsForHousehold) {
       const m = cardMetricsMap.get(card.id);
       if (m) {
-        ccUnbilled += m.shared_debt || 0;
+        ccBilled += m.billed_shared_debt || 0;
+        ccUnbilled += m.unbilled_shared_debt || 0;
       }
     }
   }
