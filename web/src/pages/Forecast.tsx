@@ -37,6 +37,10 @@ export default function Forecast() {
   const [loading, setLoading] = useState(true)
   const [settlingKey, setSettlingKey] = useState<string | null>(null)
 
+  // 日期區間查詢狀態（預設空字串代表完整 12 個月區間）
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+
   // 購買力檢查狀態
   const [checkAmount, setCheckAmount] = useState('')
   const [checkResult, setCheckResult] = useState<PurchaseCheckResult | null>(null)
@@ -108,11 +112,58 @@ export default function Forecast() {
     }
   }
 
-  // 折線圖資料
-  const chartData = forecast?.dailyBalances.map(d => ({
-    date: d.date.slice(5), // MM-DD
+  // 12 個月完整邊界與日期區間篩選計算
+  const allDaily = forecast?.dailyBalances || []
+  const minAvailableDate = allDaily[0]?.date || ''
+  const maxAvailableDate = allDaily[allDaily.length - 1]?.date || ''
+
+  const effectiveStart = startDate || minAvailableDate
+  const effectiveEnd = endDate || maxAvailableDate
+  const rangeStart = effectiveStart <= effectiveEnd ? effectiveStart : effectiveEnd
+  const rangeEnd = effectiveStart <= effectiveEnd ? effectiveEnd : effectiveStart
+
+  const isCustomRange =
+    (Boolean(startDate) && startDate !== minAvailableDate) ||
+    (Boolean(endDate) && endDate !== maxAvailableDate)
+  const rangeTitlePrefix = isCustomRange ? '區間內' : '未來 12 個月'
+
+  const filteredDailyBalances = allDaily.filter(
+    d => (!rangeStart || d.date >= rangeStart) && (!rangeEnd || d.date <= rangeEnd)
+  )
+  const filteredEvents = (forecast?.events || []).filter(
+    ev => (!rangeStart || ev.date >= rangeStart) && (!rangeEnd || ev.date <= rangeEnd)
+  )
+
+  let filteredMinBalance = forecast?.minBalance ?? 0
+  let filteredMinDate = forecast?.minDate ?? ''
+  if (filteredDailyBalances.length > 0) {
+    filteredMinBalance = filteredDailyBalances[0].balance
+    filteredMinDate = filteredDailyBalances[0].date
+    for (const d of filteredDailyBalances) {
+      if (d.balance < filteredMinBalance) {
+        filteredMinBalance = d.balance
+        filteredMinDate = d.date
+      }
+    }
+  }
+  const filteredWillOverdraft = filteredMinBalance < 0
+
+  // 折線圖資料（保留 YYYY-MM-DD 避免跨年重複 key）
+  const chartData = filteredDailyBalances.map(d => ({
+    date: d.date,
     balance: d.balance,
-  })) || []
+  }))
+
+  const applyPresetDays = (daysCount: number | null) => {
+    if (!daysCount || allDaily.length === 0) {
+      setStartDate('')
+      setEndDate('')
+      return
+    }
+    const targetIdx = Math.min(daysCount - 1, allDaily.length - 1)
+    setStartDate(minAvailableDate)
+    setEndDate(allDaily[targetIdx]?.date || maxAvailableDate)
+  }
 
   if (loading && !forecast) {
     return <ForecastSkeleton />
@@ -126,32 +177,107 @@ export default function Forecast() {
           <span>現金流預測 & 購買力試算</span>
           <TrendingUp size={24} style={{ color: 'var(--color-primary)' }} />
         </h1>
-        <p className="page-subtitle">模擬未來 60 天資金流向，精確防範透支風險，並提供智慧購物決策支援</p>
+        <p className="page-subtitle">模擬未來 12 個月（365 天）資金流向，支援自訂日期區間查詢、防範透支風險，並提供智慧購物決策支援</p>
       </div>
 
-      {/* 帳本視角切換器 */}
-      <div style={{ marginBottom: 20 }}>
+      {/* 帳本視角切換器 + 日期區間查詢列 */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+          marginBottom: 20,
+        }}
+      >
         <ScopeTabBar scope={scope} onChange={setScope} />
+
+        <div
+          className="card"
+          style={{
+            padding: '10px 14px',
+            marginBottom: 0,
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 8,
+          }}
+        >
+          <span className="text-xs text-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+            <Calendar size={14} color="var(--color-primary)" />
+            查詢區間：
+          </span>
+          <input
+            id="forecast-start-date"
+            type="date"
+            className="input"
+            aria-label="預測起始日期"
+            style={{ width: 'auto', padding: '5px 10px', fontSize: '0.82rem' }}
+            min={minAvailableDate}
+            max={maxAvailableDate}
+            value={effectiveStart}
+            onChange={e => setStartDate(e.target.value)}
+          />
+          <span className="text-xs text-muted">~</span>
+          <input
+            id="forecast-end-date"
+            type="date"
+            className="input"
+            aria-label="預測結束日期"
+            style={{ width: 'auto', padding: '5px 10px', fontSize: '0.82rem' }}
+            min={minAvailableDate}
+            max={maxAvailableDate}
+            value={effectiveEnd}
+            onChange={e => setEndDate(e.target.value)}
+          />
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              style={{ padding: '4px 8px', fontSize: '0.75rem', border: '1px solid var(--border-color)' }}
+              onClick={() => applyPresetDays(60)}
+            >
+              近 60 天
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              style={{ padding: '4px 8px', fontSize: '0.75rem', border: '1px solid var(--border-color)' }}
+              onClick={() => applyPresetDays(183)}
+            >
+              近 6 個月
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${!isCustomRange ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ padding: '4px 8px', fontSize: '0.75rem', border: '1px solid var(--border-color)' }}
+              onClick={() => applyPresetDays(null)}
+            >
+              完整 12 個月
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* 60 天安全指標卡片 */}
+      {/* 12 個月 / 所選區間安全指標卡片 */}
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
         <div
           className="stat-card"
           style={{
-            borderLeft: forecast?.willOverdraft ? '5px solid var(--color-danger)' : '5px solid var(--color-success)',
+            borderLeft: filteredWillOverdraft ? '5px solid var(--color-danger)' : '5px solid var(--color-success)',
           }}
         >
           <div className="flex items-center justify-between">
             <span className="stat-label">
-              <span>未來 60 天資金安全評級</span>
+              <span>{rangeTitlePrefix}資金安全評級</span>
               <FormulaTooltip
-                label="檢視未來 60 天資金安全評級計算公式"
-                formula="模擬未來 60 天逐日餘額，若預測期最低餘額點 < $0 則判定為「存在透支風險」，若 >= $0 則為「現金流充裕安全」"
-                calculation={`預測期最低點 ${formatCurrency(forecast?.minBalance ?? 0)} ${forecast?.willOverdraft ? '< $0（存在透支風險）' : '>= $0（現金流充裕安全）'}`}
+                label={`檢視${rangeTitlePrefix}資金安全評級計算公式`}
+                formula="模擬未來 12 個月（365 天）逐日餘額，若所選區間最低餘額點 < $0 則判定為「存在透支風險」，若 >= $0 則為「現金流充裕安全」"
+                calculation={`區間（${rangeStart} ~ ${rangeEnd}）最低點 ${formatCurrency(filteredMinBalance)} ${filteredWillOverdraft ? '< $0（存在透支風險）' : '>= $0（現金流充裕安全）'}`}
               />
             </span>
-            {forecast?.willOverdraft ? (
+            {filteredWillOverdraft ? (
               <AlertTriangle size={20} color="var(--color-danger)" />
             ) : (
               <ShieldCheck size={20} color="var(--color-success)" />
@@ -161,73 +287,74 @@ export default function Forecast() {
             className="stat-value"
             style={{
               fontSize: '1.4rem',
-              color: forecast?.willOverdraft ? 'var(--color-danger)' : 'var(--color-success)',
+              color: filteredWillOverdraft ? 'var(--color-danger)' : 'var(--color-success)',
               marginTop: 4,
               display: 'flex',
               alignItems: 'center',
               gap: 6,
             }}
           >
-            {forecast?.willOverdraft ? (
+            {filteredWillOverdraft ? (
               <><AlertTriangle size={20} /> 存在透支風險</>
             ) : (
               <><CheckCircle2 size={20} /> 現金流充裕安全</>
             )}
           </div>
           <div className="stat-sub">
-            {forecast?.willOverdraft ? '預計餘額將跌破 0，請及早調整' : '在排定所有收支後皆保持正值'}
+            {filteredWillOverdraft ? '預計餘額將跌破 0，請及早調整' : '在排定所有收支後皆保持正值'}
           </div>
         </div>
 
         <div className="stat-card">
           <span className="stat-label">
-            <span>預測期最低餘額點</span>
+            <span>{isCustomRange ? '區間最低餘額點' : '預測期最低餘額點'}</span>
             <FormulaTooltip
               label="檢視預測期最低餘額點計算公式"
-              formula="第 0 天起始餘額（現金＋銀行存款）逐日加減未勾選已繳之週期收支、已出帳卡費（扣繳日扣除）與未出帳卡費（出帳後扣繳日扣除）後之 60 天最低值"
-              calculation={`起始（現金 ${formatCurrency(forecast?.cashTotal ?? 0)} + 存款 ${formatCurrency(forecast?.bankTotal ?? 0)} = ${formatCurrency(forecast?.startingBalance ?? 0)}）→ 最低點 ${formatCurrency(forecast?.minBalance ?? 0)}（${forecast?.minDate || '無變動'}）`}
+              formula="第 0 天起始餘額（現金＋銀行存款）逐日加減未勾選已繳之週期收支、已出帳卡費（扣繳日扣除）與未出帳卡費（出帳後扣繳日扣除）後，於所選查詢區間內之最低值"
+              calculation={`起始（現金 ${formatCurrency(forecast?.cashTotal ?? 0)} + 存款 ${formatCurrency(forecast?.bankTotal ?? 0)} = ${formatCurrency(forecast?.startingBalance ?? 0)}）→ 區間最低點 ${formatCurrency(filteredMinBalance)}（${filteredMinDate || '無變動'}）`}
             />
           </span>
           <div
             className="stat-value"
             style={{
-              color: (forecast?.minBalance ?? 0) >= 0 ? 'var(--text-primary)' : 'var(--color-danger)',
+              color: filteredMinBalance >= 0 ? 'var(--text-primary)' : 'var(--color-danger)',
             }}
           >
-            {formatCurrency(forecast?.minBalance ?? 0)}
+            {formatCurrency(filteredMinBalance)}
           </div>
           <div className="stat-sub">
-            預計發生在：{forecast?.minDate || '無變動'}
+            預計發生在：{filteredMinDate || '無變動'}
           </div>
         </div>
 
         <div className="stat-card">
           <span className="stat-label">
-            <span>未來 60 天預定事件數</span>
+            <span>{rangeTitlePrefix}預定事件數</span>
             <FormulaTooltip
-              label="檢視未來 60 天預定事件數計算公式"
-              formula="未來 60 天內預計發生之週期收支筆數 ＋ 信用卡已出帳扣繳事件 ＋ 信用卡未出帳（出帳後扣繳）事件筆數"
+              label={`檢視${rangeTitlePrefix}預定事件數計算公式`}
+              formula="所選查詢區間（預設未來 12 個月）內預計發生之週期收支筆數 ＋ 信用卡已出帳扣繳事件 ＋ 信用卡未出帳（出帳後扣繳）事件筆數"
               calculation={(() => {
-                const allEvs = forecast?.events || []
-                const settledCount = allEvs.filter(e => e.is_settled).length
-                const activeCount = allEvs.length - settledCount
-                return `待扣／待入帳 ${activeCount} 筆 + 已勾選已繳 ${settledCount} 筆 = 共 ${allEvs.length} 筆`
+                const settledCount = filteredEvents.filter(e => e.is_settled).length
+                const activeCount = filteredEvents.length - settledCount
+                return `區間（${rangeStart} ~ ${rangeEnd}）待扣／待入帳 ${activeCount} 筆 + 已勾選已繳 ${settledCount} 筆 = 共 ${filteredEvents.length} 筆`
               })()}
             />
           </span>
           <div className="stat-value" style={{ color: 'var(--color-primary)' }}>
-            {forecast?.events.length ?? 0} 筆
+            {filteredEvents.length} 筆
           </div>
           <div className="stat-sub">包含各項週期收支與各期信用卡扣繳卡費</div>
         </div>
       </div>
 
-      {/* 60 天逐日餘額模擬折線圖 */}
+      {/* 12 個月逐日餘額模擬折線圖 */}
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 6 }}>
           <h2 className="text-xl flex items-center gap-xs">
             <TrendingUp size={20} color="var(--color-primary)" />
-            未來 60 天逐日現金流模擬趨勢
+            {isCustomRange
+              ? `逐日現金流模擬趨勢（${rangeStart} ~ ${rangeEnd}）`
+              : '未來 12 個月逐日現金流模擬趨勢'}
           </h2>
           <div className="text-xs text-muted">
             {scope === 'household'
@@ -241,7 +368,7 @@ export default function Forecast() {
         {chartData.length === 0 ? (
           <div className="empty-state" style={{ padding: '40px 0' }}>
             <div className="emoji"><TrendingUp size={40} /></div>
-            <h3>正在模擬未來現金流…</h3>
+            <h3>此日期區間內無模擬資料</h3>
           </div>
         ) : (
           <div style={{ height: 300, width: '100%' }}>
@@ -258,11 +385,14 @@ export default function Forecast() {
                   dataKey="date"
                   stroke="var(--text-muted)"
                   fontSize={11}
-                  minTickGap={24}
-                  tickFormatter={(v: string) => v.length >= 10 ? v.slice(5) : v}
+                  minTickGap={32}
+                  tickFormatter={(v: string) => v.length >= 10 ? v.slice(2).replace(/-/g, '/') : v}
                 />
                 <YAxis stroke="var(--text-muted)" fontSize={12} tickFormatter={v => `$${v}`} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v), '預估餘額']} />
+                <Tooltip
+                  labelFormatter={(label: string) => `日期：${label}`}
+                  formatter={(v: number) => [formatCurrency(v), '預估餘額']}
+                />
                 <Area
                   type="monotone"
                   dataKey="balance"
@@ -277,7 +407,7 @@ export default function Forecast() {
         )}
       </div>
 
-      {/* 下方兩欄：左側 購買力檢查工具 + 右側 未來 60 天事件時間軸 */}
+      {/* 下方兩欄：左側 購買力檢查工具 + 右側 未來 12 個月事件時間軸 */}
       <div className="grid-forecast-main">
         {/* 模組 9：購買力檢查 */}
         <div className="card">
@@ -286,7 +416,7 @@ export default function Forecast() {
             <h2 className="text-xl">智慧購買力試算 (Can I Buy It?)</h2>
           </div>
           <p className="text-xs text-muted" style={{ marginBottom: 18 }}>
-            打算入手心儀物品或進行大額消費？輸入金額，系統將綜合未來 60 天信用卡扣繳、週期支出與儲蓄目標，為您評估可行性！
+            打算入手心儀物品或進行大額消費？輸入金額，系統將綜合未來 12 個月信用卡扣繳、週期支出與儲蓄目標，為您評估可行性！
           </p>
 
           <form onSubmit={handlePurchaseCheck} style={{ marginBottom: 20 }}>
@@ -362,7 +492,7 @@ export default function Forecast() {
               <div style={{ fontSize: '0.875rem', lineHeight: 1.7, color: 'var(--text-secondary)' }}>
                 {checkResult.verdict === 'safe' && (
                   <p>
-                    消費 <strong>{formatCurrency(checkResult.amount)}</strong> 後，未來 60 天內現金流依舊充裕（最低點仍有 <strong>{formatCurrency(checkResult.minBalance)}</strong>）{scope === 'household' ? '。' : '，且完全不影響現有儲蓄目標進度。'}
+                    消費 <strong>{formatCurrency(checkResult.amount)}</strong> 後，未來 12 個月內現金流依舊充裕（最低點仍有 <strong>{formatCurrency(checkResult.minBalance)}</strong>）{scope === 'household' ? '。' : '，且完全不影響現有儲蓄目標進度。'}
                   </p>
                 )}
                 {checkResult.verdict === 'caution' && (
@@ -372,7 +502,7 @@ export default function Forecast() {
                 )}
                 {checkResult.verdict === 'danger' && (
                   <p style={{ color: 'var(--color-danger)' }}>
-                    注意！若執行此筆 <strong>{formatCurrency(checkResult.amount)}</strong> 消費，未來 60 天內現金流將會透支跌至 <strong>{formatCurrency(checkResult.minBalance)}</strong>！請勿在此時進行此大額開支。
+                    注意！若執行此筆 <strong>{formatCurrency(checkResult.amount)}</strong> 消費，未來 12 個月內現金流將會透支跌至 <strong>{formatCurrency(checkResult.minBalance)}</strong>！請勿在此時進行此大額開支。
                   </p>
                 )}
               </div>
@@ -380,23 +510,23 @@ export default function Forecast() {
           )}
         </div>
 
-        {/* 右側：未來 60 天排定事件 */}
+        {/* 右側：未來 12 個月 / 區間內排定事件 */}
         <div className="card">
           <div className="flex items-center justify-between" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div className="flex items-center gap-xs">
               <Calendar size={20} color="var(--color-primary)" />
-              <h2 className="text-xl">未來 60 天收支排程</h2>
+              <h2 className="text-xl">{rangeTitlePrefix}收支排程</h2>
             </div>
             <span className="text-xs text-muted">勾選「已繳」可排除已入卡帳／已消費項目，避免重複計算</span>
           </div>
 
-          {!forecast?.events || forecast.events.length === 0 ? (
+          {filteredEvents.length === 0 ? (
             <div className="empty-state" style={{ padding: '24px 0' }}>
-              <p style={{ fontSize: '0.85rem' }}>未來 60 天無週期收支排程</p>
+              <p style={{ fontSize: '0.85rem' }}>{rangeTitlePrefix}無週期收支排程</p>
             </div>
           ) : (
             <div className="forecast-timeline-list">
-              {forecast.events.map((ev, idx) => (
+              {filteredEvents.map((ev, idx) => (
                 <div
                   key={ev.event_key || `${ev.date}-${ev.name}-${idx}`}
                   className="forecast-event-row"

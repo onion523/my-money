@@ -90,7 +90,7 @@ export function calculateCreditCardDueDate(
   return { year: dueYear, month: dueMonth, day: actualDueDay, dateStr };
 }
 
-const FORECAST_DAYS = 60;
+const FORECAST_DAYS = 365;
 
 function getDaysInForecast(
   items: ForecastRecurringItem[],
@@ -163,7 +163,7 @@ function getDaysInForecast(
   return events;
 }
 
-// 試算第 0 天起始基準可用餘額與信用卡繳卡費事件 (60 天期程：已出帳排入最近扣繳日，未出帳排入下次結帳日出帳後之扣繳日)
+// 試算第 0 天起始基準可用餘額與信用卡繳卡費事件 (12 個月 / 365 天期程：已出帳排入最近扣繳日，未出帳排入下次結帳日出帳後之扣繳日)
 async function getForecastStartingBalance(
   db: any,
   userId: string,
