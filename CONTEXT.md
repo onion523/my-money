@@ -389,11 +389,15 @@ _Avoid_: 僅過濾清單而指標卡與圖表不連動 (decoupled filter state)
 
 **Card Payment Event (繳卡費事件)**:
 現金流預測 12 個月（365 天）時間軸上，依信用卡帳務狀態拆分為兩類獨立扣繳支出事件：
-1. **已出帳繳卡費（`繳卡費 · 卡名（已出帳）`）**：金額為該卡歸屬當前視角之已出帳待繳款 (`balance > 0`)，排入自今日起算**最近一次即將到來的繳款日（Payment Due Day）**。
-2. **未出帳繳卡費（`繳卡費 · 卡名（未出帳）`）**：金額為該卡歸屬當前視角之未出帳款 (`unbilled > 0`)，先依該卡結帳日（Statement Day）推算**下一次結帳日**（若今日已過本月結帳日或當期已存在已出帳帳單，則為下月結帳日），再排入**該結帳日出帳後的第一個繳款日（Payment Due Day）**。
+1. **已出帳繳卡費（`繳卡費 · 卡名（已出帳）`）**：金額為該卡歸屬當前視角之已出帳待繳款 (`balance > 0`)。系統先依據該卡之最近一期已出帳結帳日（`cutoffStatementDate`，若未設結帳日則依當月繳款日）推算其對應之「原訂扣款日（`originalDueDate`）」：
+   - 若 `originalDueDate >= 今日（D0）`：排入該 `originalDueDate` 扣款。
+   - **已過扣款日未扣款之即刻歸屬（`originalDueDate < 今日 D0`）**：當已過原訂扣款日但帳上仍有未結清之已出帳餘額時，強制歸入**今日（預測起始日 `D0`）**立即扣除，事件名稱標示為 `繳卡費 · 卡名（已出帳 · 原訂 MM/DD 扣款）`，且 `event_key` 維持綁定 `originalDueDate`（`card_due:${card.id}:${originalDueDate}`）以確保跨日不重置「已繳」勾選狀態。
+2. **未出帳繳卡費（`繳卡費 · 卡名（未出帳）`）**：金額為該卡歸屬當前視角之未出帳款 (`unbilled > 0`)，依該卡結帳日（Statement Day）與實際出帳狀態推算所屬結帳日：
+   - 僅當「今日已過本月結帳日 **且**（本月已執行過手動出帳作業 `last_rollover_at >= 本月結帳日` 或目前已有已出帳餘額 `rawBilled > 0`）」時，未出帳才歸屬於下月結帳日；若已過本月結帳日但尚未執行「出帳作業」且 `rawBilled === 0`，則未出帳優先對應「本月結帳日」之扣款日（若連該扣款日也已過期 `< 今日 D0`，同樣歸入今日 `D0` 立即扣除並標示 `原訂 MM/DD 扣款`）。
+   - 當已出帳款因過期而歸入今日（`D0`）時，當期未出帳維持排入下一個正常結帳週期之扣款日，**絕不連帶往後多順延一個月**。
 3. **已報銷沖帳公帳消費之待繳歸屬轉移**：個人私卡上之公帳消費（`is_shared = 1`）若已於家庭協同完成「報銷沖帳」或「標記已額外處理」（`reimbursement_id` 非空），其尚未繳給銀行的待扣款金額不再計入「公帳」視角之繳卡費事件，而是歸入持卡人「私帳」視角之繳卡費事件中扣款。
 兩筆事件於時間軸上各自獨立顯示，並支援分別勾選「已繳」豁免。
-_Avoid_: 自動繳卡 (auto repayment)、漏計未出帳金額 (omitting unbilled debt in schedule)、已出帳與未出帳強行合併同日扣繳 (forcing billed and unbilled onto the same due date)、已於家庭協同報銷沖帳之卡費仍在公帳現金流重複扣款 (double-deducting reimbursed card advances in household forecast)
+_Avoid_: 自動繳卡 (auto repayment)、漏計未出帳金額 (omitting unbilled debt in schedule)、已過扣款日未扣款卻順延至下個月造成當月可用資金虛高 (deferring overdue billed debt to next month inflating current available cash)、因已出帳逾期或未按出帳作業而將未出帳連帶往後多推遲一個月 (cascading 1-month delay on unbilled due date)、已出帳與未出帳強行合併同日扣繳 (forcing billed and unbilled onto the same due date)、已於家庭協同報銷沖帳之卡費仍在公帳現金流重複扣款 (double-deducting reimbursed card advances in household forecast)
 
 **Credit Card Recurring Cash Flow Shift (信用卡週期收支繳款日平移)**:
 在未來 12 個月（365 天）現金流預測中，凡設定由信用卡扣款之週期收支項目，其真實現金資產流出日不再發生於刷卡記帳日（day_of_cycle），而是依據該信用卡之結帳日與繳款日精準平移至對應之「信用卡繳款日（Payment Due Day）」，時間軸保留週期項目獨立卡片並標記卡片與繳款日扣款，真實反映流動性到期責任並支援「已繳」單筆豁免。

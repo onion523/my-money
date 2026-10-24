@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Env, RecurringItem } from '../types';
 import { authMiddleware } from '../middleware/jwt';
-import { getTaipeiForecastDays } from '../utils/date';
+import { getTaipeiDateString, getTaipeiForecastDays } from '../utils/date';
 import { getUserHousehold } from './households';
 import { ensureRecurringSchema } from './recurring';
 import { computeCreditCardsReadOnlyMetrics, ensureAccountsSchema } from './accounts';
@@ -91,6 +91,142 @@ export function calculateCreditCardDueDate(
   return { year: dueYear, month: dueMonth, day: actualDueDay, dateStr };
 }
 
+export function parseRolloverTaipeiDate(lastRolloverAt?: string | null): string | null {
+  if (!lastRolloverAt) return null;
+  const trimmed = lastRolloverAt.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  let iso = trimmed;
+  if (!iso.includes('T') && !iso.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(iso)) {
+    iso = iso.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return getTaipeiDateString(d);
+}
+
+export function resolveBilledCardSchedule(
+  todayObj: { year: number; month: number; day: number; dateStr: string },
+  minDateStr: string,
+  maxDateStr: string,
+  statementDay: number | null,
+  paymentDueDay: number,
+  lastRolloverAt?: string | null
+): { originalDueDate: string; scheduledDate: string; isOverdue: boolean } | null {
+  let originalDueDate: string;
+
+  if (statementDay) {
+    const stmtDay = statementDay;
+    const maxDaysThisMonth = new Date(todayObj.year, todayObj.month, 0).getDate();
+    const clampedTodayStmtDay = Math.min(stmtDay, maxDaysThisMonth);
+    const thisMonthStmtDateStr = `${todayObj.year}-${String(todayObj.month).padStart(2, '0')}-${String(clampedTodayStmtDay).padStart(2, '0')}`;
+
+    const rolloverDateStr = parseRolloverTaipeiDate(lastRolloverAt);
+    const hasRolledThisMonth = rolloverDateStr ? rolloverDateStr >= thisMonthStmtDateStr : false;
+
+    let stmtYear = todayObj.year;
+    let stmtMonth = todayObj.month;
+
+    // 若今日尚未到達本月結帳日，或雖已過本月結帳日但尚未執行過本月結帳日出帳，則此筆已出帳餘額源自「上月（或更早）結帳週期」
+    if (todayObj.day < clampedTodayStmtDay || (lastRolloverAt && !hasRolledThisMonth)) {
+      stmtMonth -= 1;
+      if (stmtMonth < 1) {
+        stmtYear -= 1;
+        stmtMonth = 12;
+      }
+    }
+
+    const maxDaysStmtMonth = new Date(stmtYear, stmtMonth, 0).getDate();
+    const due = calculateCreditCardDueDate(
+      stmtYear,
+      stmtMonth,
+      Math.min(stmtDay, maxDaysStmtMonth),
+      stmtDay,
+      paymentDueDay
+    );
+    originalDueDate = due.dateStr;
+  } else {
+    // 未設定結帳日之信用卡：以當月繳款日為原訂扣繳基準（若當月已過則視為當月逾期未扣，尚未過則為當月即將扣款）
+    const maxDaysThisMonth = new Date(todayObj.year, todayObj.month, 0).getDate();
+    const actualDueDay = Math.min(paymentDueDay, maxDaysThisMonth);
+    originalDueDate = `${todayObj.year}-${String(todayObj.month).padStart(2, '0')}-${String(actualDueDay).padStart(2, '0')}`;
+  }
+
+  const isOverdue = originalDueDate < todayObj.dateStr;
+  const scheduledDate = isOverdue ? todayObj.dateStr : originalDueDate;
+
+  if (scheduledDate >= minDateStr && scheduledDate <= maxDateStr) {
+    return { originalDueDate, scheduledDate, isOverdue };
+  }
+  return null;
+}
+
+export function resolveUnbilledCardSchedule(
+  todayObj: { year: number; month: number; day: number; dateStr: string },
+  minDateStr: string,
+  maxDateStr: string,
+  statementDay: number | null,
+  paymentDueDay: number,
+  hasBilledBalance: boolean,
+  billedOriginalDueDate: string | null,
+  lastRolloverAt?: string | null
+): { originalDueDate: string; scheduledDate: string; isOverdue: boolean } | null {
+  const stmtDay = statementDay || 20;
+  const maxDaysInTodayMonth = new Date(todayObj.year, todayObj.month, 0).getDate();
+  const clampedTodayStmtDay = Math.min(stmtDay, maxDaysInTodayMonth);
+  const thisMonthStmtDateStr = `${todayObj.year}-${String(todayObj.month).padStart(2, '0')}-${String(clampedTodayStmtDay).padStart(2, '0')}`;
+
+  const rolloverDateStr = parseRolloverTaipeiDate(lastRolloverAt);
+  const hasRolledCurrentCycle = rolloverDateStr ? rolloverDateStr >= thisMonthStmtDateStr : false;
+
+  let stmtYear = todayObj.year;
+  let stmtMonth = todayObj.month;
+
+  // 僅當「今日已過本月結帳日」且「本期已執行出帳（last_rollover_at >= 本月結帳日，或卡上已有已出帳待繳餘額）」時，未出帳才歸入下月結帳週期
+  // 若已過本月結帳日但使用者尚未手動按「出帳作業」且無已出帳餘額，該筆未出帳仍歸屬本月結帳週期之繳款日
+  if (todayObj.day > clampedTodayStmtDay && (hasRolledCurrentCycle || hasBilledBalance)) {
+    stmtMonth += 1;
+    if (stmtMonth > 12) {
+      stmtYear += 1;
+      stmtMonth -= 12;
+    }
+  }
+
+  const maxDaysInStmtMonth = new Date(stmtYear, stmtMonth, 0).getDate();
+  let due = calculateCreditCardDueDate(
+    stmtYear,
+    stmtMonth,
+    Math.min(stmtDay, maxDaysInStmtMonth),
+    stmtDay,
+    paymentDueDay
+  );
+
+  // 防重疊保護：以已出帳之「原訂扣款日 (billedOriginalDueDate)」比對，避免逾期平移或未出帳與已出帳落入同一期
+  if (billedOriginalDueDate && due.dateStr <= billedOriginalDueDate) {
+    stmtMonth += 1;
+    if (stmtMonth > 12) {
+      stmtYear += 1;
+      stmtMonth -= 12;
+    }
+    const nextMaxDays = new Date(stmtYear, stmtMonth, 0).getDate();
+    due = calculateCreditCardDueDate(
+      stmtYear,
+      stmtMonth,
+      Math.min(stmtDay, nextMaxDays),
+      stmtDay,
+      paymentDueDay
+    );
+  }
+
+  const originalDueDate = due.dateStr;
+  const isOverdue = originalDueDate < todayObj.dateStr;
+  const scheduledDate = isOverdue ? todayObj.dateStr : originalDueDate;
+
+  if (scheduledDate >= minDateStr && scheduledDate <= maxDateStr) {
+    return { originalDueDate, scheduledDate, isOverdue };
+  }
+  return null;
+}
+
 const FORECAST_DAYS = 365;
 
 function getDaysInForecast(
@@ -164,7 +300,7 @@ function getDaysInForecast(
   return events;
 }
 
-// 試算第 0 天起始基準可用餘額與信用卡繳卡費事件 (12 個月 / 365 天期程：已出帳排入最近扣繳日，未出帳排入下次結帳日出帳後之扣繳日)
+// 試算第 0 天起始基準可用餘額與信用卡繳卡費事件 (12 個月 / 365 天期程：已出帳排入最近扣繳日，逾期未扣繳則排入今日 D0；未出帳排入下次結帳日出帳後之扣繳日)
 async function getForecastStartingBalance(
   db: any,
   userId: string,
@@ -209,73 +345,9 @@ async function getForecastStartingBalance(
   }>;
 
   const forecastDays = getTaipeiForecastDays(days);
+  const todayObj = forecastDays[0];
   const minDateStr = forecastDays[0].dateStr;
   const maxDateStr = forecastDays[forecastDays.length - 1].dateStr;
-
-  // 尋找自今日起最近一次即將到來的扣繳日（供已出帳 balance 使用）
-  const findFirstDueDate = (dueDay: number): string | null => {
-    for (const d of forecastDays) {
-      const maxDays = new Date(d.year, d.month, 0).getDate();
-      if (d.day === Math.min(dueDay, maxDays)) return d.dateStr;
-    }
-    return null;
-  };
-
-  // 尋找下一次結帳日出帳後的第一個扣繳日（供未出帳 unbilled 使用）
-  const findUnbilledDueDate = (
-    statementDay: number | null,
-    paymentDueDay: number,
-    hasBilledBalance: boolean,
-    billedDueDate: string | null
-  ): string | null => {
-    const todayObj = forecastDays[0];
-    const stmtDay = statementDay || 20;
-    const maxDaysInTodayMonth = new Date(todayObj.year, todayObj.month, 0).getDate();
-    const clampedTodayStmtDay = Math.min(stmtDay, maxDaysInTodayMonth);
-
-    let stmtYear = todayObj.year;
-    let stmtMonth = todayObj.month;
-
-    // 若今日已過本月結帳日，或當期已有已出帳待繳餘額（代表本期已出帳），則未出帳歸屬於下月結帳日
-    if (todayObj.day > clampedTodayStmtDay || hasBilledBalance) {
-      stmtMonth += 1;
-      if (stmtMonth > 12) {
-        stmtYear += 1;
-        stmtMonth -= 12;
-      }
-    }
-
-    const maxDaysInStmtMonth = new Date(stmtYear, stmtMonth, 0).getDate();
-    let due = calculateCreditCardDueDate(
-      stmtYear,
-      stmtMonth,
-      Math.min(stmtDay, maxDaysInStmtMonth),
-      stmtDay,
-      paymentDueDay
-    );
-
-    // 防重疊保護：若該卡有已出帳排程且推算出的未出帳扣繳日未晚於已出帳扣繳日，自動推進至下一期結帳週期
-    if (billedDueDate && due.dateStr <= billedDueDate) {
-      stmtMonth += 1;
-      if (stmtMonth > 12) {
-        stmtYear += 1;
-        stmtMonth -= 12;
-      }
-      const nextMaxDays = new Date(stmtYear, stmtMonth, 0).getDate();
-      due = calculateCreditCardDueDate(
-        stmtYear,
-        stmtMonth,
-        Math.min(stmtDay, nextMaxDays),
-        stmtDay,
-        paymentDueDay
-      );
-    }
-
-    if (due.dateStr >= minDateStr && due.dateStr <= maxDateStr) {
-      return due.dateStr;
-    }
-    return null;
-  };
 
   let immediateCardDeduct = 0;
   const cardEvents: ForecastEvent[] = [];
@@ -326,15 +398,28 @@ async function getForecastStartingBalance(
     const canSettle = isShared === 0 ? isOwn : (isOwn || myRole === 'admin');
 
     if (card.payment_due_day) {
-      let dueDateBilled: string | null = null;
+      const rawBilledSched = rawBilled > 0
+        ? resolveBilledCardSchedule(
+            todayObj,
+            minDateStr,
+            maxDateStr,
+            card.statement_day,
+            card.payment_due_day,
+            card.last_rollover_at
+          )
+        : null;
+
       if (billed > 0) {
-        dueDateBilled = findFirstDueDate(card.payment_due_day);
-        if (dueDateBilled) {
-          const eventKey = `card_due:${card.id}:${dueDateBilled}`;
+        if (rawBilledSched) {
+          const eventKey = `card_due:${card.id}:${rawBilledSched.originalDueDate}`;
+          const mmdd = rawBilledSched.originalDueDate.slice(5).replace('-', '/');
+          const eventName = rawBilledSched.isOverdue
+            ? `繳卡費 · ${card.name}（已出帳 · 原訂 ${mmdd} 扣款）`
+            : `繳卡費 · ${card.name}（已出帳）`;
           cardEvents.push({
             event_key: eventKey,
-            date: dueDateBilled,
-            name: `繳卡費 · ${card.name}（已出帳）`,
+            date: rawBilledSched.scheduledDate,
+            name: eventName,
             type: 'expense',
             amount: billed,
             is_shared: isShared,
@@ -348,18 +433,26 @@ async function getForecastStartingBalance(
       }
 
       if (unbilled > 0) {
-        const dueDateUnbilled = findUnbilledDueDate(
+        const unbilledSched = resolveUnbilledCardSchedule(
+          todayObj,
+          minDateStr,
+          maxDateStr,
           card.statement_day,
           card.payment_due_day,
           rawBilled > 0,
-          dueDateBilled
+          rawBilledSched ? rawBilledSched.originalDueDate : null,
+          card.last_rollover_at
         );
-        if (dueDateUnbilled) {
-          const eventKey = `card_due:${card.id}:${dueDateUnbilled}:unbilled`;
+        if (unbilledSched) {
+          const eventKey = `card_due:${card.id}:${unbilledSched.originalDueDate}:unbilled`;
+          const mmdd = unbilledSched.originalDueDate.slice(5).replace('-', '/');
+          const eventName = unbilledSched.isOverdue
+            ? `繳卡費 · ${card.name}（未出帳 · 原訂 ${mmdd} 扣款）`
+            : `繳卡費 · ${card.name}（未出帳）`;
           cardEvents.push({
             event_key: eventKey,
-            date: dueDateUnbilled,
-            name: `繳卡費 · ${card.name}（未出帳）`,
+            date: unbilledSched.scheduledDate,
+            name: eventName,
             type: 'expense',
             amount: unbilled,
             is_shared: isShared,
