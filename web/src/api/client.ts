@@ -407,6 +407,7 @@ export interface DayEvent {
   account_name?: string;
   is_settled?: boolean;
   can_settle?: boolean;
+  running_balance?: number;
 }
 
 export interface PurchaseCheckResult {

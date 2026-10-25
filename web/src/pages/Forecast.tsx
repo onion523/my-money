@@ -31,6 +31,61 @@ import {
   AlertCircle,
 } from 'lucide-react'
 
+interface OverdraftInterval {
+  key: string
+  startDate: string
+  endDate: string
+  daysCount: number
+  minBalance: number
+  minDate: string
+  triggerEvents: string[]
+}
+
+function computeOverdraftIntervals(
+  dailyList: Array<{ date: string; balance: number; events: DayEvent[] }>
+): OverdraftInterval[] {
+  const intervals: OverdraftInterval[] = []
+  let current: OverdraftInterval | null = null
+
+  for (const d of dailyList) {
+    if (d.balance < 0) {
+      if (!current) {
+        const activeExpenses = (d.events || [])
+          .filter(ev => !ev.is_settled && ev.type !== 'income')
+          .map(ev => `${ev.name} (-${formatCurrency(ev.amount)})`)
+        const triggers =
+          activeExpenses.length > 0
+            ? activeExpenses
+            : ['起始可用餘額不足（尚無當日新增扣款）']
+        current = {
+          key: d.date,
+          startDate: d.date,
+          endDate: d.date,
+          daysCount: 1,
+          minBalance: d.balance,
+          minDate: d.date,
+          triggerEvents: triggers,
+        }
+      } else {
+        current.endDate = d.date
+        current.key = `${current.startDate}_${d.date}`
+        current.daysCount += 1
+        if (d.balance < current.minBalance) {
+          current.minBalance = d.balance
+          current.minDate = d.date
+        }
+      }
+    } else if (current) {
+      intervals.push(current)
+      current = null
+    }
+  }
+  if (current) {
+    intervals.push(current)
+  }
+  return intervals
+}
+
 export default function Forecast() {
   const [scope, setScope] = useState<'all' | 'household' | 'personal'>('all')
   const [forecast, setForecast] = useState<ForecastResult | null>(null)
@@ -40,6 +95,7 @@ export default function Forecast() {
   // 日期區間查詢狀態（預設空字串代表完整 12 個月區間）
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [focusedIntervalKey, setFocusedIntervalKey] = useState<string | null>(null)
 
   // 購買力檢查狀態
   const [checkAmount, setCheckAmount] = useState('')
@@ -130,9 +186,40 @@ export default function Forecast() {
   const filteredDailyBalances = allDaily.filter(
     d => (!rangeStart || d.date >= rangeStart) && (!rangeEnd || d.date <= rangeEnd)
   )
-  const filteredEvents = (forecast?.events || []).filter(
+
+  // 為每筆排程事件確保具備逐筆累計結餘（running_balance，同日收入優先於支出）
+  const eventsWithRunningBalance = (() => {
+    const rawEvents = [...(forecast?.events || [])].sort((x, y) => {
+      const dateDiff = x.date.localeCompare(y.date)
+      if (dateDiff !== 0) return dateDiff
+      if (x.type !== y.type) return x.type === 'income' ? -1 : 1
+      return 0
+    })
+    let runningBal = forecast?.startingBalance ?? 0
+    return rawEvents.map(ev => {
+      if (!ev.is_settled) {
+        runningBal += ev.type === 'income' ? ev.amount : -ev.amount
+      }
+      const computedBal = Math.round(runningBal * 100) / 100
+      return {
+        ...ev,
+        running_balance: ev.running_balance !== undefined ? ev.running_balance : computedBal,
+      }
+    })
+  })()
+
+  const filteredEvents = eventsWithRunningBalance.filter(
     ev => (!rangeStart || ev.date >= rangeStart) && (!rangeEnd || ev.date <= rangeEnd)
   )
+
+  // 透支區間計算（全期與目前區間）
+  const allOverdraftIntervals = computeOverdraftIntervals(allDaily)
+  const filteredOverdraftIntervals = computeOverdraftIntervals(filteredDailyBalances)
+  const displayedOverdraftIntervals = focusedIntervalKey
+    ? allOverdraftIntervals
+    : filteredOverdraftIntervals
+  const filteredOverdraftDays = filteredOverdraftIntervals.reduce((s, it) => s + it.daysCount, 0)
+  const displayedOverdraftDays = displayedOverdraftIntervals.reduce((s, it) => s + it.daysCount, 0)
 
   let filteredMinBalance = forecast?.minBalance ?? 0
   let filteredMinDate = forecast?.minDate ?? ''
@@ -155,6 +242,7 @@ export default function Forecast() {
   }))
 
   const applyPresetDays = (daysCount: number | null) => {
+    setFocusedIntervalKey(null)
     if (!daysCount || allDaily.length === 0) {
       setStartDate('')
       setEndDate('')
@@ -163,6 +251,18 @@ export default function Forecast() {
     const targetIdx = Math.min(daysCount - 1, allDaily.length - 1)
     setStartDate(minAvailableDate)
     setEndDate(allDaily[targetIdx]?.date || maxAvailableDate)
+  }
+
+  const handleToggleFocusInterval = (iv: OverdraftInterval) => {
+    if (focusedIntervalKey === iv.key) {
+      setFocusedIntervalKey(null)
+      setStartDate('')
+      setEndDate('')
+    } else {
+      setFocusedIntervalKey(iv.key)
+      setStartDate(iv.startDate)
+      setEndDate(iv.endDate)
+    }
   }
 
   if (loading && !forecast) {
@@ -210,7 +310,10 @@ export default function Forecast() {
                   min={minAvailableDate}
                   max={maxAvailableDate}
                   value={effectiveStart}
-                  onChange={e => setStartDate(e.target.value)}
+                  onChange={e => {
+                    setFocusedIntervalKey(null)
+                    setStartDate(e.target.value)
+                  }}
                 />
               </div>
               <span className="forecast-date-sep">~</span>
@@ -224,7 +327,10 @@ export default function Forecast() {
                   min={minAvailableDate}
                   max={maxAvailableDate}
                   value={effectiveEnd}
-                  onChange={e => setEndDate(e.target.value)}
+                  onChange={e => {
+                    setFocusedIntervalKey(null)
+                    setEndDate(e.target.value)
+                  }}
                 />
               </div>
             </div>
@@ -272,7 +378,7 @@ export default function Forecast() {
               <FormulaTooltip
                 label={`檢視${rangeTitlePrefix}資金安全評級計算公式`}
                 formula="模擬未來 12 個月（365 天）逐日餘額，若所選區間最低餘額點 < $0 則判定為「存在透支風險」，若 >= $0 則為「現金流充裕安全」"
-                calculation={`區間（${rangeStart} ~ ${rangeEnd}）最低點 ${formatCurrency(filteredMinBalance)} ${filteredWillOverdraft ? '< $0（存在透支風險）' : '>= $0（現金流充裕安全）'}`}
+                calculation={`區間（${rangeStart} ~ ${rangeEnd}）最低點 ${formatCurrency(filteredMinBalance)} ${filteredWillOverdraft ? `< $0（存在透支風險 · 共 ${filteredOverdraftIntervals.length} 段合計 ${filteredOverdraftDays} 天為負）` : '>= $0（現金流充裕安全）'}`}
               />
             </span>
             {filteredWillOverdraft ? (
@@ -299,7 +405,9 @@ export default function Forecast() {
             )}
           </div>
           <div className="stat-sub">
-            {filteredWillOverdraft ? '預計餘額將跌破 0，請及早調整' : '在排定所有收支後皆保持正值'}
+            {filteredWillOverdraft
+              ? `共 ${filteredOverdraftIntervals.length} 段透支（合計 ${filteredOverdraftDays} 天），請及早調度資金`
+              : '在排定所有收支後皆保持正值'}
           </div>
         </div>
 
@@ -344,6 +452,137 @@ export default function Forecast() {
           <div className="stat-sub">包含各項週期收支與各期信用卡扣繳卡費</div>
         </div>
       </div>
+
+      {/* 透支風險區間明細警示卡（當有餘額 < $0 的區間時顯示） */}
+      {displayedOverdraftIntervals.length > 0 && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 24,
+            borderLeft: '5px solid var(--color-danger)',
+            background: 'rgba(255, 107, 107, 0.05)',
+          }}
+        >
+          <div
+            className="flex items-center justify-between"
+            style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+              <AlertTriangle size={20} color="var(--color-danger)" style={{ flexShrink: 0 }} />
+              <h2 className="text-lg" style={{ fontWeight: 700, color: 'var(--color-danger)', margin: 0 }}>
+                透支風險區間明細（共 {displayedOverdraftIntervals.length} 段 · 合計 {displayedOverdraftDays} 天餘額為負）
+              </h2>
+            </div>
+
+            {isCustomRange ? (
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
+                onClick={() => applyPresetDays(null)}
+              >
+                <RotateCcw size={13} />
+                <span>還原完整 12 個月</span>
+              </button>
+            ) : (
+              <span className="text-xs text-muted">
+                點擊任一透支區間可快速聚焦檢視該時段走勢與排程
+              </span>
+            )}
+          </div>
+
+          <div className="overdraft-intervals-list">
+            {displayedOverdraftIntervals.map((iv, idx) => {
+              const isFocused = focusedIntervalKey === iv.key
+              const dateRangeText =
+                iv.startDate === iv.endDate
+                  ? iv.startDate
+                  : `${iv.startDate} ~ ${iv.endDate}`
+              return (
+                <div
+                  key={iv.key}
+                  className={`overdraft-interval-item ${isFocused ? 'active' : ''}`.trim()}
+                  onClick={() => handleToggleFocusInterval(iv)}
+                >
+                  <div className="overdraft-interval-main">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span
+                        className="badge badge-expense"
+                        style={{ fontSize: '0.72rem', padding: '2px 7px', fontWeight: 700 }}
+                      >
+                        第 {idx + 1} 段
+                      </span>
+                      <span style={{ fontWeight: 700, fontSize: '0.95rem', fontFamily: 'var(--font-display)' }}>
+                        {dateRangeText}
+                      </span>
+                      <span
+                        className="badge"
+                        style={{
+                          fontSize: '0.72rem',
+                          padding: '1px 7px',
+                          background: 'var(--bg-surface-2)',
+                          color: 'var(--text-secondary)',
+                          border: '1px solid var(--border-color)',
+                        }}
+                      >
+                        共 {iv.daysCount} 天
+                      </span>
+                      {isFocused && (
+                        <span
+                          className="badge badge-primary"
+                          style={{ fontSize: '0.7rem', padding: '1px 7px' }}
+                        >
+                          聚焦檢視中
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-secondary" style={{ lineHeight: 1.45, wordBreak: 'break-word' }}>
+                      <span>首日觸發：</span>
+                      <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                        {iv.triggerEvents.join('、')}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="overdraft-interval-side">
+                    <div style={{ textAlign: 'right' }}>
+                      <div className="text-xs text-muted">
+                        區間最低點（{iv.minDate}）
+                      </div>
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          fontSize: '1.05rem',
+                          fontFamily: 'var(--font-display)',
+                          color: 'var(--color-danger)',
+                        }}
+                      >
+                        {formatCurrency(iv.minBalance)}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${isFocused ? 'btn-secondary' : 'btn-ghost'}`}
+                      style={{
+                        padding: '5px 10px',
+                        fontSize: '0.76rem',
+                        border: '1px solid var(--border-color)',
+                        whiteSpace: 'nowrap',
+                      }}
+                      onClick={e => {
+                        e.stopPropagation()
+                        handleToggleFocusInterval(iv)
+                      }}
+                    >
+                      {isFocused ? '取消聚焦' : '聚焦此區間'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 12 個月逐日餘額模擬折線圖 */}
       <div className="card" style={{ marginBottom: 24 }}>
@@ -558,16 +797,48 @@ export default function Forecast() {
                   </div>
 
                   <div className="forecast-event-side">
-                    <div
-                      style={{
-                        fontWeight: 700,
-                        fontFamily: 'var(--font-display)',
-                        color: ev.is_settled ? 'var(--text-muted)' : ev.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)',
-                        textDecoration: ev.is_settled ? 'line-through' : 'none',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {ev.type === 'income' ? '+' : '-'}{formatCurrency(ev.amount)}
+                    <div className="forecast-event-amount-group">
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          fontFamily: 'var(--font-display)',
+                          color: ev.is_settled ? 'var(--text-muted)' : ev.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)',
+                          textDecoration: ev.is_settled ? 'line-through' : 'none',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {ev.type === 'income' ? '+' : '-'}{formatCurrency(ev.amount)}
+                      </div>
+                      {typeof ev.running_balance === 'number' && (
+                        <div
+                          style={{
+                            fontSize: '0.75rem',
+                            fontFamily: 'var(--font-display)',
+                            fontWeight: ev.running_balance < 0 ? 700 : 500,
+                            color: ev.running_balance < 0 ? 'var(--color-danger)' : 'var(--text-secondary)',
+                            whiteSpace: 'nowrap',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <span>{ev.is_settled ? '當下結餘：' : '結餘：'}{formatCurrency(ev.running_balance)}</span>
+                          {ev.running_balance < 0 && (
+                            <span
+                              className="badge"
+                              style={{
+                                fontSize: '0.62rem',
+                                padding: '0px 5px',
+                                background: 'rgba(255,107,107,0.16)',
+                                color: 'var(--color-danger)',
+                                border: '1px solid rgba(255,107,107,0.35)',
+                              }}
+                            >
+                              透支
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {ev.event_key && ev.can_settle !== false && (

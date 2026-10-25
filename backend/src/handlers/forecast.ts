@@ -45,6 +45,7 @@ export interface ForecastEvent {
   account_name?: string;
   is_settled?: boolean;
   can_settle?: boolean;
+  running_balance?: number;
 }
 
 export interface ForecastRecurringItem extends RecurringItem {
@@ -513,7 +514,12 @@ forecast.get('/', async (c) => {
   `).bind(...recParams).all();
 
   const items = recRows.results as unknown as ForecastRecurringItem[];
-  const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
+  const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => {
+    const dateDiff = x.date.localeCompare(y.date);
+    if (dateDiff !== 0) return dateDiff;
+    if (x.type !== y.type) return x.type === 'income' ? -1 : 1;
+    return 0;
+  });
 
   // 逐日模擬（ADR 0018：已勾選 is_settled 之事件不列入餘額加減）
   const forecastDays = getTaipeiForecastDays(FORECAST_DAYS);
@@ -528,6 +534,7 @@ forecast.get('/', async (c) => {
       if (!e.is_settled) {
         balance += e.type === 'income' ? e.amount : -e.amount;
       }
+      e.running_balance = Math.round(balance * 100) / 100;
     });
     if (balance < minBalance) { minBalance = balance; minDate = dateStr; }
     dailyBalances.push({ date: dateStr, balance: Math.round(balance * 100) / 100, events: dayEvents });
@@ -596,7 +603,12 @@ forecast.post('/purchase-check', async (c) => {
   `).bind(...recParams).all();
 
   const items = recRows.results as unknown as ForecastRecurringItem[];
-  const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => x.date.localeCompare(y.date));
+  const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => {
+    const dateDiff = x.date.localeCompare(y.date);
+    if (dateDiff !== 0) return dateDiff;
+    if (x.type !== y.type) return x.type === 'income' ? -1 : 1;
+    return 0;
+  });
   let minBalance = balance;
   events.forEach(e => {
     if (!e.is_settled) {

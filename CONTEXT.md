@@ -377,18 +377,30 @@ _Avoid_: 模除猜測 (modulo guessing)、固定雙數月 (hardcoded even months
 _Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑化 (smoothing)、攤提 (proration)
 
 **Scoped Cash Flow Forecast (三態現金流預測)**:
-支援切換「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」之未來 12 個月（365 天）逐日資金流模擬引擎（含雙月、季、半年、年繳等長週期項目完整排程模擬）。各視角之第 0 天起始基準餘額為該視角下之「現金錢包總額 ＋ 銀行存款總額」實際正資產餘額（未設定繳款日之信用卡欠款除外），並將信用卡欠款依結帳週期拆分為「已出帳待繳款（排入最近一次繳款日）」與「未出帳款（排入下一次結帳日出帳後之繳款日）」分別排入 12 個月時間軸扣減（避免於第 0 天重複預扣或跨期混同），依視角過濾未來 12 個月預定發生之週期收支與繳卡費排程事件，於時間軸卡片標示 `Home` 公帳 / `Lock` 私帳向量徽章與扣款帳戶。
-_Avoid_: 單一混合預測 (unscoped mixed forecast)、第 0 天重複預扣未出帳卡費 (day-0 double deduction of unbilled debt)、將未出帳與已出帳混綁於同一期繳款日 (lumping unbilled debt into current billed due date)
+支援切換「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」之未來 12 個月（365 天）逐日資金流模擬引擎（含雙月、季、半年、年繳等長週期項目完整排程模擬）。各視角之第 0 天起始基準餘額為該視角下之「現金錢包總額 ＋ 銀行存款總額」實際正資產餘額（未設定繳款日之信用卡欠款除外），並將信用卡欠款依結帳週期拆分為「已出帳待繳款（排入最近一次繳款日）」與「未出帳款（排入下一次結帳日出帳後之繳款日）」分別排入 12 個月時間軸扣減（避免於第 0 天重複預扣或跨期混同），依視角過濾未來 12 個月預定發生之週期收支與繳卡費排程事件，於時間軸卡片標示 `Home` 公帳 / `Lock` 私帳向量徽章、扣款帳戶，以及**該筆事件執行後之逐筆累計結餘（`running_balance`，同日多筆事件依收入優先於支出之順序逐筆加減反映水位變化；若結餘 `< $0` 則以醒目珊瑚紅標示透支）**。
+_Avoid_: 單一混合預測 (unscoped mixed forecast)、第 0 天重複預扣未出帳卡費 (day-0 double deduction of unbilled debt)、將未出帳與已出帳混綁於同一期繳款日 (lumping unbilled debt into current billed due date)、時間軸卡片僅顯示收支金額卻看不出當下剩餘水位 (omitting running balance after each scheduled event)
 
 **Forecast Date Range Filter (預測日期區間查詢)**:
 於未來 12 個月（365 天）現金流預測結果之上，提供「起始日期 (`startDate`) ~ 結束日期 (`endDate`)」區間查詢篩選器（預設為今日起算完整 12 個月，並提供「近 60 天」、「近 6 個月」、「完整 12 個月」三顆快捷區間按鈕）。
 - **電腦版與平板端**：日期輸入框（`input[type="date"]`）具備充足最小寬度（`min-width: 150px`），確保 `YYYY-MM-DD` 與原生月曆圖示完整呈現不截斷。
 - **行動端（`<= 640px`）三層滿寬響應式結構**：篩選器卡片轉為 100% 滿寬三層佈局——第一層為「查詢區間」標題列；第二層為起始與結束日期選擇器（滿寬彈性雙欄或單欄展開、字級 `16px` 防止 iOS 自動縮放且完整顯示年月日）；第三層將「近 60 天 / 近 6 個月 / 完整 12 個月」轉為三欄等寬網格按鈕（`grid-template-columns: repeat(3, minmax(0, 1fr))`）。
 調整起訖日期區間時，同步連動篩選並即時重算：
-1. **上方三張指標卡**：該區間內之資金安全評級（依區間最低餘額點判定 `SAFE` / `WARNING` / `DANGER`）、該區間最低餘額點與發生日期、該區間預定事件數。
-2. **現金流水位趨勢圖 (`AreaChart`)**：僅繪製所選起訖日期區間內之逐日餘額走勢，並支援跨年度日期標記（`YYYY-MM-DD`）。
-3. **收支排程清單**：僅顯示落於所選起訖日期區間內之預定收支與繳卡費事件。
+1. **上方三張指標卡**：該區間內之資金安全評級（依區間最低餘額點判定 `SAFE` / `WARNING` / `DANGER`，存在透支時副標題顯示「共 N 段透支（合計 M 天）」）、該區間最低餘額點與發生日期、該區間預定事件數。
+2. **透支風險區間警示卡 (`Overdraft Interval`)**：列出負數餘額之所有連續時間區間並支援點擊快速聚焦。
+3. **現金流水位趨勢圖 (`AreaChart`)**：僅繪製所選起訖日期區間內之逐日餘額走勢，並支援跨年度日期標記（`YYYY-MM-DD`）。
+4. **收支排程清單**：僅顯示落於所選起訖日期區間內之預定收支與繳卡費事件，且每張卡片同步呈現該筆事件發生時之真實累計結餘（`running_balance`）。
 _Avoid_: 僅過濾清單而指標卡與圖表不連動 (decoupled filter state)、日期輸入框寬度過窄導致年份或月曆圖示被裁切 (clipped date input width)、手機版將標題、雙日期框與三個快捷鈕硬塞同一行導致鋸齒狀斷行 (cramming label, two date pickers, and three preset pills into a single jagged flex row on mobile)
+
+**Overdraft Interval (透支風險區間 / 負數餘額區間)**:
+在現金流預測模擬中，將逐日預估餘額小於零（`balance < 0`）之連續日期自動聚合為獨立的「透支風險區間」（若單日為負則顯示 `YYYY-MM-DD（共 1 天）`，連續多日則顯示 `startDate ~ endDate（共 N 天）`）。
+- **單筆透支區間資訊**：
+  1. **起訖日期與持續天數**：`startDate ~ endDate · 共 N 天`（單日則標示 `startDate · 共 1 天`）。
+  2. **區間最低餘額（最大資金缺口）與發生日**：該段連續負值期間內之最低點金額 `minBalance` 與發生日期 `minDate`。
+  3. **首日觸發透支之關鍵支出事件摘要**：列出該區間首日（`startDate`）發生且未勾選已繳之支出／繳卡費事件名稱（若第 0 天起始即為負數則標示「起始可用餘額不足」）。
+- **版面呈現與點擊聚焦互動**：
+  - 當存在透支區間時，於上方三張安全指標卡正下方（折線圖上方）顯示醒目之「透支風險區間警示卡」（若全區間皆 `>= $0` 則自動隱藏）；第一張「資金安全評級」指標卡副標題同步顯示「共 N 段透支（合計 M 天），請及早調度資金」。
+  - 支援點擊任一透支區間（或「聚焦此區間」按鈕）快速將查詢區間（`startDate ~ endDate`）鎖定至該透支區間（若聚焦中則高亮標示當前選中之區間，並於卡片右上角提供「還原完整 12 個月」按鈕方便隨時切換或返回全景）。
+_Avoid_: 僅顯示全期單一最低點而掩蓋多段分佈之透支時期 (showing only a single global minimum date while hiding multiple separate overdraft periods)、未合併連續負數日期導致 300 行重複單日洗版 (flooding UI with unmerged daily negative rows)、無負數時仍佔用版面顯示空警示框 (rendering empty warning box when cash flow is safe)
 
 **Card Payment Event (繳卡費事件)**:
 現金流預測 12 個月（365 天）時間軸上，依信用卡帳務狀態拆分為兩類獨立扣繳支出事件：
@@ -407,7 +419,7 @@ _Avoid_: 自動繳卡 (auto repayment)、漏計未出帳金額 (omitting unbille
 _Avoid_: 刷卡日直接扣款 (immediate swipe cash deduction)、粗暴合併繳卡費 (opaque card merge)
 
 **Settled Forecast Event (已繳預測事件)**:
-未來 12 個月（365 天）現金流預測排程中，已被使用者勾選標記為「已繳」（搭配 `CheckCircle2` / `Circle` 向量圖示）之單次排程事件（涵蓋週期支出、週期收入與已出帳／未出帳繳卡費，以 `項目 ID + 預計日期 YYYY-MM-DD` 唯一識別）。當一筆事件已經實際刷卡入帳（進入信用卡未出帳）或已提前消費扣款時，勾選「已繳」即可將該次事件從 12 個月現金流折線圖與購買力試算中豁免（不列入計算，防止重複扣款），並在排程清單中保留顯示為半透明刪除線狀態，支援隨時取消勾選恢復計算。
+未來 12 個月（365 天）現金流預測排程中，已被使用者勾選標記為「已繳」（搭配 `CheckCircle2` / `Circle` 向量圖示）之單次排程事件（涵蓋週期支出、週期收入與已出帳／未出帳繳卡費，以 `項目 ID + 預計日期 YYYY-MM-DD` 唯一識別）。當一筆事件已經實際刷卡入帳（進入信用卡未出帳）或已提前消費扣款時，勾選「已繳」即可將該次事件從 12 個月現金流折線圖與購買力試算中豁免（不列入計算，防止重複扣款），並在排程清單中保留顯示為半透明刪除線狀態，同時標示當下維持不變之預估結餘（`running_balance`），支援隨時取消勾選恢復計算。
 _Avoid_: 刪除排程 (delete schedule)、永久停用 (permanent disable)
 
 **Savings Goal (儲蓄目標)**:

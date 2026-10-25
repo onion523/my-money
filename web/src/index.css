@@ -1484,6 +1484,44 @@ a { text-decoration: none; color: inherit; }
   gap: 6px;
   flex-wrap: wrap;
 }
+.overdraft-intervals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.overdraft-interval-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  border: 1px solid rgba(255, 107, 107, 0.28);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.overdraft-interval-item:hover {
+  border-color: var(--color-danger);
+  box-shadow: var(--shadow-sm);
+}
+.overdraft-interval-item.active {
+  border: 2px solid var(--color-danger);
+  background: rgba(255, 107, 107, 0.10);
+}
+.overdraft-interval-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.overdraft-interval-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
 .forecast-timeline-list {
   display: flex;
   flex-direction: column;
@@ -1506,6 +1544,12 @@ a { text-decoration: none; color: inherit; }
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+.forecast-event-amount-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
 }
 
 /* 帳戶綁定扣繳卡、出帳預覽與彈窗操作列輔助類 */
@@ -1914,6 +1958,18 @@ a { text-decoration: none; color: inherit; }
     padding: 7px 6px;
     font-size: 0.78rem;
   }
+  .overdraft-interval-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .overdraft-interval-side {
+    justify-content: space-between;
+    width: 100%;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border-color-2);
+  }
   .forecast-timeline-list {
     max-height: none;
     overflow-y: visible;
@@ -1928,6 +1984,9 @@ a { text-decoration: none; color: inherit; }
     width: 100%;
     padding-top: 6px;
     border-top: 1px dashed var(--border-color-2);
+  }
+  .forecast-event-amount-group {
+    align-items: flex-start;
   }
 
   /* 彈窗：出帳預覽雙層列、頁尾與報銷彈窗三鈕階層 */
