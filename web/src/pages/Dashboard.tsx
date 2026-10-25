@@ -296,9 +296,9 @@ export default function Dashboard() {
               注意！有 {overBudgets.length} 個分類支出已超出預算！
             </h3>
           </div>
-          <div className="flex gap-md" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+          <div className="flex gap-sm" style={{ marginTop: 8, flexWrap: 'wrap' }}>
             {overBudgets.map(b => (
-              <span key={b.category} className="badge badge-expense">
+              <span key={b.category} className="badge badge-expense alert-badge-wrap">
                 {b.category}：已用 {formatCurrency(b.spent)} / 預算 {formatCurrency(b.amount)}（超支 {formatCurrency(b.spent - b.amount)}）
               </span>
             ))}
@@ -311,12 +311,12 @@ export default function Dashboard() {
         <div className="flex-col gap-lg" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* 帳戶一覽 */}
           <div className="card">
-            <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
-              <h2 className="text-xl flex items-center gap-xs">
-                <CreditCard size={20} color="var(--color-primary)" />
-                帳戶一覽
+            <div className="flex items-center justify-between gap-sm" style={{ marginBottom: 16 }}>
+              <h2 className="text-xl flex items-center gap-xs" style={{ minWidth: 0 }}>
+                <CreditCard size={20} color="var(--color-primary)" style={{ flexShrink: 0 }} />
+                <span>帳戶一覽</span>
               </h2>
-              <Link to="/accounts" className="btn btn-ghost btn-sm">
+              <Link to="/accounts" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>
                 管理帳戶 <ChevronRight size={16} />
               </Link>
             </div>
@@ -466,12 +466,12 @@ export default function Dashboard() {
 
           {/* 最近明細 */}
           <div className="card">
-            <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
-              <h2 className="text-xl flex items-center gap-xs">
-                <Calendar size={20} color="var(--color-primary)" />
-                最近收支明細 ({viewScope === 'household' ? '公帳' : viewScope === 'personal' ? '個人私帳' : '全部'})
+            <div className="flex items-center justify-between gap-sm" style={{ marginBottom: 16 }}>
+              <h2 className="text-xl flex items-center gap-xs" style={{ minWidth: 0 }}>
+                <Calendar size={20} color="var(--color-primary)" style={{ flexShrink: 0 }} />
+                <span>最近收支明細 ({viewScope === 'household' ? '公帳' : viewScope === 'personal' ? '個人私帳' : '全部'})</span>
               </h2>
-              <Link to="/transactions" className="btn btn-ghost btn-sm">
+              <Link to="/transactions" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>
                 查看全部 <ChevronRight size={16} />
               </Link>
             </div>
@@ -497,12 +497,12 @@ export default function Dashboard() {
         <div className="flex-col gap-lg" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* 儲蓄目標進度 */}
           <div className="card">
-            <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
-              <h2 className="text-xl flex items-center gap-xs">
-                <PiggyBank size={20} color="var(--color-primary)" />
-                儲蓄進度
+            <div className="flex items-center justify-between gap-sm" style={{ marginBottom: 16 }}>
+              <h2 className="text-xl flex items-center gap-xs" style={{ minWidth: 0 }}>
+                <PiggyBank size={20} color="var(--color-primary)" style={{ flexShrink: 0 }} />
+                <span>儲蓄進度</span>
               </h2>
-              <Link to="/goals" className="btn btn-ghost btn-sm">
+              <Link to="/goals" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>
                 管理 <ChevronRight size={16} />
               </Link>
             </div>

@@ -381,11 +381,14 @@ _Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑�
 _Avoid_: 單一混合預測 (unscoped mixed forecast)、第 0 天重複預扣未出帳卡費 (day-0 double deduction of unbilled debt)、將未出帳與已出帳混綁於同一期繳款日 (lumping unbilled debt into current billed due date)
 
 **Forecast Date Range Filter (預測日期區間查詢)**:
-於未來 12 個月（365 天）現金流預測結果之上，提供「起始日期 (`startDate`) ~ 結束日期 (`endDate`)」區間查詢篩選器（預設為今日起算完整 12 個月，並提供快速重設鈕）。調整起訖日期區間時，同步連動篩選並即時重算：
+於未來 12 個月（365 天）現金流預測結果之上，提供「起始日期 (`startDate`) ~ 結束日期 (`endDate`)」區間查詢篩選器（預設為今日起算完整 12 個月，並提供「近 60 天」、「近 6 個月」、「完整 12 個月」三顆快捷區間按鈕）。
+- **電腦版與平板端**：日期輸入框（`input[type="date"]`）具備充足最小寬度（`min-width: 150px`），確保 `YYYY-MM-DD` 與原生月曆圖示完整呈現不截斷。
+- **行動端（`<= 640px`）三層滿寬響應式結構**：篩選器卡片轉為 100% 滿寬三層佈局——第一層為「查詢區間」標題列；第二層為起始與結束日期選擇器（滿寬彈性雙欄或單欄展開、字級 `16px` 防止 iOS 自動縮放且完整顯示年月日）；第三層將「近 60 天 / 近 6 個月 / 完整 12 個月」轉為三欄等寬網格按鈕（`grid-template-columns: repeat(3, minmax(0, 1fr))`）。
+調整起訖日期區間時，同步連動篩選並即時重算：
 1. **上方三張指標卡**：該區間內之資金安全評級（依區間最低餘額點判定 `SAFE` / `WARNING` / `DANGER`）、該區間最低餘額點與發生日期、該區間預定事件數。
 2. **現金流水位趨勢圖 (`AreaChart`)**：僅繪製所選起訖日期區間內之逐日餘額走勢，並支援跨年度日期標記（`YYYY-MM-DD`）。
 3. **收支排程清單**：僅顯示落於所選起訖日期區間內之預定收支與繳卡費事件。
-_Avoid_: 僅過濾清單而指標卡與圖表不連動 (decoupled filter state)
+_Avoid_: 僅過濾清單而指標卡與圖表不連動 (decoupled filter state)、日期輸入框寬度過窄導致年份或月曆圖示被裁切 (clipped date input width)、手機版將標題、雙日期框與三個快捷鈕硬塞同一行導致鋸齒狀斷行 (cramming label, two date pickers, and three preset pills into a single jagged flex row on mobile)
 
 **Card Payment Event (繳卡費事件)**:
 現金流預測 12 個月（365 天）時間軸上，依信用卡帳務狀態拆分為兩類獨立扣繳支出事件：
@@ -445,8 +448,8 @@ _Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick 
 _Avoid_: 高彩度刺眼藍紫深色底 (`#1A1A2E` / `#252540`)、純黑高反差眩光 (`#000000`)、未設 `color: inherit` 導致圖示按鈕退回純黑 `#000000` 融入深色卡片 (uncolored buttons falling back to browser black `#000000` on dark cards)、深色模式下重複定義覆寫之粉紅邊框 (`rgba(255, 158, 158, 0.15)`)、元件行內寫死亮白底色導致深色模式白底配白字 (hardcoding `#FAFBFD`/`#F9FAFB` causing white-on-white text in dark mode)、寫死深灰或深藍文字導致深色模式過暗無法辨識 (hardcoding `#4B5563`/`#1E40AF` on dark surfaces)
 
 **Skeleton Screen (骨架屏)**:
-在非同步資料載入完成前，呈現與真實頁面結構（含行動端 RWD 斷點佈局）1:1 對齊的微光佔位區塊，用於防止版面跳動 (CLS) 並提供流暢的等待視覺回饋。所有骨架卡片統一沿用響應式標準內距（嚴禁寫死行內大內距），圓形圖示佔位固定比例不壓縮變形（`flex-shrink: 0`），文字與矩形佔位條具備彈性百分比／最大寬度防溢出保護（`max-width: 100%` 與 `min-width: 0`），並於行動端同步對齊三態等寬切換列、可收合篩選列與家庭成員名冊等真實區塊結構。
-_Avoid_: 載入轉圈 (spinner)、空白佔位 (blank placeholder)、假資料 (mock data)、寫死固定像素寬度導致手機版擠壓溢出 (hardcoded pixel widths overflowing mobile cards)、圓形骨架壓縮成橢圓 (squished oval circle skeletons)
+在非同步資料載入完成前，呈現與真實頁面結構（含行動端 RWD 斷點佈局）1:1 對齊的微光佔位區塊，用於防止版面跳動 (CLS) 並提供流暢的等待視覺回饋。所有骨架卡片統一沿用響應式標準內距（嚴禁寫死行內大內距），圓形圖示佔位固定比例不壓縮變形（`flex-shrink: 0`），文字與矩形佔位條具備彈性百分比／最大寬度防溢出保護（`max-width: 100%` 與 `min-width: 0`），並於行動端同步對齊三態等寬切換列、預測日期區間查詢列（且 `ForecastSkeleton` 之折線圖與主網格順序必須與真實頁面完全一致）、可收合篩選列與家庭成員名冊等真實區塊結構。
+_Avoid_: 載入轉圈 (spinner)、空白佔位 (blank placeholder)、假資料 (mock data)、寫死固定像素寬度導致手機版擠壓溢出 (hardcoded pixel widths overflowing mobile cards)、圓形骨架壓縮成橢圓 (squished oval circle skeletons)、骨架區塊上下順序與真實頁面顛倒造成載入完成瞬間版面跳動 (inverted skeleton section order causing layout shift)
 
 **Initial Mount Loading (初次載入狀態)**:
 使用者首次進入頁面或完全重新整理時，在所有初始資料請求完成前呈現全頁骨架屏的狀態。
@@ -469,7 +472,7 @@ _Avoid_: 容器位移 (element translation)、生硬刷光 (hard sweep)、呼吸
 _Avoid_: 手機置中懸浮彈窗 (centered floating modal on mobile)、低於 16px 觸發強制縮放之輸入框 (sub-16px auto-zoom inputs)、誤將二元切換鈕垂直拆行 (stacked binary toggle buttons)
 
 **Modal Layout & Tiered Sizing Architecture (彈窗分層滾動與分級寬度架構)**:
-全站彈窗採用外框防護、固定標題與內部獨立滾動層的三層分離架構，杜絕直角原生卷軸穿透 24px 大圓角，並依內容複雜度落實電腦版分級寬度規範：
+全站彈窗採用外框防護、固定標題與內部獨立滾動層的三層分離架構，杜絕直角原生卷軸穿透 24px 大圓角，並依內容複雜度落實電腦版分級寬度與行動端排版規範：
 1. **結構分層重構（Three-Tier Modal Frame）**：
    - `.modal-box`（外框容器）：配置 `border-radius: var(--radius-xl)`（24px），啟用 `overflow: hidden;` 作為外層圓角遮罩防線，以 `display: flex; flex-direction: column;` 控制縱向排版，徹底杜絕原生卷軸或子容器穿透 24px 圓角。
    - `.modal-header`（固定標題列）：固定於彈窗頂部，不隨內容滾動，包含標題與關閉按鈕，享有專屬內距，關閉按鈕（`modal-close-btn`）不再受卷軸擠壓或遮擋。
@@ -478,34 +481,36 @@ _Avoid_: 手機置中懸浮彈窗 (centered floating modal on mobile)、低於 1
    - **小型確認/數值彈窗**：`maxWidth: 400px`（如預算設定、存入目標）。
    - **標準表單彈窗**：`maxWidth: 540px`（預設值，由 480px 提升至 540px，如新增/編輯帳戶、轉帳、信用卡還款、快速記帳、新增週期性收支、目標設定等，確保各類帳戶選單文字不截斷）。
    - **複雜明細與清單彈窗**：`maxWidth: 720px`（如「結帳日出帳作業預覽」與「家庭代墊報銷清單」，由 640px 提升至 720px），提供充裕水平空間給統計卡片、公私拆解與勾選明細，消除內部雙重嵌套卷軸與擁擠換行。
-   - **還款快捷按鈕滿寬獨立排版**：信用卡繳費彈窗之快捷金額標籤抽離至金額與日期網格下方作為獨立整行（Full-width），不再擠壓於單一欄位內。
-   - **明細備註自然換行**：出帳預覽等清單之收支備註解除 `nowrap` 與 `ellipsis` 單行強制截斷，採 `wordBreak: break-word` 自然多行呈現，完整展現備註內容。
+   - **還款快捷按鈕滿寬獨立排版与精簡按鈕文案**：信用卡繳費彈窗之快捷金額標籤抽離至金額與日期網格下方作為獨立整行（Full-width），不再擠壓於單一欄位內；確認按鈕文案精簡為「確認扣款還款」，並於行動端與取消鈕等寬並排。
+   - **明細備註自然換行與行動端雙層防擠壓**：出帳預覽（Statement Rollover Modal）之收支備註解除 `nowrap` 與 `ellipsis` 單行強制截斷，採 `wordBreak: break-word` 自然多行呈現；在行動端（`<= 640px`）下，單筆消費列轉為上下雙層排版（上層呈現分類、日期、歸屬徽章與完整備註；下層呈現靠左或兩端對齊之金額與「延至下期」按鈕），且彈窗底部將提示文字獨立置於上方，下方「取消 / 確認出帳」採雙欄等寬滿寬按鈕。
+   - **家庭報銷彈窗底部三鈕行動端階層排版**：家庭代墊報銷彈窗（Reimbursement Modal）底部包含「取消」、「已額外處理 (僅移出清單)」、「確認撥款沖帳」三顆操作鈕，於行動端（`<= 640px`）將主行動按鈕「確認撥款沖帳」設為獨立滿寬（100% width），次要按鈕對齊並排，消除參差不齊的擠壓折行。
+   - **邀請碼與驗證碼大字展示框防溢出**：家庭邀請碼與機器人綁定驗證碼展示框具備 `max-width: 100%` 與彈性換行保護（`flex-wrap: wrap`），防止大字距代碼連同複製按鈕撐破窄螢幕。
    - **行動端自適應**：在 `<= 640px` 下，所有分級彈窗統一自動自適應為 100% 滿寬之底部抽屜（Bottom Sheet），維持安全區與吸頂標題列體驗。
-_Avoid_: 外框直接設 overflow-y 導致直角卷軸刺穿圓角 (overflow-y directly on rounded modal-box piercing 24px corners)、Header 隨內容滾走 (header scrolling away with content)、複雜清單塞入窄彈窗造成雙重卷軸 (cramping wide tables into narrow modal causing nested double scrollbars)、卷軸出現時內容橫向跳動 (content layout shifting without scrollbar-gutter)、單行省略截斷導致無法讀取完整備註 (truncating transaction notes with ellipsis)
+_Avoid_: 外框直接設 overflow-y 導致直角卷軸刺穿圓角 (overflow-y directly on rounded modal-box piercing 24px corners)、Header 隨內容滾走 (header scrolling away with content)、複雜清單塞入窄彈窗造成雙重卷軸 (cramping wide tables into narrow modal causing nested double scrollbars)、卷軸出現時內容橫向跳動 (content layout shifting without scrollbar-gutter)、單行省略截斷導致無法讀取完整備註 (truncating transaction notes with ellipsis)、手機版出帳明細單行硬塞備註與金額及延期鈕導致文字壓成直書 (single-row cramming of note, amount, and defer button on mobile)、過長冗餘之確認按鈕文案撐爆手機頁尾 (verbose 15-char confirm button text overflowing mobile modal footer)
 
 **Collapsible Mobile Filter Bar (行動端可收合進階篩選列)**:
-在收支明細頁（Transactions）的行動端視角（`<= 640px`）下，篩選工具列預設僅常駐顯示「三態帳本視角等寬切換器」、「關鍵字搜尋框」與附帶已啟用篩選數徽章之「進階篩選收合按鈕」，將起始／結束日期、收支類型、分類、帳戶等次要篩選條件預設折疊收合（展開時日期採雙欄並排），並將篩選結果統計列之「總收入、總支出、淨收支」轉為三欄等寬網格，確保使用者進入頁面第一屏即可直接檢視收支明細。
-_Avoid_: 手機首屏全展開篩選牆 (full-screen uncollapsed filter wall)、篩選總計文字擠壓斷行 (cramped summary text wrapping)
+在收支明細頁（Transactions）的行動端視角（`<= 640px`）下，篩選工具列預設僅常駐顯示「三態帳本視角等寬切換器」、「關鍵字搜尋框」與附帶已啟用篩選數徽章之「進階篩選收合按鈕」，將起始／結束日期、收支類型、分類、帳戶等次要篩選條件預設折疊收合；展開時，起始與結束日期輸入框採單欄滿寬（`grid-column: 1 / -1`）呈現，確保在 `16px` 防縮放字級下完整顯示 `YYYY-MM-DD` 與原生月曆圖示而不被裁切；同時將篩選結果統計列之「總收入、總支出、淨收支」轉為三欄等寬網格，且金額數值維持完整不斷字（嚴禁使用 `word-break: break-all` 導致大額數字被攔腰切斷換行），確保使用者進入頁面第一屏即可清晰檢視收支明細。
+_Avoid_: 手機首屏全展開篩選牆 (full-screen uncollapsed filter wall)、雙欄窄網格截斷 16px 日期字串 (2-column narrow grid clipping 16px date inputs on mobile)、對統計金額設 `word-break: break-all` 導致數字攔腰斷行 (mid-number line breaks caused by `word-break: break-all`)
 
 **Two-Deck Mobile Transaction Row (手機版收支明細列雙層防誤觸排版)**:
 在行動端小螢幕（`<= 640px`）下，單筆收支明細列（`TransactionRow`）將金額固定靠右上對齊，讓左側分類圖示與中間「分類・備註・徽章・帳戶」享有完整水平寬度；當該列包含操作按鈕（編輯、刪除或系統保護標籤）時，操作區自動獨立下移靠右排列並放大按鈕觸控熱區與安全間距，防止備註擠壓成細長多行及手指誤觸刪除。
 _Avoid_: 單行硬塞金額與微型編刪鈕 (single-line cramming with tiny action icons)、緊貼誤刪風險 (adjacent micro delete button)
 
 **Mobile Account Action Grid (手機版帳戶管理 2x2 快捷網格與觸控優化)**:
-在帳戶管理頁（Accounts）的行動端視角（`<= 640px`）下，頂部四項核心操作（「ATM 提款／轉帳」、「新增現金錢包」、「新增銀行存款帳戶」、「新增信用卡」）自動排列為對齊之 `2x2` 雙欄等寬網格按鈕；帳戶卡片標題列維持名稱與編輯／刪除圖示（至少 `36x36px` 觸控盒）水平兩端對齊，且信用卡「未出帳」區之「校準」與「出帳作業」按鈕提供充足觸控高度與彈性換行空間。
-_Avoid_: 頂部四鈕鋸齒狀折行堆疊 (jagged 4-button wrapping stack)、18px 微型校準按鈕 (micro 18px action buttons)
+在帳戶管理頁（Accounts）的行動端視角（`<= 640px`）下，頂部四項核心操作（「ATM 提款／轉帳」、「新增現金錢包」、「新增銀行存款帳戶」、「新增信用卡」）自動排列為對齊之 `2x2` 雙欄等寬網格按鈕；各類帳戶卡片（含現金、銀行存款、信用卡）標題列統一維持名稱／徽章區（`min-width: 0`）與右側編輯／刪除圖示（`flex-shrink: 0`，至少 `36x36px` 觸控盒）水平兩端對齊不擠壓；銀行存款卡片內之「綁定自動扣繳信用卡」子列於行動端自動轉為上下雙行（上行顯示卡名、下行靠右顯示「已出帳 · 總待繳」金額明細），避免長金額擠扁卡名；信用卡「已出帳待繳款 / 未出帳」雙欄區塊於手機版垂直堆疊時具備清晰間距與分隔線，且「校準」與「出帳作業」按鈕提供充足觸控高度與彈性換行空間。
+_Avoid_: 頂部四鈕鋸齒狀折行堆疊 (jagged 4-button wrapping stack)、18px 微型校準按鈕 (micro 18px action buttons)、綁定扣繳卡子列單行硬塞雙金額導致卡名縮成單字 (bound card row squeezing card name to 1 char due to nowrap dual amounts)
 
 **Mobile Chart & Timeline Adaptation (手機版統計圖表與預測時間軸自適應)**:
-在統計圖表頁（Analytics）與現金流預測頁（Forecast）的行動端視角（`<= 640px`）下，長條圖與折線圖之 X 軸自動啟用簡短月份／日期格式與防重疊跳格（`minTickGap`）；圓餅圖圖例於小螢幕改為單欄左右對齊列表以完整呈現分類名稱、百分比與金額；每月預算進度列與預測排程事件卡片皆轉為上下雙層結構，且預測時間軸解除固定高度內部捲軸限制，隨頁面自然滾動。
+在統計圖表頁（Analytics）與現金流預測頁（Forecast）的行動端視角（`<= 640px`）下，統計頁頂部之月份選擇器（`input[type="month"]`）於 `.header-actions` 中自動彈性滿寬展開（解除固定 `150px` 寬度限制）；長條圖與折線圖之 X 軸自動啟用簡短月份／日期格式與防重疊跳格（`minTickGap`）；圓餅圖圖例於小螢幕改為單欄左右對齊列表以完整呈現分類名稱、百分比與金額；每月預算進度列與預測排程事件卡片皆轉為上下雙層結構，且預測時間軸解除固定高度內部捲軸限制，隨頁面自然滾動。
 _Avoid_: 圖表 X 軸標籤重疊黑塊 (overlapping X-axis tick labels)、圓餅圖例雙欄截斷金額 (truncated 2-column pie legend)、手機局部捲軸陷阱 (nested scroll trapping)
 
 **Mobile Advance Breakdown Card List (手機版家庭代墊與報銷雙層明細列)**:
-在家庭協同頁（Family）的行動端視角（`<= 640px`）下，「代墊與報銷明細」與「共同基金撥款紀錄」捨棄固定最小寬度之四欄橫向捲動表格，轉化為免橫向滑動之上下雙層緊湊列（第一行左列類別與備註、右列金額；第二行左列日期、右列扣款或轉入帳戶）；代墊成員概覽之「累計公帳墊付」與「已獲撥款報銷」於窄螢幕自動上下分行並隱藏行間分隔圓點，操作按鈕採雙欄等寬並排。
-_Avoid_: 手機版四欄強制橫向捲動表格 (horizontal-scroll 4-column table on mobile)、換行尾端殘留分隔圓點 (dangling separator dot on wrap)
+在家庭協同頁（Family）的行動端視角（`<= 640px`）下，「代墊與報銷明細（含待報銷與已結清）」與「共同基金撥款沖帳紀錄」全面捨棄固定最小寬度之橫向捲動表格，轉化為免橫向滑動之上下雙層緊湊列（第一行左列類別與備註、右列金額；第二行左列日期、右列扣款／轉入帳戶與 `.fb-cell-action` 編輯／刪除按鈕，確保 `.reimb-cols` 與 `.settled-cols` 皆完整配置 `action` 網格區域）；「目前待報銷墊付款項」子區塊頂部之批次操作鈕（「全選」與「已額外處理・移出清單」）於行動端支援彈性換行與滿寬對齊；代墊成員概覽之「累計公帳墊付」與「已獲撥款報銷」於窄螢幕自動上下分行並隱藏行間分隔圓點，操作按鈕採雙欄等寬並排。
+_Avoid_: 手機版四欄強制橫向捲動表格 (horizontal-scroll 4-column table on mobile)、換行尾端殘留分隔圓點 (dangling separator dot on wrap)、漏設 `.reimb-cols .fb-cell-action` 網格區域導致撥款紀錄編刪按鈕錯位 (missing grid-area mapping for reimbursement action buttons on mobile)
 
 **Mobile Household Roster & Anti-Cramming Layout (手機版家庭成員名冊與卡片防擠壓排版)**:
-在行動端小螢幕（`<= 640px`）下，全站卡片統一遵循行動端緊湊內距（嚴禁以行內固定大內距覆蓋導致內容可用寬度受壓縮），並維持完整之間距與膠囊徽章色彩體系。家庭群組成員名冊單筆卡片採上下結構：頂部列由左側「圓形頭像＋姓名＋角色膠囊徽章」與右側「移除」操作鈕同行兩端對齊；底部資訊區之「電子信箱」與「加入時間」於手機版自動轉為上下獨立分行並隱藏中間分隔圓點；家庭頂部橫幅操作鈕則於手機版滿寬等寬並排。
-_Avoid_: 頭像與文字零間距緊貼 (zero-gap avatar/text collision)、移除按鈕掉至左下角孤行 (orphaned bottom-left remove button)、行內固定大內距擠壓窄螢幕 (hardcoded inline padding squeezing mobile width)
+在行動端小螢幕（`<= 640px`）下，全站卡片統一遵循行動端緊湊內距（嚴禁以行內固定大內距覆蓋導致內容可用寬度受壓縮），並維持完整之間距與膠囊徽章色彩體系。全站卡片標題列（如總覽頁近期收支／資產帳戶摘要、儲蓄目標卡片 `GoalCard` 等）左側標題區統一配置 `min-width: 0`、右側操作鈕或連結配置 `flex-shrink: 0` 防擠壓保護；總覽頁之「本月預算超支警示」長文字徽章解除 `white-space: nowrap` 單行限制，允許於窄螢幕自然多行換行以防止橫向破版。家庭群組成員名冊單筆卡片採上下結構：頂部列由左側「圓形頭像＋姓名＋角色膠囊徽章」與右側「移除」操作鈕同行兩端對齊；底部資訊區之「電子信箱」與「加入時間」於手機版自動轉為上下獨立分行並隱藏中間分隔圓點；家庭頂部橫幅操作鈕則於手機版滿寬等寬並排。
+_Avoid_: 頭像與文字零間距緊貼 (zero-gap avatar/text collision)、移除按鈕掉至左下角孤行 (orphaned bottom-left remove button)、行內固定大內距擠壓窄螢幕 (hardcoded inline padding squeezing mobile width)、超支警示長徽章 `nowrap` 撐破手機螢幕 (long over-budget alert badge overflowing viewport due to `nowrap`)
 
 **Mobile Segmented Scope & Quick-Add FAB (手機版等寬三態切換與全域懸浮記帳鈕)**:
 在行動端視角（`<= 640px`）下，全站三態視角切換器（`ScopeTabBar`）自動轉為 100% 滿寬之三等分控制項（三個按鈕 `flex: 1` 置中均分，不附冗餘前綴文字）；各頁面頂部操作按鈕統一收斂於 `.header-actions` 容器以確保小螢幕滿寬對齊；同時於行動端右下角（底部導覽列上方安全區）提供水彩粉紅圓形「`+`」懸浮快速記帳按鈕（Quick-Add FAB），支援隨時一鍵喚起記帳表單。

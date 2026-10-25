@@ -1398,7 +1398,11 @@ a { text-decoration: none; color: inherit; }
   gap: 4px;
 }
 
-/* 3. 統計分析與預測時間軸 */
+/* 3. 統計分析與預測時間軸、預測日期區間查詢 */
+.analytics-month-input {
+  width: 165px;
+  padding: 0.4rem 0.6rem;
+}
 .analytics-pie-legend {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -1420,6 +1424,65 @@ a { text-decoration: none; color: inherit; }
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+.forecast-filter-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.forecast-filter-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.forecast-filter-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.forecast-filter-dates {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+.forecast-date-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.forecast-date-tag {
+  display: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.forecast-date-input {
+  min-width: 156px;
+  width: auto;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+.forecast-date-sep {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.forecast-filter-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 .forecast-timeline-list {
   display: flex;
@@ -1443,6 +1506,98 @@ a { text-decoration: none; color: inherit; }
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+
+/* 帳戶綁定扣繳卡、出帳預覽與彈窗操作列輔助類 */
+.bound-card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--bg-surface-2);
+  gap: 8px;
+}
+.bound-card-name {
+  color: var(--text-secondary);
+  font-weight: 500;
+  min-width: 0;
+  word-break: break-word;
+}
+.bound-card-amounts {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.rollover-tx-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 8px;
+  gap: 10px;
+  transition: all 0.15s ease;
+}
+.rollover-tx-main {
+  min-width: 0;
+  flex: 1;
+}
+.rollover-tx-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.rollover-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rollover-modal-actions {
+  display: flex;
+  gap: 10px;
+}
+.reimb-modal-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+.modal-footer-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.alert-badge-wrap {
+  white-space: normal;
+  text-align: left;
+  line-height: 1.45;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  word-break: break-word;
+}
+.family-pending-batch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.family-pending-batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 /* 4. 家庭代墊與報銷明細表 */
@@ -1602,6 +1757,11 @@ a { text-decoration: none; color: inherit; }
   .tx-advanced-filters.open {
     display: grid;
   }
+  .tx-advanced-filters input[type="date"] {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
   .tx-filter-account-group {
     grid-column: 1 / -1;
   }
@@ -1619,12 +1779,13 @@ a { text-decoration: none; color: inherit; }
     align-items: center;
     text-align: center;
     gap: 2px;
-    font-size: 0.76rem;
+    font-size: 0.75rem;
     min-width: 0;
   }
   .tx-summary-metric strong {
-    font-size: 0.85rem;
-    word-break: break-all;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    word-break: normal;
   }
 
   /* 收支明細：雙層防誤觸明細列 */
@@ -1647,7 +1808,7 @@ a { text-decoration: none; color: inherit; }
     border-radius: var(--radius-sm);
   }
 
-  /* 帳戶管理：2x2 快捷網格與信用卡觸控高度 */
+  /* 帳戶管理：2x2 快捷網格、綁定扣繳卡與信用卡觸控高度 */
   .accounts-header-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1665,8 +1826,28 @@ a { text-decoration: none; color: inherit; }
     padding: 6px 12px;
     font-size: 0.8rem;
   }
+  .bound-card-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 7px 10px;
+  }
+  .bound-card-amounts {
+    width: 100%;
+    justify-content: flex-end;
+    font-size: 0.76rem;
+  }
+  .cc-due-hero > .grid-2 > div:nth-child(2) {
+    padding-top: 10px;
+    border-top: 1px dashed var(--border-color);
+  }
 
-  /* 統計與預測時間軸 */
+  /* 統計、預測日期區間三層佈局與預測時間軸 */
+  .analytics-month-input {
+    width: 100%;
+    flex: 1;
+    min-width: 0;
+  }
   .budget-item-header {
     flex-direction: column;
     align-items: stretch;
@@ -1675,6 +1856,63 @@ a { text-decoration: none; color: inherit; }
   .budget-item-meta {
     justify-content: space-between;
     width: 100%;
+  }
+  .forecast-filter-card {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+  .forecast-filter-main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+  }
+  .forecast-filter-dates {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    width: 100%;
+  }
+  .forecast-date-field {
+    width: 100%;
+  }
+  .forecast-date-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-color);
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+  }
+  .forecast-date-input {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    font-size: 1rem;
+    padding: 7px 10px;
+  }
+  .forecast-date-sep {
+    display: none;
+  }
+  .forecast-filter-presets {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+  .forecast-filter-presets .btn {
+    width: 100%;
+    justify-content: center;
+    padding: 7px 6px;
+    font-size: 0.78rem;
   }
   .forecast-timeline-list {
     max-height: none;
@@ -1692,7 +1930,67 @@ a { text-decoration: none; color: inherit; }
     border-top: 1px dashed var(--border-color-2);
   }
 
+  /* 彈窗：出帳預覽雙層列、頁尾與報銷彈窗三鈕階層 */
+  .rollover-tx-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .rollover-tx-side {
+    justify-content: space-between;
+    width: 100%;
+    padding-top: 6px;
+    border-top: 1px dashed var(--border-color-2);
+  }
+  .rollover-modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .rollover-modal-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .rollover-modal-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .reimb-modal-footer {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+  .reimb-modal-footer .btn {
+    justify-content: center;
+  }
+  .reimb-modal-footer .reimb-submit-btn {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .modal-footer-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+  .modal-footer-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
   /* 家庭代墊與報銷雙層明細列 */
+  .family-pending-batch-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .family-pending-batch-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
   .family-breakdown-header,
   .family-breakdown-header.advance-cols,
   .family-breakdown-header.reimb-cols,
@@ -1724,6 +2022,7 @@ a { text-decoration: none; color: inherit; }
     background: var(--bg-surface);
     border: 1px solid var(--border-color-2);
   }
+  .family-breakdown-row.reimb-cols .fb-cell-action,
   .family-breakdown-row.settled-cols .fb-cell-action {
     grid-area: action;
     display: flex;
@@ -1734,6 +2033,11 @@ a { text-decoration: none; color: inherit; }
   }
   .fb-cell-main {
     grid-area: main;
+    align-items: flex-start;
+  }
+  .fb-cell-title {
+    white-space: normal;
+    word-break: break-word;
   }
   .fb-cell-amount {
     grid-area: amount;
@@ -1748,6 +2052,8 @@ a { text-decoration: none; color: inherit; }
     text-align: right;
     font-size: 0.74rem;
     color: var(--text-muted);
+    white-space: normal;
+    word-break: break-word;
   }
 }
 

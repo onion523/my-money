@@ -176,6 +176,9 @@ export default function BotIntegration() {
                   padding: '16px 20px',
                   display: 'inline-flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap',
+                  maxWidth: '100%',
                   gap: 14,
                   marginBottom: 10
                 }}>

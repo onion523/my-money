@@ -766,7 +766,7 @@ export default function Family() {
 
                             return (
                               <div style={{ marginBottom: 20 }}>
-                                <div className="flex items-center justify-between" style={{ marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                                <div className="family-pending-batch-header" style={{ marginBottom: 10 }}>
                                   <div>
                                     <h4 style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
                                       <Receipt size={16} color="var(--color-primary)" />
@@ -777,11 +777,11 @@ export default function Family() {
                                     </span>
                                   </div>
                                   {canManageAdv && advanceItems.length > 0 && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                    <div className="family-pending-batch-actions">
                                       <button
                                         type="button"
                                         className="btn btn-secondary btn-sm"
-                                        style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                                        style={{ padding: '5px 10px', fontSize: '0.78rem' }}
                                         onClick={() => toggleInlineSelectAll(adv.user_id, allAdvIds)}
                                       >
                                         {isAllInlineSelected ? '取消全選' : '全選'}
@@ -790,11 +790,13 @@ export default function Family() {
                                         type="button"
                                         className="btn btn-primary btn-sm"
                                         style={{
-                                          padding: '4px 10px',
+                                          padding: '5px 10px',
                                           fontSize: '0.78rem',
                                           display: 'inline-flex',
                                           alignItems: 'center',
+                                          justifyContent: 'center',
                                           gap: 4,
+                                          flex: 1,
                                           opacity: myInlineSelected.length === 0 ? 0.55 : 1,
                                         }}
                                         disabled={myInlineSelected.length === 0 || markingSettled}
@@ -1175,10 +1177,13 @@ export default function Family() {
               background: 'var(--bg-surface-2)',
               border: '2px dashed var(--color-primary)',
               borderRadius: 'var(--radius-lg)',
-              padding: '18px 24px',
+              padding: '16px 20px',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 16,
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              maxWidth: '100%',
+              gap: 14,
               marginBottom: 16
             }}>
               <span style={{ fontSize: '1.8rem', fontWeight: 800, letterSpacing: 4, color: 'var(--color-primary-dark)' }}>
@@ -1525,7 +1530,7 @@ export default function Family() {
               />
             </div>
 
-            <div className="flex justify-end gap-sm" style={{ marginTop: 24, flexWrap: 'wrap' }}>
+            <div className="reimb-modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setReimburseModalTarget(null)}>
                 取消
               </button>
@@ -1541,7 +1546,7 @@ export default function Family() {
               >
                 {markingSettled ? '移出處理中...' : '已額外處理 (僅移出清單)'}
               </button>
-              <button type="submit" className="btn btn-primary" disabled={reimbursing || markingSettled}>
+              <button type="submit" className="btn btn-primary reimb-submit-btn" disabled={reimbursing || markingSettled}>
                 {reimbursing ? '撥款報銷中...' : '確認撥款沖帳'}
               </button>
             </div>

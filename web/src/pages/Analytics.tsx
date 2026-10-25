@@ -213,8 +213,7 @@ export default function Analytics() {
         <div className="header-actions flex items-center gap-sm">
           <Calendar size={16} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
           <input
-            className="input"
-            style={{ width: 150, padding: '0.4rem 0.6rem' }}
+            className="input analytics-month-input"
             type="month"
             value={currentMonth}
             onChange={e => setCurrentMonth(e.target.value)}

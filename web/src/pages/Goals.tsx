@@ -481,13 +481,13 @@ function GoalCard({
 
   return (
     <div className="card" style={{ borderTop: isDone ? '4px solid var(--color-success)' : '4px solid var(--color-primary)' }}>
-      <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: 10, background: 'rgba(255,138,138,0.12)', color: 'var(--color-primary)' }}>
+      <div className="flex items-center justify-between gap-sm" style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: 10, background: 'rgba(255,138,138,0.12)', color: 'var(--color-primary)', flexShrink: 0 }}>
             <GoalIcon name={goal.emoji} size={20} />
           </span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{goal.name}</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: '1.1rem', wordBreak: 'break-word' }}>{goal.name}</div>
             {goal.deadline && (
               <div className="text-xs text-muted">
                 預計截止：{goal.deadline}
@@ -496,7 +496,7 @@ function GoalCard({
           </div>
         </div>
 
-        <div className="flex gap-xs">
+        <div className="flex gap-xs" style={{ flexShrink: 0 }}>
           <button className="btn-icon" title="編輯" onClick={onEdit}>
             <Edit2 size={15} />
           </button>

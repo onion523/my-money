@@ -491,8 +491,33 @@ export function ForecastSkeleton() {
         </div>
       </div>
 
-      {/* 公私帳切換列骨架 */}
-      <ScopeTabBarSkeleton />
+      {/* 公私帳切換列 + 日期區間查詢列骨架 */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+          marginBottom: 20,
+        }}
+      >
+        <ScopeTabBarSkeleton />
+        <div className="card forecast-filter-card" style={{ marginBottom: 0 }}>
+          <div className="forecast-filter-main">
+            <Skeleton variant="text" width={72} height={18} />
+            <div className="forecast-filter-dates">
+              <Skeleton variant="rect" width={156} height={36} borderRadius={8} className="forecast-date-input" />
+              <Skeleton variant="rect" width={156} height={36} borderRadius={8} className="forecast-date-input" />
+            </div>
+          </div>
+          <div className="forecast-filter-presets">
+            <Skeleton variant="rect" width={68} height={30} borderRadius={8} style={{ width: '100%', minWidth: 64 }} />
+            <Skeleton variant="rect" width={72} height={30} borderRadius={8} style={{ width: '100%', minWidth: 68 }} />
+            <Skeleton variant="rect" width={88} height={30} borderRadius={8} style={{ width: '100%', minWidth: 80 }} />
+          </div>
+        </div>
+      </div>
 
       {/* 統計卡片骨架 */}
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
@@ -504,22 +529,32 @@ export function ForecastSkeleton() {
         ))}
       </div>
 
-      <div className="grid-forecast-main">
-        {/* 走勢圖卡片骨架 */}
-        <div className="card" style={{ minWidth: 0 }}>
-          <div className="flex items-center justify-between gap-2" style={{ marginBottom: 16 }}>
-            <Skeleton variant="text" width="45%" height={20} />
-            <Skeleton variant="text" width="30%" height={16} />
-          </div>
-          <Skeleton variant="rect" height={260} borderRadius={12} />
+      {/* 走勢圖卡片骨架（與真實頁面相同，位於雙欄網格上方） */}
+      <div className="card" style={{ minWidth: 0, marginBottom: 24 }}>
+        <div className="flex items-center justify-between gap-2" style={{ marginBottom: 16 }}>
+          <Skeleton variant="text" width="min(200px, 50%)" height={20} />
+          <Skeleton variant="text" width="min(140px, 35%)" height={16} />
         </div>
+        <Skeleton variant="rect" height={260} borderRadius={12} />
+      </div>
 
+      <div className="grid-forecast-main">
         {/* 購買力試算骨架 */}
         <div className="card" style={{ minWidth: 0 }}>
           <Skeleton variant="text" width="50%" height={20} style={{ marginBottom: 14 }} />
           <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
             <Skeleton variant="rect" height={40} borderRadius={8} style={{ flex: 1, minWidth: 140 }} />
             <Skeleton variant="rect" width={96} height={40} borderRadius={8} style={{ flexShrink: 0 }} />
+          </div>
+        </div>
+
+        {/* 收支排程時間軸骨架 */}
+        <div className="card" style={{ minWidth: 0 }}>
+          <Skeleton variant="text" width="45%" height={20} style={{ marginBottom: 14 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[1, 2, 3].map(i => (
+              <Skeleton key={i} variant="rect" height={54} borderRadius={8} />
+            ))}
           </div>
         </div>
       </div>

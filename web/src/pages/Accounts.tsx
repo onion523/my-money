@@ -868,16 +868,17 @@ export default function Accounts() {
                           return (
                             <div
                               key={bc.id}
-                              className="flex items-center justify-between"
-                              style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', gap: 6 }}
+                              className="bound-card-item"
                             >
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <span className="bound-card-name" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: bc.color || 'var(--color-danger)', flexShrink: 0 }} />
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{bc.name}</span>
+                                <span>{bc.name}</span>
                               </span>
-                              <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                已出帳 <strong style={{ color: bcBilled > 0 ? 'var(--color-danger)' : 'var(--text-primary)' }}>{formatCurrency(bcBilled)}</strong>
-                                {' · '}總待繳 {formatCurrency(bcTotal)}
+                              <span className="bound-card-amounts" style={{ color: 'var(--text-secondary)' }}>
+                                <span>
+                                  已出帳 <strong style={{ color: bcBilled > 0 ? 'var(--color-danger)' : 'var(--text-primary)' }}>{formatCurrency(bcBilled)}</strong>
+                                </span>
+                                <span>· 總待繳 {formatCurrency(bcTotal)}</span>
                               </span>
                             </div>
                           )
@@ -961,7 +962,7 @@ export default function Accounts() {
 
               return (
                 <div key={card.id} className="card cc-card" style={{ borderTop: `4px solid ${card.color}` }}>
-                  <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+                  <div className="account-card-header" style={{ marginBottom: 12 }}>
                     <div className="account-name-group">
                       <span className="account-color-dot" style={{ backgroundColor: card.color }} />
                       <h3 className="account-name">{card.name}</h3>
@@ -996,7 +997,7 @@ export default function Accounts() {
                       )}
                     </div>
                     {canModifyAccount(card) && (
-                      <div className="flex gap-xs">
+                      <div className="flex gap-xs" style={{ flexShrink: 0 }}>
                         <button className="btn-icon" title="編輯" onClick={() => handleOpenEdit(card)}>
                           <Edit2 size={16} />
                         </button>
@@ -1720,12 +1721,12 @@ export default function Accounts() {
               />
             </div>
 
-            <div className="flex justify-end gap-sm" style={{ marginTop: 24 }}>
+            <div className="modal-footer-actions" style={{ marginTop: 24 }}>
               <button type="button" className="btn btn-secondary" onClick={() => setPayCardModal(null)}>
                 取消
               </button>
               <button type="submit" className="btn btn-primary" disabled={paying}>
-                {paying ? '繳款扣款中...' : '確認信用卡扣款還款信用卡待繳款'}
+                {paying ? '繳款扣款中...' : '確認扣款還款'}
               </button>
             </div>
           </form>
@@ -1950,23 +1951,20 @@ export default function Accounts() {
                             return (
                               <div
                                 key={t.id}
+                                className="rollover-tx-item"
                                 style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
                                   padding: '8px 6px',
                                   borderBottom: '1px solid var(--border-color-2)',
                                   opacity: isDeferred ? 0.55 : 1,
                                   background: isDeferred ? 'rgba(245, 158, 11, 0.08)' : 'transparent',
                                   borderRadius: 6,
-                                  transition: 'all 0.15s ease',
                                 }}
                               >
-                                <div className="flex items-center gap-xs" style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
-                                  <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                                <div className="rollover-tx-main flex items-center gap-xs">
+                                  <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                                     <CategoryIcon category={t.category || '其他'} size={15} />
                                   </div>
-                                  <div style={{ minWidth: 0 }}>
+                                  <div style={{ minWidth: 0, flex: 1 }}>
                                     <div className="flex items-center gap-xs" style={{ flexWrap: 'wrap' }}>
                                       <span style={{ fontSize: '0.82rem', fontWeight: 600, textDecoration: isDeferred ? 'line-through' : 'none' }}>
                                         {t.category || '消費'}
@@ -2050,7 +2048,7 @@ export default function Accounts() {
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-sm">
+                                <div className="rollover-tx-side">
                                   <span
                                     style={{
                                       fontSize: '0.88rem',
@@ -2079,11 +2077,11 @@ export default function Accounts() {
                     </div>
 
                     {/* 底部確認按鈕組 */}
-                    <div className="flex items-center justify-between" style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
+                    <div className="rollover-modal-footer" style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                         切換延期僅於預覽中試算，確認出帳時統一寫入
                       </span>
-                      <div className="flex gap-xs">
+                      <div className="rollover-modal-actions">
                         <button
                           type="button"
                           className="btn btn-secondary"

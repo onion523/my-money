@@ -193,49 +193,47 @@ export default function Forecast() {
       >
         <ScopeTabBar scope={scope} onChange={setScope} />
 
-        <div
-          className="card"
-          style={{
-            padding: '10px 14px',
-            marginBottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 8,
-          }}
-        >
-          <span className="text-xs text-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
-            <Calendar size={14} color="var(--color-primary)" />
-            查詢區間：
-          </span>
-          <input
-            id="forecast-start-date"
-            type="date"
-            className="input"
-            aria-label="預測起始日期"
-            style={{ width: 'auto', padding: '5px 10px', fontSize: '0.82rem' }}
-            min={minAvailableDate}
-            max={maxAvailableDate}
-            value={effectiveStart}
-            onChange={e => setStartDate(e.target.value)}
-          />
-          <span className="text-xs text-muted">~</span>
-          <input
-            id="forecast-end-date"
-            type="date"
-            className="input"
-            aria-label="預測結束日期"
-            style={{ width: 'auto', padding: '5px 10px', fontSize: '0.82rem' }}
-            min={minAvailableDate}
-            max={maxAvailableDate}
-            value={effectiveEnd}
-            onChange={e => setEndDate(e.target.value)}
-          />
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div className="card forecast-filter-card" style={{ marginBottom: 0 }}>
+          <div className="forecast-filter-main">
+            <span className="forecast-filter-label">
+              <Calendar size={15} color="var(--color-primary)" />
+              查詢區間：
+            </span>
+            <div className="forecast-filter-dates">
+              <div className="forecast-date-field">
+                <span className="forecast-date-tag">起</span>
+                <input
+                  id="forecast-start-date"
+                  type="date"
+                  className="input forecast-date-input"
+                  aria-label="預測起始日期"
+                  min={minAvailableDate}
+                  max={maxAvailableDate}
+                  value={effectiveStart}
+                  onChange={e => setStartDate(e.target.value)}
+                />
+              </div>
+              <span className="forecast-date-sep">~</span>
+              <div className="forecast-date-field">
+                <span className="forecast-date-tag">迄</span>
+                <input
+                  id="forecast-end-date"
+                  type="date"
+                  className="input forecast-date-input"
+                  aria-label="預測結束日期"
+                  min={minAvailableDate}
+                  max={maxAvailableDate}
+                  value={effectiveEnd}
+                  onChange={e => setEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="forecast-filter-presets">
             <button
               type="button"
               className="btn btn-sm btn-ghost"
-              style={{ padding: '4px 8px', fontSize: '0.75rem', border: '1px solid var(--border-color)' }}
+              style={{ border: '1px solid var(--border-color)' }}
               onClick={() => applyPresetDays(60)}
             >
               近 60 天
@@ -243,7 +241,7 @@ export default function Forecast() {
             <button
               type="button"
               className="btn btn-sm btn-ghost"
-              style={{ padding: '4px 8px', fontSize: '0.75rem', border: '1px solid var(--border-color)' }}
+              style={{ border: '1px solid var(--border-color)' }}
               onClick={() => applyPresetDays(183)}
             >
               近 6 個月
@@ -251,7 +249,7 @@ export default function Forecast() {
             <button
               type="button"
               className={`btn btn-sm ${!isCustomRange ? 'btn-primary' : 'btn-ghost'}`}
-              style={{ padding: '4px 8px', fontSize: '0.75rem', border: '1px solid var(--border-color)' }}
+              style={{ border: '1px solid var(--border-color)' }}
               onClick={() => applyPresetDays(null)}
             >
               完整 12 個月
