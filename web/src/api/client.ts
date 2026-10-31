@@ -5,25 +5,49 @@ function getToken(): string | null {
   return localStorage.getItem('mm_token');
 }
 
+// 客戶端記憶體快取 (支援 HTTP 304 Not Modified 條件式快取，ADR-0033)
+interface CacheEntry {
+  etag: string;
+  data: any;
+}
+const apiCache = new Map<string, CacheEntry>();
+
+export function clearApiCache() {
+  apiCache.clear();
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
+  const method = (options.method || 'GET').toUpperCase();
+  const isGet = method === 'GET';
+
+  const cached = isGet ? apiCache.get(path) : undefined;
+  const reqHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(isGet && cached?.etag ? { 'If-None-Match': cached.etag } : {}),
+    ...(options.headers as Record<string, string> || {}),
+  };
+
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
+    headers: reqHeaders,
   });
 
   if (res.status === 401 && !path.startsWith('/auth/')) {
     try {
       localStorage.removeItem('mm_token');
       localStorage.removeItem('mm_user');
+      apiCache.clear();
     } catch (_) {}
     if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
       window.location.href = '/login';
     }
+  }
+
+  // 304 Not Modified: 直接複用客戶端記憶體快取 (零傳輸、零二次解析)
+  if (res.status === 304 && cached) {
+    return cached.data as T;
   }
 
   let data: any = {};
@@ -36,6 +60,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!res.ok || !data.success) {
     throw new Error(data.error || '請求失敗');
   }
+
+  if (isGet) {
+    const etag = res.headers.get('ETag') || res.headers.get('etag');
+    if (etag) {
+      apiCache.set(path, { etag, data: data.data });
+    }
+  } else {
+    // 寫入操作 (POST, PUT, DELETE) 立即清空快取以維持資料即時一致
+    apiCache.clear();
+  }
+
   return data.data as T;
 }
 

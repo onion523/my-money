@@ -94,6 +94,8 @@ CREATE TABLE IF NOT EXISTS budgets (
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_tx_account_type_billed_date ON transactions(account_id, type, is_billed, date);
 CREATE INDEX IF NOT EXISTS idx_tx_user_shared_date ON transactions(user_id, is_shared, date);
+CREATE INDEX IF NOT EXISTS idx_tx_pair_id ON transactions(pair_tx_id);
+CREATE INDEX IF NOT EXISTS idx_tx_stats ON transactions(user_id, is_shared, type, date);
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_recurring_user ON recurring_items(user_id);
 CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id);

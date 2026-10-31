@@ -531,3 +531,27 @@ _Avoid_: 手機版偏左不等寬三態按鈕 (left-aligned uneven scope tabs)�
 **Formula Breakdown Tooltip (統計公式透明化氣泡提示)**:
 在全站所有統計數據儀表板卡片（總覽、帳戶管理、週期收支、儲蓄目標、現金流預測之 `.stat-card`）以及次要統計摘要區塊（收支明細篩選總計、統計分析消費總額與公帳分攤佔比、家庭協同代墊待報銷淨額）之指標標題旁，配置 `Info`（小 `i`）向量圖示按鈕。點擊時彈出自動防超出螢幕邊界之懸浮氣泡框（Popover Tooltip，點擊外部或再次點擊即收合，不撐開原卡片高度），框內分上下兩層同時呈現「會計計算公式定義」與「代入當前視角實際金額之驗算算式」，讓使用者能即時核對每一項統計指標的組成來源。
 _Avoid_: 僅支援滑鼠懸停而手機無法觸發之原生 title (hover-only native title tooltip)、無實際數值代入之空泛文字 (static formula without live values)、超出手機螢幕右側邊界之氣泡框 (off-screen overflowing popover)
+
+---
+
+### 系統架構與 API 效能規範 (System Architecture & API Performance)
+
+**Indexed Ledger Scans & Keyset-Compatible Pagination (收支明細複合索引覆蓋與相容分頁)**:
+針對龐大帳本歷史查詢（`GET /transactions`），依據常用篩選條件組合（使用者、公私帳視角、日期區間、帳戶等）建立高效複合覆蓋索引，包含 `(user_id, is_shared, date)`、`(account_id, type, is_billed, date)` 等。API 分頁維持原生 `limit` 與 `offset` 參數以向下相容現有前端，並同時支援以 `(date, created_at, rowid)` 組合之游標式（Cursor-based / Keyset）篩選機制，杜絕大資料量深層翻頁時的全表掃描開銷。
+_Avoid_: 無索引任意多欄位過濾掃描 (unindexed multi-column table scans)、破壞現有前端分頁協定 (breaking existing pagination contract)
+
+**Paired Transaction Reverse Indexing (成對平帳流水反向檢索索引)**:
+針對內部轉帳、ATM提款、信用卡還款與公帳報銷之成對紀錄（`findPairedTransaction`），在資料庫層級顯式建立 `idx_tx_pair_id ON transactions(pair_tx_id)`。當系統執行成對反向配對或自癒修復時，直接透過 B-Tree 索引達成 $O(1)$ 瞬時檢索，徹底根除每次編輯或刪除成對收支時對數萬筆交易紀錄執行的全表循序掃描 (Full Table Scan)。
+_Avoid_: 缺乏外鍵索引的反向匹配 (reverse lookup without foreign index)、每次編輯刪除遍歷全表 (iterating full table on every paired operation)
+
+**Event Direct Projection Forecast Engine (事件直接投影預測引擎)**:
+在現金流預測（`GET /forecast`）與即時採購試算（`POST /forecast/purchase-check`）中，預測演算架構由「逐日 365 次外層迴圈檢查各個定期項目（$O(\text{days} \times N)$）」全面重構為「針對定期項目依週期直接投影發生日（$O(N \times \text{cycles})$）」。月繳項目一年僅計算 12 次、年繳僅計算 1 次，消除 95% 以上之無效日期建構與迴圈運算；同時對同一張信用卡之多個週期結帳與到期日推算於單次請求生命週期內實施記憶化（Memoization），保留 365 天長程預測視野並達成毫秒級極速回應。
+_Avoid_: 365 天逐日雙重迴圈重算 (365-day nested day-by-day recalculation)、無快取重複建立 Date 物件 (redundant Date instantiation)、為求效能犧牲長期預測視窗 (sacrificing forecast horizon for speed)
+
+**Lightweight ETag & Conditional HTTP 304 Caching (輕量 ETag 與 HTTP 304 條件式快取)**:
+後端為所有唯讀查詢端點（`GET /accounts`、`/transactions`、`/budgets`、`/goals`、`/recurring`、`/forecast` 等）引入基於回應內容雜湊的輕量 ETag 標頭，並於 CORS 中明確暴露 `ETag` 標頭且接受客戶端 `If-None-Match` 請求標頭。前端 API Client 攔截 `304 Not Modified` 狀態碼並自動複用記憶體快取實體；在帳本資料未變更時避免大體積 JSON 傳輸與重解析成本，一旦發生收支寫入或資料異動即刻獲取最新版本，在零陳舊快取風險（Zero Stale Risk）下達成極低延遲與頻寬節省。
+_Avoid_: 強制私有快取過期導致資料不同步 (stale cache desynchronization)、跨分頁無差別全量傳輸相同 JSON (wasteful full-payload JSON transfer on tab navigation)、CORS 漏配 ETag 標頭導致瀏覽器無法讀取 (missing CORS ETag exposure)
+
+**Exact B-Tree Range Aggregation (統計報表閉區間範圍掃描)**:
+月度收支、分類統計與家庭分攤報表（`GET /transactions/summary/*`）全面廢除 `date LIKE 'YYYY-MM%'` 字串模糊前綴比對，重構為明確之日期閉區間比較（`date >= ? AND date <= ?`），完全釋放 SQLite / D1 之 B-Tree 索引範圍掃描（Range Scan）能力；配合包含 `(user_id, is_shared, type, date)` 之統計複合索引，確保在百萬級記帳數據下仍能在數毫秒內完成聚合計算。
+_Avoid_: 依賴字串 LIKE 前綴查詢阻礙索引範圍查找 (using string LIKE prefixes blocking B-Tree range scans)、聚合端點缺乏複合覆蓋索引 (missing composite index for grouping)

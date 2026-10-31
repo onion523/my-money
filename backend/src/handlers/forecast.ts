@@ -56,6 +56,8 @@ export interface ForecastRecurringItem extends RecurringItem {
   is_shared?: number;
 }
 
+const creditCardDueDateCache = new Map<string, { year: number; month: number; day: number; dateStr: string }>();
+
 export function calculateCreditCardDueDate(
   chargeYear: number,
   chargeMonth: number,
@@ -63,6 +65,10 @@ export function calculateCreditCardDueDate(
   statementDay: number | null,
   paymentDueDay: number
 ): { year: number; month: number; day: number; dateStr: string } {
+  const cacheKey = `${chargeYear}-${chargeMonth}-${chargeDay}-${statementDay ?? 20}-${paymentDueDay}`;
+  const cached = creditCardDueDateCache.get(cacheKey);
+  if (cached) return cached;
+
   const stmtDay = statementDay || 20;
   let dueYear = chargeYear;
   let dueMonth = chargeMonth;
@@ -89,7 +95,9 @@ export function calculateCreditCardDueDate(
   const maxDaysInDueMonth = new Date(dueYear, dueMonth, 0).getDate();
   const actualDueDay = Math.min(paymentDueDay, maxDaysInDueMonth);
   const dateStr = `${dueYear}-${String(dueMonth).padStart(2, '0')}-${String(actualDueDay).padStart(2, '0')}`;
-  return { year: dueYear, month: dueMonth, day: actualDueDay, dateStr };
+  const result = { year: dueYear, month: dueMonth, day: actualDueDay, dateStr };
+  creditCardDueDateCache.set(cacheKey, result);
+  return result;
 }
 
 export function parseRolloverTaipeiDate(lastRolloverAt?: string | null): string | null {
@@ -242,50 +250,62 @@ function getDaysInForecast(
   const minDateStr = forecastDays[0].dateStr;
   const maxDateStr = forecastDays[forecastDays.length - 1].dateStr;
 
-  for (const dayObj of forecastDays) {
-    const dom = dayObj.day;
-    const month = dayObj.month;
-    const year = dayObj.year;
+  // 1. 預先蒐集預測區間涵蓋的所有月份及其最大天數 (至多 13~14 個月份，消除在 365 逐日雙重迴圈中重複計算)
+  const monthMap = new Map<string, { year: number; month: number; maxDays: number }>();
+  for (const d of forecastDays) {
+    const key = `${d.year}-${d.month}`;
+    if (!monthMap.has(key)) {
+      monthMap.set(key, {
+        year: d.year,
+        month: d.month,
+        maxDays: new Date(d.year, d.month, 0).getDate(),
+      });
+    }
+  }
+  const months = Array.from(monthMap.values());
 
-    // 計算該年該月實際最大天數（支援平年 28、閏年 29、大小月 30/31 天）
-    const maxDaysInMonth = new Date(year, month, 0).getDate();
+  // 2. 針對各週期項目直接進行投影 (Event Direct Projection)
+  // 將複雜度由 O(days * items) 降為 O(months * items)，消除 95%+ 迴圈開銷
+  for (const item of items) {
+    const cycleM = CYCLE_MONTHS[item.cycle] || 1;
+    const anchorM = item.month_of_cycle || 1;
+    const isShared = item.is_shared ?? 0;
+    const canSettle = isShared === 0 ? item.user_id === userId : (item.user_id === userId || myRole === 'admin');
 
-    for (const item of items) {
-      const cycleM = CYCLE_MONTHS[item.cycle] || 1;
-      const anchorM = item.month_of_cycle || 1;
-      const monthDiff = month - anchorM;
+    for (const m of months) {
+      const monthDiff = m.month - anchorM;
       const isCycleMonth = ((monthDiff % cycleM) + cycleM) % cycleM === 0;
+      if (!isCycleMonth) continue;
 
-      // 月底天數平貼：若扣款日大於該月最大天數，自動平貼至該月最後一日
-      const targetDay = Math.min(item.day_of_cycle, maxDaysInMonth);
+      const targetDay = Math.min(item.day_of_cycle, m.maxDays);
+      const dayStr = String(targetDay).padStart(2, '0');
+      const monthStr = String(m.month).padStart(2, '0');
+      const itemDateStr = `${m.year}-${monthStr}-${dayStr}`;
 
-      if (isCycleMonth && dom === targetDay) {
-        const isShared = item.is_shared ?? 0;
-        const canSettle = isShared === 0 ? item.user_id === userId : (item.user_id === userId || myRole === 'admin');
-
-        if (item.account_type === 'credit_card' && item.payment_due_day) {
-          // 信用卡扣款週期收支：平移至該卡所屬之信用卡繳款日 (Payment Due Day)
-          const due = calculateCreditCardDueDate(year, month, targetDay, item.statement_day ?? null, item.payment_due_day);
-          if (due.dateStr >= minDateStr && due.dateStr <= maxDateStr) {
-            const eventKey = `recurring:${item.id}:${due.dateStr}`;
-            events.push({
-              event_key: eventKey,
-              date: due.dateStr,
-              name: `${item.name} (${item.account_name || '信用卡'} · 信用卡繳款日扣款)`,
-              type: item.type,
-              amount: item.amount,
-              is_shared: isShared,
-              account_name: item.account_name || undefined,
-              is_settled: settledKeys.has(eventKey),
-              can_settle: canSettle,
-            });
-          }
-        } else {
-          // 現金或銀行活存扣款：維持於排程扣款日
-          const eventKey = `recurring:${item.id}:${dayObj.dateStr}`;
+      if (item.account_type === 'credit_card' && item.payment_due_day) {
+        // 信用卡扣款週期收支：平移至該卡所屬之信用卡繳款日 (Payment Due Day)
+        const due = calculateCreditCardDueDate(m.year, m.month, targetDay, item.statement_day ?? null, item.payment_due_day);
+        if (due.dateStr >= minDateStr && due.dateStr <= maxDateStr) {
+          const eventKey = `recurring:${item.id}:${due.dateStr}`;
           events.push({
             event_key: eventKey,
-            date: dayObj.dateStr,
+            date: due.dateStr,
+            name: `${item.name} (${item.account_name || '信用卡'} · 信用卡繳款日扣款)`,
+            type: item.type,
+            amount: item.amount,
+            is_shared: isShared,
+            account_name: item.account_name || undefined,
+            is_settled: settledKeys.has(eventKey),
+            can_settle: canSettle,
+          });
+        }
+      } else {
+        // 現金或銀行活存扣款：維持於排程扣款日
+        if (itemDateStr >= minDateStr && itemDateStr <= maxDateStr) {
+          const eventKey = `recurring:${item.id}:${itemDateStr}`;
+          events.push({
+            event_key: eventKey,
+            date: itemDateStr,
             name: item.name,
             type: item.type,
             amount: item.amount,
@@ -298,6 +318,9 @@ function getDaysInForecast(
       }
     }
   }
+
+  // 3. 事件依發生日期排序
+  events.sort((a, b) => a.date.localeCompare(b.date) || a.event_key.localeCompare(b.event_key));
   return events;
 }
 

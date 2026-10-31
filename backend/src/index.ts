@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { etag } from 'hono/etag';
 import type { Env } from './types';
 import auth from './handlers/auth';
 import accounts from './handlers/accounts';
@@ -23,9 +24,13 @@ app.use('*', cors({
     }
     return origin;
   },
-  allowHeaders: ['Content-Type', 'Authorization'],
+  allowHeaders: ['Content-Type', 'Authorization', 'If-None-Match'],
+  exposeHeaders: ['ETag'],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }));
+
+// HTTP ETag (304 Not Modified 條件式快取，ADR-0033)
+app.use('*', etag());
 
 // Health check
 app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));

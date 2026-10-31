@@ -96,7 +96,7 @@ transactions.get('/', async (c) => {
   await ensureAccountsSchema(c.env.DB);
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
-  const { category, from, to, scope = 'all', limit = '50', offset = '0', account_id } = c.req.query();
+  const { category, from, to, scope = 'all', limit = '50', offset = '0', account_id, cursor } = c.req.query();
 
   const { condition, params: scopeParams } = buildScopeCondition(userId, memberUserIds, scope);
 
@@ -107,11 +107,39 @@ transactions.get('/', async (c) => {
   if (account_id) { sql += ' AND t.account_id = ?'; params.push(account_id); }
   if (from) { sql += ' AND t.date >= ?'; params.push(from); }
   if (to) { sql += ' AND t.date <= ?'; params.push(to); }
-  sql += ' ORDER BY t.date DESC, t.created_at DESC, t.rowid DESC LIMIT ? OFFSET ?';
-  params.push(parseInt(limit), parseInt(offset));
+
+  const limitNum = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
+
+  if (cursor) {
+    try {
+      const decoded = decodeURIComponent(cursor);
+      const parts = decoded.split('|');
+      if (parts.length >= 3) {
+        const [cDate, cCreatedAt, cId] = parts;
+        sql += ' AND (t.date < ? OR (t.date = ? AND (t.created_at < ? OR (t.created_at = ? AND t.id < ?))))';
+        params.push(cDate, cDate, cCreatedAt || '', cCreatedAt || '', cId);
+      }
+    } catch (_) {}
+    sql += ' ORDER BY t.date DESC, t.created_at DESC, t.id DESC LIMIT ?';
+    params.push(limitNum);
+  } else {
+    const offsetNum = Math.max(parseInt(offset) || 0, 0);
+    sql += ' ORDER BY t.date DESC, t.created_at DESC, t.id DESC LIMIT ? OFFSET ?';
+    params.push(limitNum, offsetNum);
+  }
 
   const rows = await c.env.DB.prepare(sql).bind(...params).all();
-  return c.json({ success: true, data: rows.results });
+  const results = rows.results || [];
+
+  let nextCursor: string | null = null;
+  if (results.length === limitNum) {
+    const last: any = results[results.length - 1];
+    if (last && last.date && last.id) {
+      nextCursor = encodeURIComponent(`${last.date}|${last.created_at || ''}|${last.id}`);
+    }
+  }
+
+  return c.json({ success: true, data: results, next_cursor: nextCursor });
 });
 
 // POST /transactions
@@ -560,13 +588,15 @@ transactions.get('/summary/category', async (c) => {
   const scope = c.req.query('scope') || 'all';
 
   const { condition, params } = buildScopeCondition(userId, memberUserIds, scope);
+  const startDate = `${month}-01`;
+  const endDate = `${month}-31`;
 
   const rows = await c.env.DB.prepare(`
     SELECT category, SUM(amount) as total
     FROM transactions t
-    WHERE ${condition} AND t.type = 'expense' AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷') AND t.date LIKE ?
+    WHERE ${condition} AND t.type = 'expense' AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷') AND t.date >= ? AND t.date <= ?
     GROUP BY category ORDER BY total DESC
-  `).bind(...params, `${month}%`).all();
+  `).bind(...params, startDate, endDate).all();
   return c.json({ success: true, data: rows.results });
 });
 
@@ -578,14 +608,16 @@ transactions.get('/summary/monthly', async (c) => {
   const scope = c.req.query('scope') || 'all';
 
   const { condition, params } = buildScopeCondition(userId, memberUserIds, scope);
+  const startDate = `${year}-01-01`;
+  const endDate = `${year}-12-31`;
 
   const rows = await c.env.DB.prepare(`
     SELECT strftime('%Y-%m', date) as month, type, SUM(amount) as total
     FROM transactions t
     WHERE ${condition}
-      AND t.date LIKE ?
+      AND t.date >= ? AND t.date <= ?
     GROUP BY month, type ORDER BY month ASC
-  `).bind(...params, `${year}%`).all();
+  `).bind(...params, startDate, endDate).all();
   return c.json({ success: true, data: rows.results });
 });
 
@@ -599,15 +631,17 @@ transactions.get('/summary/household-shares', async (c) => {
 
   const month = c.req.query('month') || new Date().toISOString().slice(0, 7);
   const placeholders = memberUserIds.map(() => '?').join(',');
+  const startDate = `${month}-01`;
+  const endDate = `${month}-31`;
 
   const rows = await c.env.DB.prepare(`
     SELECT t.user_id, u.name as user_name, SUM(t.amount) as total
     FROM transactions t
     JOIN users u ON t.user_id = u.id
-    WHERE t.user_id IN (${placeholders}) AND t.is_shared = 1 AND t.type = 'expense' AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷') AND t.date LIKE ?
+    WHERE t.user_id IN (${placeholders}) AND t.is_shared = 1 AND t.type = 'expense' AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷') AND t.date >= ? AND t.date <= ?
     GROUP BY t.user_id, u.name
     ORDER BY total DESC
-  `).bind(...memberUserIds, `${month}%`).all();
+  `).bind(...memberUserIds, startDate, endDate).all();
 
   return c.json({ success: true, data: rows.results });
 });
