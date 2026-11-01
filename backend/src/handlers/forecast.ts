@@ -497,9 +497,10 @@ async function getForecastStartingBalance(
   return { available, cashTotal, bankTotal, immediateCardDeduct, cardEvents };
 }
 
-async function getSettledKeysSet(db: any): Promise<Set<string>> {
+async function getSettledKeysSet(db: any, memberUserIds: string[]): Promise<Set<string>> {
   await ensureForecastSchema(db);
-  const rows = await db.prepare('SELECT event_key FROM forecast_settled_events').all();
+  const placeholders = memberUserIds.map(() => '?').join(',');
+  const rows = await db.prepare(`SELECT event_key FROM forecast_settled_events WHERE user_id IN (${placeholders})`).bind(...memberUserIds).all();
   const list = (rows.results || []) as Array<{ event_key: string }>;
   return new Set(list.map(r => r.event_key));
 }
@@ -508,9 +509,9 @@ async function getSettledKeysSet(db: any): Promise<Set<string>> {
 forecast.get('/', async (c) => {
   const userId = c.get('userId');
   await ensureRecurringSchema(c.env.DB);
-  const settledKeys = await getSettledKeysSet(c.env.DB);
   const scope = c.req.query('scope') || 'all';
   const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
+  const settledKeys = await getSettledKeysSet(c.env.DB, memberUserIds);
   const placeholders = memberUserIds.map(() => '?').join(',');
 
   const { available, cashTotal, bankTotal, cardEvents } = await getForecastStartingBalance(
@@ -582,11 +583,11 @@ forecast.get('/', async (c) => {
 forecast.post('/purchase-check', async (c) => {
   const userId = c.get('userId');
   await ensureRecurringSchema(c.env.DB);
-  const settledKeys = await getSettledKeysSet(c.env.DB);
   const { amount, scope = 'all' } = await c.req.json();
   if (!amount || amount <= 0) return c.json({ success: false, error: '請輸入有效金額' }, 400);
 
   const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
+  const settledKeys = await getSettledKeysSet(c.env.DB, memberUserIds);
   const placeholders = memberUserIds.map(() => '?').join(',');
 
   const { available, cardEvents } = await getForecastStartingBalance(
