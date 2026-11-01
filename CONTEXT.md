@@ -553,5 +553,10 @@ _Avoid_: 365 天逐日雙重迴圈重算 (365-day nested day-by-day recalculatio
 _Avoid_: 強制私有快取過期導致資料不同步 (stale cache desynchronization)、跨分頁無差別全量傳輸相同 JSON (wasteful full-payload JSON transfer on tab navigation)、CORS 漏配 ETag 標頭導致瀏覽器無法讀取 (missing CORS ETag exposure)
 
 **Exact B-Tree Range Aggregation (統計報表閉區間範圍掃描)**:
-月度收支、分類統計與家庭分攤報表（`GET /transactions/summary/*`）全面廢除 `date LIKE 'YYYY-MM%'` 字串模糊前綴比對，重構為明確之日期閉區間比較（`date >= ? AND date <= ?`），完全釋放 SQLite / D1 之 B-Tree 索引範圍掃描（Range Scan）能力；配合包含 `(user_id, is_shared, type, date)` 之統計複合索引，確保在百萬級記帳數據下仍能在數毫秒內完成聚合計算。
+月度收支、分類統計、家庭分攤報表（`GET /transactions/summary/*`）與月度預算支出聚合（`GET /budgets`）全面廢除 `date LIKE 'YYYY-MM%'` 字串模糊前綴比對，重構為明確之日期閉區間比較（`date >= ? AND date <= ?`），完全釋放 SQLite / D1 之 B-Tree 索引範圍掃描（Range Scan）能力；配合包含 `(user_id, is_shared, type, date)` 之統計複合索引，確保在百萬級記帳數據下仍能在數毫秒內完成聚合計算。
 _Avoid_: 依賴字串 LIKE 前綴查詢阻礙索引範圍查找 (using string LIKE prefixes blocking B-Tree range scans)、聚合端點缺乏複合覆蓋索引 (missing composite index for grouping)
+
+**SQL-Aggregated Card Metrics & Household-Scoped Settled Events (信用卡指標 SQL 端聚合與預測已結清事件範圍化)**:
+`computeCreditCardsReadOnlyMetrics` 由 SQLite / D1 端以 CTE `GROUP BY` 單次批次聚合各卡之當期未出帳消費／刷退／還款沖抵與已出帳公私帳分流（每張卡僅回傳單列彙總數據），不再將信用卡全部歷史交易明細載入 Worker 記憶體逐筆迴圈計算，並維持公私帳欠款與已報銷代墊轉列私帳之 100% 會計準確度。同時，`forecast_settled_events` 讀取嚴格限定本人與家庭成員（`WHERE user_id IN (...)`），杜絕跨家庭全表讀取；`transactions` 補齊排序專用複合索引 `idx_tx_user_sort ON transactions(user_id, date DESC, created_at DESC, id DESC)` 並移除重複索引 `idx_tx_pair`。
+_Avoid_: 將全歷史信用卡交易撈入 Worker 記憶體逐筆累加 (loading full card transaction history into Worker memory)、無 `WHERE` 全表讀取 `forecast_settled_events` (unscoped full-table scan on settled events)、同欄位重複索引增加寫入開銷 (duplicate indexes on `pair_tx_id`)
+

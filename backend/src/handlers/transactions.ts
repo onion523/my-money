@@ -123,9 +123,9 @@ transactions.get('/', async (c) => {
         params.push(cDate, cDate, cCreatedAt || '', cCreatedAt || '', cId);
       }
     } catch (_) {}
-    sql += ' ORDER BY t.date DESC, t.created_at DESC, t.id DESC LIMIT ?';
-    params.push(limitNum);
-  } else if (offsetNum > 0) {
+  }
+
+  if (!cursor && offsetNum > 0) {
     sql += ' ORDER BY t.date DESC, t.created_at DESC, t.id DESC LIMIT ? OFFSET ?';
     params.push(limitNum, offsetNum);
   } else {

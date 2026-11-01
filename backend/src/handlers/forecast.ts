@@ -347,15 +347,16 @@ async function getForecastStartingBalance(
     sqlParams = [userId];
   }
 
-  const allAccounts = await db.prepare(`SELECT * FROM accounts WHERE ${sqlCondition}`).bind(...sqlParams).all();
+  const [allAccounts, cardRows] = await Promise.all([
+    db.prepare(`SELECT * FROM accounts WHERE ${sqlCondition}`).bind(...sqlParams).all(),
+    // 信用卡：依視角計算歸屬本視角之「已出帳 (balance)」與「未出帳 (unbilled)」
+    db.prepare(
+      `SELECT id, user_id, name, balance, unbilled, is_joint, statement_day, payment_due_day, last_rollover_at FROM accounts WHERE type = 'credit_card' AND (user_id = ? OR user_id IN (${placeholders}))`
+    ).bind(userId, ...memberUserIds).all(),
+  ]);
   const accList = allAccounts.results as Array<{ type: string; balance: number }>;
   const cashTotal = accList.filter(a => a.type === 'cash').reduce((s, a) => s + (a.balance || 0), 0);
   const bankTotal = accList.filter(a => a.type === 'bank').reduce((s, a) => s + (a.balance || 0), 0);
-
-  // 信用卡：依視角計算歸屬本視角之「已出帳 (balance)」與「未出帳 (unbilled)」
-  const cardRows = await db.prepare(
-    `SELECT id, user_id, name, balance, unbilled, is_joint, statement_day, payment_due_day, last_rollover_at FROM accounts WHERE type = 'credit_card' AND (user_id = ? OR user_id IN (${placeholders}))`
-  ).bind(userId, ...memberUserIds).all();
   const cards = (cardRows.results || []) as Array<{
     id: string;
     user_id: string;
@@ -594,30 +595,14 @@ forecast.get('/', async (c) => {
 // POST /forecast/purchase-check (支援 scope = all | household | personal)
 forecast.post('/purchase-check', async (c) => {
   const userId = c.get('userId');
-  await ensureRecurringSchema(c.env.DB);
   const { amount, scope = 'all' } = await c.req.json();
   if (!amount || amount <= 0) return c.json({ success: false, error: '請輸入有效金額' }, 400);
 
-  const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
-  const settledKeys = await getSettledKeysSet(c.env.DB, memberUserIds);
+  const [, { memberUserIds, myRole }] = await Promise.all([
+    ensureRecurringSchema(c.env.DB),
+    getUserHousehold(c.env.DB, userId),
+  ]);
   const placeholders = memberUserIds.map(() => '?').join(',');
-
-  const { available, cardEvents } = await getForecastStartingBalance(
-    c.env.DB, userId, scope, memberUserIds, FORECAST_DAYS, settledKeys, myRole
-  );
-  let balance = available - amount;
-
-  // 儲蓄目標影響 (ADR 0016: 公帳視角不檢核成員個人私密儲蓄目標)
-  let affectedGoals: Array<{ name: string; saved_amount: number; target_amount: number; monthly_reserve: number }> = [];
-  let affectsSavings = false;
-
-  if (scope !== 'household') {
-    const goals = await c.env.DB.prepare('SELECT * FROM goals WHERE user_id = ?').bind(userId).all();
-    const goalList = goals.results as Array<{ name: string; saved_amount: number; target_amount: number; monthly_reserve: number }>;
-    affectedGoals = goalList.filter(g => g.monthly_reserve > 0);
-    const totalReserve = affectedGoals.reduce((s, g) => s + g.monthly_reserve, 0);
-    affectsSavings = affectedGoals.length > 0 && balance < totalReserve;
-  }
 
   // 60天現金流（ADR 0018：跳過已勾選 is_settled 之事件）
   let recCondition = `((r.user_id = ? AND r.is_shared = 0) OR (r.user_id IN (${placeholders}) AND r.is_shared = 1))`;
@@ -630,13 +615,36 @@ forecast.post('/purchase-check', async (c) => {
     recParams = [userId];
   }
 
-  const recRows = await c.env.DB.prepare(`
-    SELECT r.*, a.name as account_name, a.type as account_type, a.statement_day, a.payment_due_day
-    FROM recurring_items r
-    LEFT JOIN accounts a ON r.account_id = a.id
-    WHERE ${recCondition}
-    ORDER BY r.created_at ASC
-  `).bind(...recParams).all();
+  const settledPromise = getSettledKeysSet(c.env.DB, memberUserIds);
+  const [startingBalance, goalsRes, recRows] = await Promise.all([
+    settledPromise.then((sk) => getForecastStartingBalance(
+      c.env.DB, userId, scope, memberUserIds, FORECAST_DAYS, sk, myRole
+    )),
+    scope !== 'household'
+      ? c.env.DB.prepare('SELECT * FROM goals WHERE user_id = ?').bind(userId).all()
+      : Promise.resolve(null),
+    c.env.DB.prepare(`
+      SELECT r.*, a.name as account_name, a.type as account_type, a.statement_day, a.payment_due_day
+      FROM recurring_items r
+      LEFT JOIN accounts a ON r.account_id = a.id
+      WHERE ${recCondition}
+      ORDER BY r.created_at ASC
+    `).bind(...recParams).all(),
+  ]);
+  const settledKeys = await settledPromise;
+  const { available, cardEvents } = startingBalance;
+  let balance = available - amount;
+
+  // 儲蓄目標影響 (ADR 0016: 公帳視角不檢核成員個人私密儲蓄目標)
+  let affectedGoals: Array<{ name: string; saved_amount: number; target_amount: number; monthly_reserve: number }> = [];
+  let affectsSavings = false;
+
+  if (goalsRes) {
+    const goalList = goalsRes.results as Array<{ name: string; saved_amount: number; target_amount: number; monthly_reserve: number }>;
+    affectedGoals = goalList.filter(g => g.monthly_reserve > 0);
+    const totalReserve = affectedGoals.reduce((s, g) => s + g.monthly_reserve, 0);
+    affectsSavings = affectedGoals.length > 0 && balance < totalReserve;
+  }
 
   const items = recRows.results as unknown as ForecastRecurringItem[];
   const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => {
