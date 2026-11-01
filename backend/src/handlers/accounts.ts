@@ -75,6 +75,7 @@ export async function ensureAccountsSchema(db: any) {
           db.prepare('CREATE INDEX IF NOT EXISTS idx_tx_user_shared_date ON transactions(user_id, is_shared, date)'),
           db.prepare('CREATE INDEX IF NOT EXISTS idx_tx_pair_id ON transactions(pair_tx_id)'),
           db.prepare('CREATE INDEX IF NOT EXISTS idx_tx_stats ON transactions(user_id, is_shared, type, date)'),
+          db.prepare('CREATE INDEX IF NOT EXISTS idx_tx_user_sort ON transactions(user_id, date DESC, created_at DESC, id DESC)'),
         ]);
       } catch (_) {}
       accountsMigrated = true;

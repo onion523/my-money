@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS budgets (
 
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_tx_user_sort ON transactions(user_id, date DESC, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_tx_account_type_billed_date ON transactions(account_id, type, is_billed, date);
 CREATE INDEX IF NOT EXISTS idx_tx_user_shared_date ON transactions(user_id, is_shared, date);
 CREATE INDEX IF NOT EXISTS idx_tx_pair_id ON transactions(pair_tx_id);

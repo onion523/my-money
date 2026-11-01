@@ -81,7 +81,7 @@ transactions.use('*', authMiddleware);
 
 function buildScopeCondition(userId: string, memberUserIds: string[], scope?: string): { condition: string; params: string[] } {
   const placeholders = memberUserIds.map(() => '?').join(',');
-  if (scope === 'personal') {
+  if (scope === 'personal' || (scope !== 'household' && memberUserIds.length === 1 && memberUserIds[0] === userId)) {
     return { condition: 't.user_id = ?', params: [userId] };
   } else if (scope === 'household') {
     return { condition: `t.user_id IN (${placeholders}) AND t.is_shared = 1`, params: [...memberUserIds] };
@@ -93,10 +93,12 @@ function buildScopeCondition(userId: string, memberUserIds: string[], scope?: st
 
 // GET /transactions
 transactions.get('/', async (c) => {
-  await ensureAccountsSchema(c.env.DB);
   const userId = c.get('userId');
-  const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
-  const { category, from, to, scope = 'all', limit = '50', offset = '0', account_id, cursor } = c.req.query();
+  const [, { memberUserIds }] = await Promise.all([
+    ensureAccountsSchema(c.env.DB),
+    getUserHousehold(c.env.DB, userId),
+  ]);
+  const { category, from, to, scope = 'all', limit = '50', offset, account_id, cursor } = c.req.query();
 
   const { condition, params: scopeParams } = buildScopeCondition(userId, memberUserIds, scope);
 
@@ -109,6 +111,7 @@ transactions.get('/', async (c) => {
   if (to) { sql += ' AND t.date <= ?'; params.push(to); }
 
   const limitNum = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
+  const offsetNum = offset !== undefined ? Math.max(parseInt(offset) || 0, 0) : 0;
 
   if (cursor) {
     try {
@@ -122,10 +125,12 @@ transactions.get('/', async (c) => {
     } catch (_) {}
     sql += ' ORDER BY t.date DESC, t.created_at DESC, t.id DESC LIMIT ?';
     params.push(limitNum);
-  } else {
-    const offsetNum = Math.max(parseInt(offset) || 0, 0);
+  } else if (offsetNum > 0) {
     sql += ' ORDER BY t.date DESC, t.created_at DESC, t.id DESC LIMIT ? OFFSET ?';
     params.push(limitNum, offsetNum);
+  } else {
+    sql += ' ORDER BY t.date DESC, t.created_at DESC, t.id DESC LIMIT ?';
+    params.push(limitNum);
   }
 
   const rows = await c.env.DB.prepare(sql).bind(...params).all();

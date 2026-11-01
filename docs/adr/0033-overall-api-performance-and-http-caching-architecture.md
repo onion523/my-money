@@ -28,6 +28,7 @@ Accepted
    - 建立統計複合覆蓋索引 `idx_tx_stats ON transactions(user_id, is_shared, type, date)`，完全發揮 SQLite 索引範圍掃描能力。
 4. **後端輕量 ETag 與 HTTP 304 條件式快取**：
    - 引入輕量 ETag 生成機制，當請求攜帶 `If-None-Match` 且資料無變更時直接回傳 `304 Not Modified`（空 Response Body）。
+   - **補充說明（ADR 0034）**：目前實作為 Hono 全域 `etag()` 中介層，會在處理器執行完畢並產生回應後計算雜湊，因此 `304` 僅節省網路傳輸頻寬與前端 JSON 解析，不略過後端 D1 查詢（降低 DB 負載由 SQL 聚合、範圍過濾與索引優化負責）。
    - 在 CORS 設定中加入 `Access-Control-Expose-Headers: ETag` 與 `Access-Control-Allow-Headers: If-None-Match`。
 5. **前端 Client 記憶體快取複用**：
    - 前端 `client.ts` 內建透明記憶體快取，發送 GET 請求時自動夾帶已快取的 ETag；當收到 `304` 時即刻複用本地快取，在零陳舊風險下大幅降低傳輸頻寬與延遲。
