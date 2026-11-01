@@ -878,116 +878,98 @@ export async function computeCreditCardsReadOnlyMetrics(
   }>();
   if (!cards || cards.length === 0) return result;
 
-  const uniqueCardIds = Array.from(new Set(cards.map(c => c.id)));
-  const placeholders = uniqueCardIds.map(() => '?').join(',');
+  // ADR-0034：改由 SQL 端以單一聚合查詢取得各卡分類加總（每卡僅回傳一列），
+  // 不再把信用卡全部歷史交易載入 Worker 記憶體逐筆計算。分類規則與逐筆版本完全一致。
+  type CardAgg = {
+    unb_exp_shared: number; unb_exp_personal: number;
+    unb_ref_shared: number; unb_ref_personal: number;
+    unb_repay_shared: number; unb_repay_personal: number;
+    bil_exp_shared: number; bil_exp_personal: number;
+    bil_ref_shared: number; bil_ref_personal: number;
+    bil_repay_shared: number; bil_repay_personal: number;
+  };
+  const cardCutoffs = cards.map((card) => ({
+    card,
+    ...calculateCardCutoffDates(card.statement_day, card.last_rollover_at),
+  }));
 
-  const txRowsResult = await db.prepare(`
-    SELECT account_id, type, category, amount, date, is_shared, is_billed, defer_to_next_statement, unbilled_offset, reimbursement_id
-    FROM transactions
-    WHERE account_id IN (${placeholders})
-    ORDER BY date DESC, created_at DESC, rowid DESC
-  `).bind(...uniqueCardIds).all<{
-    account_id: string;
-    type: string;
-    category: string;
-    amount: number;
-    date: string;
-    is_shared: number;
-    is_billed: number;
-    defer_to_next_statement: number;
-    unbilled_offset: number | null;
-    reimbursement_id: string | null;
-  }>();
-
-  const txsByCard = new Map<string, Array<{
-    type: string;
-    category: string;
-    amount: number;
-    date: string;
-    is_shared: number;
-    is_billed: number;
-    defer_to_next_statement: number;
-    unbilled_offset: number | null;
-    reimbursement_id: string | null;
-  }>>();
-
-  for (const row of (txRowsResult.results || [])) {
-    let list = txsByCard.get(row.account_id);
-    if (!list) {
-      list = [];
-      txsByCard.set(row.account_id, list);
-    }
-    list.push(row);
+  const aggByIndex = new Map<number, CardAgg>();
+  const CHUNK = 20; // 每卡 4 個綁定參數，D1 單語句上限 100
+  const aggStmts: D1PreparedStatement[] = [];
+  for (let start = 0; start < cardCutoffs.length; start += CHUNK) {
+    const slice = cardCutoffs.slice(start, start + CHUNK);
+    const values = slice.map(() => '(?,?,?,?)').join(',');
+    const binds: Array<string | number> = [];
+    slice.forEach((cc, i) => binds.push(start + i, cc.card.id, cc.cutoffStatementDate, cc.prevCutoffStatementDate));
+    aggStmts.push(db.prepare(`
+      WITH c(idx, card_id, cutoff, prev) AS (VALUES ${values}),
+      t AS (
+        SELECT
+          c.idx AS idx,
+          x.type AS type,
+          x.amount AS amount,
+          CASE WHEN x.category = '信用卡還款' THEN 1 ELSE 0 END AS is_repay,
+          CASE WHEN x.category IN ('內部轉帳', 'ATM提款', '公帳代墊報銷') THEN 1 ELSE 0 END AS is_sys,
+          CASE WHEN x.is_shared = 1 THEN 1 ELSE 0 END AS shared_raw,
+          CASE WHEN x.reimbursement_id IS NOT NULL AND TRIM(x.reimbursement_id) <> '' THEN 1 ELSE 0 END AS reimb,
+          COALESCE(x.unbilled_offset, 0) AS off,
+          CASE
+            WHEN c.cutoff <> '' AND c.prev <> '' THEN
+              CASE WHEN x.date > c.cutoff OR (x.date > c.prev AND x.date <= c.cutoff AND x.defer_to_next_statement = 1) THEN 1 ELSE 0 END
+            ELSE
+              CASE WHEN x.is_billed = 0 OR x.defer_to_next_statement = 1 THEN 1 ELSE 0 END
+          END AS unb
+        FROM c
+        JOIN transactions x ON x.account_id = c.card_id
+      ),
+      s AS (
+        SELECT *,
+          CASE WHEN shared_raw = 1 AND NOT (type = 'expense' AND reimb = 1) THEN 1 ELSE 0 END AS shared_eff
+        FROM t
+      )
+      SELECT
+        idx,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND unb = 1 AND type = 'expense' AND shared_eff = 1 THEN amount END), 0) AS unb_exp_shared,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND unb = 1 AND type = 'expense' AND shared_eff = 0 THEN amount END), 0) AS unb_exp_personal,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND unb = 1 AND type = 'income' AND shared_eff = 1 THEN amount END), 0) AS unb_ref_shared,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND unb = 1 AND type = 'income' AND shared_eff = 0 THEN amount END), 0) AS unb_ref_personal,
+        COALESCE(SUM(CASE WHEN is_repay = 1 AND shared_raw = 1 THEN MIN(amount, off) END), 0) AS unb_repay_shared,
+        COALESCE(SUM(CASE WHEN is_repay = 1 AND shared_raw = 0 THEN MIN(amount, off) END), 0) AS unb_repay_personal,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND unb = 0 AND type = 'expense' AND shared_eff = 1 THEN amount END), 0) AS bil_exp_shared,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND unb = 0 AND type = 'expense' AND shared_eff = 0 THEN amount END), 0) AS bil_exp_personal,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND unb = 0 AND type = 'income' AND shared_eff = 1 THEN amount END), 0) AS bil_ref_shared,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND unb = 0 AND type = 'income' AND shared_eff = 0 THEN amount END), 0) AS bil_ref_personal,
+        COALESCE(SUM(CASE WHEN is_repay = 1 AND shared_raw = 1 THEN MAX(0, amount - MIN(amount, off)) END), 0) AS bil_repay_shared,
+        COALESCE(SUM(CASE WHEN is_repay = 1 AND shared_raw = 0 THEN MAX(0, amount - MIN(amount, off)) END), 0) AS bil_repay_personal
+      FROM s
+      GROUP BY idx
+    `).bind(...binds));
+  }
+  const aggResults = aggStmts.length === 1 ? [await aggStmts[0].all<CardAgg & { idx: number }>()] : await db.batch<CardAgg & { idx: number }>(aggStmts);
+  for (const res of aggResults) {
+    for (const row of (res.results || [])) aggByIndex.set(row.idx, row);
   }
 
-  for (const card of cards) {
-    const cardTxs = txsByCard.get(card.id) || [];
-    const { cutoffStatementDate, prevCutoffStatementDate } = calculateCardCutoffDates(card.statement_day, card.last_rollover_at);
+  const ZERO_AGG: CardAgg = {
+    unb_exp_shared: 0, unb_exp_personal: 0, unb_ref_shared: 0, unb_ref_personal: 0,
+    unb_repay_shared: 0, unb_repay_personal: 0,
+    bil_exp_shared: 0, bil_exp_personal: 0, bil_ref_shared: 0, bil_ref_personal: 0,
+    bil_repay_shared: 0, bil_repay_personal: 0,
+  };
 
-    let unbilledExpShared = 0;
-    let unbilledExpPersonal = 0;
-    let unbilledRefShared = 0;
-    let unbilledRefPersonal = 0;
-    let unbilledRepayShared = 0;
-    let unbilledRepayPersonal = 0;
+  for (let cardIdx = 0; cardIdx < cards.length; cardIdx++) {
+    const card = cards[cardIdx];
+    const agg = aggByIndex.get(cardIdx) || ZERO_AGG;
 
-    let billedExpShared = 0;
-    let billedExpPersonal = 0;
-    let billedRefShared = 0;
-    let billedRefPersonal = 0;
-    let billedRepayShared = 0;
-    let billedRepayPersonal = 0;
+    const unbilledExpShared = Number(agg.unb_exp_shared);
+    const unbilledExpPersonal = Number(agg.unb_exp_personal);
+    const unbilledRefShared = Number(agg.unb_ref_shared);
+    const unbilledRefPersonal = Number(agg.unb_ref_personal);
+    const unbilledRepayShared = Number(agg.unb_repay_shared);
 
-    for (const tx of cardTxs) {
-      if (tx.category === '信用卡還款') {
-        const repayAmt = Number(tx.amount || 0);
-        const unbOffset = Math.min(repayAmt, Number(tx.unbilled_offset || 0));
-        const billedRepay = Math.max(0, repayAmt - unbOffset);
-        if (Number(tx.is_shared) === 1) {
-          unbilledRepayShared += unbOffset;
-          billedRepayShared += billedRepay;
-        } else {
-          unbilledRepayPersonal += unbOffset;
-          billedRepayPersonal += billedRepay;
-        }
-        continue;
-      }
-
-      if (SYSTEM_CATEGORIES_SET.has(tx.category)) continue;
-
-      let isUnbilledWindow = false;
-      if (cutoffStatementDate && prevCutoffStatementDate) {
-        isUnbilledWindow =
-          tx.date > cutoffStatementDate ||
-          (tx.date > prevCutoffStatementDate && tx.date <= cutoffStatementDate && Number(tx.defer_to_next_statement) === 1);
-      } else {
-        isUnbilledWindow = Number(tx.is_billed) === 0 || Number(tx.defer_to_next_statement) === 1;
-      }
-
-      // ADR-0029：公帳刷卡支出若已於家庭協同完成報銷沖帳或標記已額外處理 (reimbursement_id 非空)，
-      // 對信用卡待繳而言不再記入公帳，轉列為持卡人私帳待繳 (personal_debt)
-      const isReimbursed = Boolean(tx.reimbursement_id && String(tx.reimbursement_id).trim() !== '');
-      const isShared = Number(tx.is_shared) === 1 && !(tx.type === 'expense' && isReimbursed);
-      const amt = Number(tx.amount || 0);
-
-      if (isUnbilledWindow) {
-        if (tx.type === 'expense') {
-          if (isShared) unbilledExpShared += amt;
-          else unbilledExpPersonal += amt;
-        } else if (tx.type === 'income') {
-          if (isShared) unbilledRefShared += amt;
-          else unbilledRefPersonal += amt;
-        }
-      } else {
-        if (tx.type === 'expense') {
-          if (isShared) billedExpShared += amt;
-          else billedExpPersonal += amt;
-        } else if (tx.type === 'income') {
-          if (isShared) billedRefShared += amt;
-          else billedRefPersonal += amt;
-        }
-      }
-    }
+    const billedExpShared = Number(agg.bil_exp_shared);
+    const billedRefShared = Number(agg.bil_ref_shared);
+    const billedRepayShared = Number(agg.bil_repay_shared);
 
     const totalUnbilledExp = unbilledExpShared + unbilledExpPersonal;
     const totalUnbilledRef = unbilledRefShared + unbilledRefPersonal;
