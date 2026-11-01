@@ -1,4 +1,4 @@
-﻿import { Hono } from 'hono';
+import { Hono } from 'hono';
 import { Env } from '../types';
 import { authMiddleware, generateId } from '../middleware/jwt';
 
@@ -10,10 +10,12 @@ budgets.use('*', authMiddleware);
 budgets.get('/', async (c) => {
   const userId = c.get('userId');
   const month = c.req.query('month') || new Date().toISOString().slice(0, 7);
-  const budgetRows = await c.env.DB.prepare('SELECT * FROM budgets WHERE user_id = ? AND month = ?').bind(userId, month).all();
-  const spendRows = await c.env.DB.prepare(
-    "SELECT category, SUM(amount) as spent FROM transactions WHERE user_id = ? AND date LIKE ? AND type='expense' GROUP BY category"
-  ).bind(userId, `${month}%`).all();
+  const [budgetRows, spendRows] = await Promise.all([
+    c.env.DB.prepare('SELECT * FROM budgets WHERE user_id = ? AND month = ?').bind(userId, month).all(),
+    c.env.DB.prepare(
+      "SELECT category, SUM(amount) as spent FROM transactions WHERE user_id = ? AND date >= ? AND date <= ? AND type='expense' GROUP BY category"
+    ).bind(userId, `${month}-01`, `${month}-31`).all(),
+  ]);
   const spentMap: Record<string, number> = {};
   (spendRows.results as Array<{ category: string; spent: number }>).forEach(r => { spentMap[r.category] = r.spent; });
   const result = (budgetRows.results as Array<{ id: string; category: string; amount: number; month: string }>).map(b => ({

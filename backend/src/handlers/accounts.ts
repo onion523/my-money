@@ -35,7 +35,8 @@ export async function ensureAccountsSchema(db: any) {
         await db.prepare('ALTER TABLE transactions ADD COLUMN pair_tx_id TEXT').run();
       } catch (_) {}
       try {
-        await db.prepare('CREATE INDEX IF NOT EXISTS idx_tx_pair ON transactions(pair_tx_id)').run();
+        // ADR-0034：idx_tx_pair 與 idx_tx_pair_id 同欄位重複，移除舊名稱減少寫入成本
+        await db.prepare('DROP INDEX IF EXISTS idx_tx_pair').run();
       } catch (_) {}
       try {
         await db.prepare("UPDATE transactions SET reimbursement_id = NULL WHERE reimbursement_id = 'historical_reimbursement'").run();

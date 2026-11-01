@@ -508,16 +508,12 @@ async function getSettledKeysSet(db: any, memberUserIds: string[]): Promise<Set<
 // GET /forecast (支援 scope = all | household | personal)
 forecast.get('/', async (c) => {
   const userId = c.get('userId');
-  await ensureRecurringSchema(c.env.DB);
   const scope = c.req.query('scope') || 'all';
-  const { memberUserIds, myRole } = await getUserHousehold(c.env.DB, userId);
-  const settledKeys = await getSettledKeysSet(c.env.DB, memberUserIds);
+  const [, { memberUserIds, myRole }] = await Promise.all([
+    ensureRecurringSchema(c.env.DB),
+    getUserHousehold(c.env.DB, userId),
+  ]);
   const placeholders = memberUserIds.map(() => '?').join(',');
-
-  const { available, cashTotal, bankTotal, cardEvents } = await getForecastStartingBalance(
-    c.env.DB, userId, scope, memberUserIds, FORECAST_DAYS, settledKeys, myRole
-  );
-  let balance = available;
 
   let recCondition = `((r.user_id = ? AND r.is_shared = 0) OR (r.user_id IN (${placeholders}) AND r.is_shared = 1))`;
   let recParams: any[] = [userId, ...memberUserIds];
@@ -529,13 +525,22 @@ forecast.get('/', async (c) => {
     recParams = [userId];
   }
 
-  const recRows = await c.env.DB.prepare(`
-    SELECT r.*, a.name as account_name, a.type as account_type, a.statement_day, a.payment_due_day
-    FROM recurring_items r
-    LEFT JOIN accounts a ON r.account_id = a.id
-    WHERE ${recCondition}
-    ORDER BY r.created_at ASC
-  `).bind(...recParams).all();
+  const settledPromise = getSettledKeysSet(c.env.DB, memberUserIds);
+  const [startingBalance, recRows] = await Promise.all([
+    settledPromise.then((sk) => getForecastStartingBalance(
+      c.env.DB, userId, scope, memberUserIds, FORECAST_DAYS, sk, myRole
+    )),
+    c.env.DB.prepare(`
+      SELECT r.*, a.name as account_name, a.type as account_type, a.statement_day, a.payment_due_day
+      FROM recurring_items r
+      LEFT JOIN accounts a ON r.account_id = a.id
+      WHERE ${recCondition}
+      ORDER BY r.created_at ASC
+    `).bind(...recParams).all(),
+  ]);
+  const settledKeys = await settledPromise;
+  const { available, cashTotal, bankTotal, cardEvents } = startingBalance;
+  let balance = available;
 
   const items = recRows.results as unknown as ForecastRecurringItem[];
   const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => {
@@ -551,9 +556,16 @@ forecast.get('/', async (c) => {
   let minBalance = balance;
   let minDate = forecastDays[0]?.dateStr || '';
 
+  const eventsByDate = new Map<string, ForecastEvent[]>();
+  for (const e of events) {
+    const list = eventsByDate.get(e.date);
+    if (list) list.push(e);
+    else eventsByDate.set(e.date, [e]);
+  }
+
   for (let d = 0; d < FORECAST_DAYS; d++) {
     const dateStr = forecastDays[d].dateStr;
-    const dayEvents = events.filter(e => e.date === dateStr);
+    const dayEvents = eventsByDate.get(dateStr) || [];
     dayEvents.forEach(e => {
       if (!e.is_settled) {
         balance += e.type === 'income' ? e.amount : -e.amount;
