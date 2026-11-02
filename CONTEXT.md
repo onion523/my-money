@@ -548,9 +548,9 @@ _Avoid_: 缺乏外鍵索引的反向匹配 (reverse lookup without foreign index
 在現金流預測（`GET /forecast`）與即時採購試算（`POST /forecast/purchase-check`）中，預測演算架構由「逐日 365 次外層迴圈檢查各個定期項目（$O(\text{days} \times N)$）」全面重構為「針對定期項目依週期直接投影發生日（$O(N \times \text{cycles})$）」。月繳項目一年僅計算 12 次、年繳僅計算 1 次，消除 95% 以上之無效日期建構與迴圈運算；同時對同一張信用卡之多個週期結帳與到期日推算於單次請求生命週期內實施記憶化（Memoization），保留 365 天長程預測視野並達成毫秒級極速回應。
 _Avoid_: 365 天逐日雙重迴圈重算 (365-day nested day-by-day recalculation)、無快取重複建立 Date 物件 (redundant Date instantiation)、為求效能犧牲長期預測視窗 (sacrificing forecast horizon for speed)
 
-**Lightweight ETag & Conditional HTTP 304 Caching (輕量 ETag 與 HTTP 304 條件式快取)**:
-後端為所有唯讀查詢端點（`GET /accounts`、`/transactions`、`/budgets`、`/goals`、`/recurring`、`/forecast` 等）引入基於回應內容雜湊的輕量 ETag 標頭，並於 CORS 中明確暴露 `ETag` 標頭且接受客戶端 `If-None-Match` 請求標頭。前端 API Client 攔截 `304 Not Modified` 狀態碼並自動複用記憶體快取實體；在帳本資料未變更時避免大體積 JSON 傳輸與重解析成本，一旦發生收支寫入或資料異動即刻獲取最新版本，在零陳舊快取風險（Zero Stale Risk）下達成極低延遲與頻寬節省。
-_Avoid_: 強制私有快取過期導致資料不同步 (stale cache desynchronization)、跨分頁無差別全量傳輸相同 JSON (wasteful full-payload JSON transfer on tab navigation)、CORS 漏配 ETag 標頭導致瀏覽器無法讀取 (missing CORS ETag exposure)
+**Lightweight ETag, Cross-Origin 304 Header Retention & Global Error Boundary (輕量 ETag、跨網域 304 CORS 標頭保留與全域錯誤防線)**:
+後端為所有唯讀查詢端點（`GET /accounts`、`/transactions`、`/budgets`、`/goals`、`/recurring`、`/forecast` 等）引入基於回應內容雜湊的輕量 ETag 標頭，並於 CORS 中明確暴露 `ETag` 標頭且接受客戶端 `If-None-Match` 請求標頭。為防止 Hono `etag()` 在命中 `304 Not Modified` 重建空回應時清除 CORS 標頭導致跨網域請求（`pages.dev` → `workers.dev`）遭瀏覽器阻擋，`etag()` 必須將 `access-control-allow-origin`、`access-control-expose-headers`、`access-control-allow-credentials` 列入 `retainedHeaders`。前端 API Client 發送 `fetch` 時指定 `cache: 'no-store'` 以交由記憶體 `apiCache` 單一控管條件式快取，避免瀏覽器原生 HTTP 快取在寫入清空後干擾；若因競態收到 `304` 但本地無快取，則自動無條件重發請求取回最新資料。後端同時配置全域 `app.onError`，以 `console.error` 記錄完整例外與請求路徑，並回傳具備 CORS 標頭之標準 `500` JSON（`{ success: false, error: '伺服器內部錯誤，請稍後再試' }`）。
+_Avoid_: `304 Not Modified` 回應漏失 `Access-Control-Allow-Origin` 導致跨網域 `Failed to fetch` (stripping CORS headers on 304 responses)、瀏覽器原生快取與記憶體快取雙重控管導致空 `304` 拋錯 (dual HTTP cache conflict after `apiCache.clear()`)、未捕捉例外回傳無 CORS 純文字 500 (unhandled exceptions returning plain-text 500)
 
 **Exact B-Tree Range Aggregation (統計報表閉區間範圍掃描)**:
 月度收支、分類統計、家庭分攤報表（`GET /transactions/summary/*`）與月度預算支出聚合（`GET /budgets`）全面廢除 `date LIKE 'YYYY-MM%'` 字串模糊前綴比對，重構為明確之日期閉區間比較（`date >= ? AND date <= ?`），完全釋放 SQLite / D1 之 B-Tree 索引範圍掃描（Range Scan）能力；配合包含 `(user_id, is_shared, type, date)` 之統計複合索引，確保在百萬級記帳數據下仍能在數毫秒內完成聚合計算。

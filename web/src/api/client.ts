@@ -29,10 +29,28 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...(options.headers as Record<string, string> || {}),
   };
 
-  const res = await fetch(`${BASE}${path}`, {
+  let res = await fetch(`${BASE}${path}`, {
     ...options,
+    cache: 'no-store',
     headers: reqHeaders,
   });
+
+  // 304 Not Modified: 直接複用客戶端記憶體快取 (零傳輸、零二次解析)；
+  // 若因併發競態導致收到 304 時本地快取已被清空，則移除 If-None-Match 自動重發一次取回最新資料
+  if (res.status === 304) {
+    const latestCached = cached || (isGet ? apiCache.get(path) : undefined);
+    if (latestCached) {
+      return latestCached.data as T;
+    }
+    const retryHeaders = { ...reqHeaders };
+    delete retryHeaders['If-None-Match'];
+    delete retryHeaders['if-none-match'];
+    res = await fetch(`${BASE}${path}`, {
+      ...options,
+      cache: 'no-store',
+      headers: retryHeaders,
+    });
+  }
 
   if (res.status === 401 && !path.startsWith('/auth/')) {
     try {
@@ -43,11 +61,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
       window.location.href = '/login';
     }
-  }
-
-  // 304 Not Modified: 直接複用客戶端記憶體快取 (零傳輸、零二次解析)
-  if (res.status === 304 && cached) {
-    return cached.data as T;
   }
 
   let data: any = {};
