@@ -169,33 +169,76 @@ households.post('/join', async (c) => {
   return c.json({ success: true, data: { household, role: 'member' } });
 });
 
+export async function handleHouseholdMemberDeparture(
+  db: D1Database,
+  userId: string
+): Promise<{ leftHousehold: boolean }> {
+  const member = await db.prepare('SELECT id, household_id, role FROM household_members WHERE user_id = ?')
+    .bind(userId)
+    .first<{ id: string; household_id: string; role: string }>();
+
+  if (member) {
+    const otherMembersRes = await db.prepare(`
+      SELECT id, user_id, role
+      FROM household_members
+      WHERE household_id = ? AND user_id != ?
+      ORDER BY CASE WHEN role = 'admin' THEN 0 ELSE 1 END, joined_at ASC
+    `).bind(member.household_id, userId).all<{ id: string; user_id: string; role: string }>();
+
+    const otherMembers = otherMembersRes.results || [];
+    if (otherMembers.length === 0) {
+      await db.batch([
+        db.prepare('DELETE FROM household_members WHERE household_id = ?').bind(member.household_id),
+        db.prepare('DELETE FROM household_invitations WHERE household_id = ?').bind(member.household_id),
+        db.prepare('DELETE FROM households WHERE id = ?').bind(member.household_id),
+      ]);
+    } else {
+      const successor = otherMembers[0];
+      const stmts: D1PreparedStatement[] = [
+        db.prepare("UPDATE household_members SET role = 'admin' WHERE id = ?").bind(successor.id),
+        db.prepare('UPDATE households SET created_by = ? WHERE id = ? AND created_by = ?').bind(successor.user_id, member.household_id, userId),
+        db.prepare('UPDATE household_invitations SET inviter_id = ? WHERE household_id = ? AND inviter_id = ?').bind(successor.user_id, member.household_id, userId),
+        db.prepare('DELETE FROM household_members WHERE user_id = ?').bind(userId),
+      ];
+      await db.batch(stmts);
+    }
+    return { leftHousehold: true };
+  }
+
+  // Fallback: 若該使用者先前已離開家庭，但 households.created_by 仍指向該使用者，於刪除帳號前移交給現存成員
+  const createdHouseholdsRes = await db.prepare('SELECT id FROM households WHERE created_by = ?')
+    .bind(userId)
+    .all<{ id: string }>();
+  for (const hh of createdHouseholdsRes.results || []) {
+    const nextMember = await db.prepare(`
+      SELECT id, user_id
+      FROM household_members
+      WHERE household_id = ? AND user_id != ?
+      ORDER BY CASE WHEN role = 'admin' THEN 0 ELSE 1 END, joined_at ASC
+      LIMIT 1
+    `).bind(hh.id, userId).first<{ id: string; user_id: string }>();
+    if (nextMember) {
+      await db.batch([
+        db.prepare("UPDATE household_members SET role = 'admin' WHERE id = ?").bind(nextMember.id),
+        db.prepare('UPDATE households SET created_by = ? WHERE id = ?').bind(nextMember.user_id, hh.id),
+        db.prepare('UPDATE household_invitations SET inviter_id = ? WHERE household_id = ? AND inviter_id = ?').bind(nextMember.user_id, hh.id, userId),
+      ]);
+    } else {
+      await db.batch([
+        db.prepare('DELETE FROM household_invitations WHERE household_id = ?').bind(hh.id),
+        db.prepare('DELETE FROM households WHERE id = ?').bind(hh.id),
+      ]);
+    }
+  }
+
+  return { leftHousehold: false };
+}
+
 // DELETE /households/leave
 households.delete('/leave', async (c) => {
   const userId = c.get('userId');
-  const member = await c.env.DB.prepare('SELECT * FROM household_members WHERE user_id = ?').bind(userId).first<{ id: string; household_id: string; role: string }>();
-  if (!member) return c.json({ success: false, error: '你未加入任何家庭' }, 400);
-
-  // Count members
-  const countRes = await c.env.DB.prepare('SELECT COUNT(*) as count FROM household_members WHERE household_id = ?').bind(member.household_id).first<{ count: number }>();
-  
-  if (countRes && countRes.count <= 1) {
-    // Last member leaves, delete the household
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM household_members WHERE household_id = ?').bind(member.household_id),
-      c.env.DB.prepare('DELETE FROM household_invitations WHERE household_id = ?').bind(member.household_id),
-      c.env.DB.prepare('DELETE FROM households WHERE id = ?').bind(member.household_id),
-    ]);
-  } else {
-    // If admin leaves, transfer admin to someone else
-    if (member.role === 'admin') {
-      const nextMember = await c.env.DB.prepare('SELECT id FROM household_members WHERE household_id = ? AND user_id != ? LIMIT 1')
-        .bind(member.household_id, userId).first<{ id: string }>();
-      if (nextMember) {
-        await c.env.DB.prepare("UPDATE household_members SET role = 'admin' WHERE id = ?").bind(nextMember.id).run();
-      }
-    }
-    await c.env.DB.prepare('DELETE FROM household_members WHERE user_id = ?').bind(userId).run();
-  }
+  const { leftHousehold } = await handleHouseholdMemberDeparture(c.env.DB, userId);
+  if (!leftHousehold) return c.json({ success: false, error: '你未加入任何家庭' }, 400);
 
   return c.json({ success: true, message: '已離開家庭群組' });
 });

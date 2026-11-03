@@ -200,9 +200,42 @@ export const accountsApi = {
 };
 
 // Transactions
+export interface TransactionFilterParams {
+  scope?: string;
+  from?: string;
+  to?: string;
+  account_id?: string;
+  category?: string;
+  type?: 'income' | 'expense' | string;
+  q?: string;
+  cursor?: string;
+  limit?: string;
+  offset?: string;
+  [key: string]: string | undefined;
+}
+
+export interface TransactionRangeSummary {
+  total_income: number;
+  total_expense: number;
+  count: number;
+  by_day: Array<{ date: string; income: number; expense: number }>;
+}
+
 export const txApi = {
-  list: (params?: Record<string, string>) =>
-    get<Transaction[]>(`/transactions${params ? '?' + new URLSearchParams(params).toString() : ''}`),
+  list: (params?: TransactionFilterParams) => {
+    const clean = params
+      ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== '')) as Record<string, string>
+      : undefined;
+    const qs = clean ? new URLSearchParams(clean).toString() : '';
+    return get<Transaction[]>(`/transactions${qs ? '?' + qs : ''}`);
+  },
+  summaryRange: (params?: Omit<TransactionFilterParams, 'cursor' | 'limit' | 'offset'>) => {
+    const clean = params
+      ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== '')) as Record<string, string>
+      : undefined;
+    const qs = clean ? new URLSearchParams(clean).toString() : '';
+    return get<TransactionRangeSummary>(`/transactions/summary/range${qs ? '?' + qs : ''}`);
+  },
   summary: (month?: string, scope?: string) => {
     const q = new URLSearchParams();
     if (month) q.set('month', month);
@@ -367,6 +400,7 @@ export interface Transaction {
   is_billed?: number;
   defer_to_next_statement?: number;
   created_at: string;
+  updated_at?: string | null;
   account_name?: string;
   account_is_joint?: number;
   account_type?: string;
@@ -438,6 +472,7 @@ export interface ForecastResult {
   startingBalance?: number;
   cashTotal?: number;
   bankTotal?: number;
+  cardDeduction?: number;
   dailyBalances: Array<{ date: string; balance: number; events: DayEvent[] }>;
   minBalance: number;
   minDate: string;

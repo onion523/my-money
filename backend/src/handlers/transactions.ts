@@ -91,6 +91,30 @@ function buildScopeCondition(userId: string, memberUserIds: string[], scope?: st
   }
 }
 
+function buildTransactionFilter(
+  userId: string,
+  memberUserIds: string[],
+  query: { scope?: string; category?: string; account_id?: string; from?: string; to?: string; type?: string; q?: string }
+): { whereSql: string; params: (string | number)[] } {
+  const { scope = 'all', category, account_id, from, to, type, q } = query;
+  const { condition, params: scopeParams } = buildScopeCondition(userId, memberUserIds, scope);
+  let whereSql = condition;
+  const params: (string | number)[] = [...scopeParams];
+
+  if (category) { whereSql += ' AND t.category = ?'; params.push(category); }
+  if (account_id) { whereSql += ' AND t.account_id = ?'; params.push(account_id); }
+  if (type === 'income' || type === 'expense') { whereSql += ' AND t.type = ?'; params.push(type); }
+  if (from) { whereSql += ' AND t.date >= ?'; params.push(from); }
+  if (to) { whereSql += ' AND t.date <= ?'; params.push(to); }
+  if (q && q.trim()) {
+    const kw = `%${q.trim().toLowerCase()}%`;
+    whereSql += " AND (LOWER(COALESCE(t.note, '')) LIKE ? OR LOWER(COALESCE(t.category, '')) LIKE ? OR LOWER(COALESCE(a.name, '')) LIKE ? OR LOWER(COALESCE(u.name, '')) LIKE ?)";
+    params.push(kw, kw, kw, kw);
+  }
+
+  return { whereSql, params };
+}
+
 // GET /transactions
 transactions.get('/', async (c) => {
   const userId = c.get('userId');
@@ -98,17 +122,19 @@ transactions.get('/', async (c) => {
     ensureAccountsSchema(c.env.DB),
     getUserHousehold(c.env.DB, userId),
   ]);
-  const { category, from, to, scope = 'all', limit = '50', offset, account_id, cursor } = c.req.query();
+  const { category, from, to, scope = 'all', limit = '50', offset, account_id, cursor, type, q } = c.req.query();
 
-  const { condition, params: scopeParams } = buildScopeCondition(userId, memberUserIds, scope);
+  const { whereSql, params } = buildTransactionFilter(userId, memberUserIds, {
+    scope,
+    category,
+    account_id,
+    from,
+    to,
+    type,
+    q,
+  });
 
-  let sql = `SELECT t.*, a.name as account_name, a.is_joint as account_is_joint, a.type as account_type, u.name as user_name FROM transactions t LEFT JOIN accounts a ON t.account_id = a.id LEFT JOIN users u ON t.user_id = u.id WHERE ${condition}`;
-  const params: (string | number)[] = [...scopeParams];
-
-  if (category) { sql += ' AND t.category = ?'; params.push(category); }
-  if (account_id) { sql += ' AND t.account_id = ?'; params.push(account_id); }
-  if (from) { sql += ' AND t.date >= ?'; params.push(from); }
-  if (to) { sql += ' AND t.date <= ?'; params.push(to); }
+  let sql = `SELECT t.*, a.name as account_name, a.is_joint as account_is_joint, a.type as account_type, u.name as user_name FROM transactions t LEFT JOIN accounts a ON t.account_id = a.id LEFT JOIN users u ON t.user_id = u.id WHERE ${whereSql}`;
 
   const limitNum = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
   const offsetNum = offset !== undefined ? Math.max(parseInt(offset) || 0, 0) : 0;
@@ -145,6 +171,64 @@ transactions.get('/', async (c) => {
   }
 
   return c.json({ success: true, data: results, next_cursor: nextCursor });
+});
+
+// GET /transactions/summary/range — 支援與 GET /transactions 相同篩選條件之區間統計與每日小計 (ADR 0035, #184)
+transactions.get('/summary/range', async (c) => {
+  const userId = c.get('userId');
+  const [, { memberUserIds }] = await Promise.all([
+    ensureAccountsSchema(c.env.DB),
+    getUserHousehold(c.env.DB, userId),
+  ]);
+  const { category, from, to, scope = 'all', account_id, type, q } = c.req.query();
+
+  const { whereSql, params } = buildTransactionFilter(userId, memberUserIds, {
+    scope,
+    category,
+    account_id,
+    from,
+    to,
+    type,
+    q,
+  });
+
+  const baseFrom = `FROM transactions t LEFT JOIN accounts a ON t.account_id = a.id LEFT JOIN users u ON t.user_id = u.id WHERE ${whereSql}`;
+
+  const [totalsRes, byDayRes] = await c.env.DB.batch([
+    c.env.DB.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE 0 END), 0) as total_income,
+        COALESCE(SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END), 0) as total_expense,
+        COUNT(*) as count
+      ${baseFrom}
+    `).bind(...params),
+    c.env.DB.prepare(`
+      SELECT
+        t.date as date,
+        COALESCE(SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE 0 END), 0) as income,
+        COALESCE(SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END), 0) as expense
+      ${baseFrom}
+      GROUP BY t.date
+      ORDER BY t.date DESC
+    `).bind(...params),
+  ]);
+
+  const totalsRow = (totalsRes.results?.[0] || {}) as { total_income?: number; total_expense?: number; count?: number };
+  const byDayRows = ((byDayRes.results || []) as Array<{ date: string; income: number; expense: number }>).map(r => ({
+    date: r.date,
+    income: Math.round(Number(r.income || 0) * 100) / 100,
+    expense: Math.round(Number(r.expense || 0) * 100) / 100,
+  }));
+
+  return c.json({
+    success: true,
+    data: {
+      total_income: Math.round(Number(totalsRow.total_income || 0) * 100) / 100,
+      total_expense: Math.round(Number(totalsRow.total_expense || 0) * 100) / 100,
+      count: Number(totalsRow.count || 0),
+      by_day: byDayRows,
+    },
+  });
 });
 
 // POST /transactions
@@ -320,9 +404,9 @@ transactions.put('/:id', async (c) => {
         // 轉入端帳戶 (個人存款)：balance = balance + delta
         c.env.DB.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(delta, inTx.account_id),
         // 更新當前紀錄
-        c.env.DB.prepare('UPDATE transactions SET amount = ?, date = ?, note = ? WHERE id = ?').bind(newAmt, date, note, existing.id),
+        c.env.DB.prepare("UPDATE transactions SET amount = ?, date = ?, note = ?, updated_at = datetime('now') WHERE id = ?").bind(newAmt, date, note, existing.id),
         // 更新對應端紀錄 (同步金額與日期)
-        c.env.DB.prepare('UPDATE transactions SET amount = ?, date = ? WHERE id = ?').bind(newAmt, date, partner.id),
+        c.env.DB.prepare("UPDATE transactions SET amount = ?, date = ?, updated_at = datetime('now') WHERE id = ?").bind(newAmt, date, partner.id),
       ]);
     } else if (existing.category === '信用卡還款') {
       const bankTx = existing.type === 'expense' ? existing : partner;
@@ -365,9 +449,9 @@ transactions.put('/:id', async (c) => {
         // 銀行帳戶支出更新：扣除額增加 delta (balance = balance - delta)
         c.env.DB.prepare('UPDATE accounts SET balance = balance - ? WHERE id = ?').bind(delta, bankTx.account_id),
         // 更新銀行端紀錄
-        c.env.DB.prepare('UPDATE transactions SET amount = ?, date = ?, note = ? WHERE id = ?').bind(newAmt, date, existing.id === bankTx.id ? note : bankTx.note, bankTx.id),
+        c.env.DB.prepare("UPDATE transactions SET amount = ?, date = ?, note = ?, updated_at = datetime('now') WHERE id = ?").bind(newAmt, date, existing.id === bankTx.id ? note : bankTx.note, bankTx.id),
         // 更新信用卡端紀錄
-        c.env.DB.prepare('UPDATE transactions SET amount = ?, date = ?, note = ?, unbilled_offset = ? WHERE id = ?').bind(newAmt, date, existing.id === cardTx.id ? note : cardTx.note, newUnbilledOffset, cardTx.id),
+        c.env.DB.prepare("UPDATE transactions SET amount = ?, date = ?, note = ?, unbilled_offset = ?, updated_at = datetime('now') WHERE id = ?").bind(newAmt, date, existing.id === cardTx.id ? note : cardTx.note, newUnbilledOffset, cardTx.id),
       ]);
 
       // 冪等重算信用卡已出帳與未出帳
@@ -385,9 +469,9 @@ transactions.put('/:id', async (c) => {
         // 轉入端帳戶：balance = balance + delta
         c.env.DB.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').bind(delta, inTx.account_id),
         // 更新當前紀錄
-        c.env.DB.prepare('UPDATE transactions SET amount = ?, date = ?, note = ? WHERE id = ?').bind(newAmt, date, note, existing.id),
+        c.env.DB.prepare("UPDATE transactions SET amount = ?, date = ?, note = ?, updated_at = datetime('now') WHERE id = ?").bind(newAmt, date, note, existing.id),
         // 更新對應端紀錄 (同步金額與日期)
-        c.env.DB.prepare('UPDATE transactions SET amount = ?, date = ? WHERE id = ?').bind(newAmt, date, partner.id),
+        c.env.DB.prepare("UPDATE transactions SET amount = ?, date = ?, updated_at = datetime('now') WHERE id = ?").bind(newAmt, date, partner.id),
       ]);
     }
 
@@ -455,7 +539,7 @@ transactions.put('/:id', async (c) => {
   const nextIsBilled = defer_to_next_statement === 1 ? 0 : (existing.is_billed || 0);
 
   const updateTxStmt = c.env.DB.prepare(
-    'UPDATE transactions SET account_id = ?, type = ?, category = ?, amount = ?, note = ?, date = ?, is_shared = ?, defer_to_next_statement = ?, is_billed = ? WHERE id = ?'
+    "UPDATE transactions SET account_id = ?, type = ?, category = ?, amount = ?, note = ?, date = ?, is_shared = ?, defer_to_next_statement = ?, is_billed = ?, updated_at = datetime('now') WHERE id = ?"
   ).bind(account_id, type, category, amount, note, date, is_shared, defer_to_next_statement, nextIsBilled, id);
 
   await c.env.DB.batch([...accountStmts, updateTxStmt]);

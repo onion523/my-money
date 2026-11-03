@@ -540,7 +540,7 @@ forecast.get('/', async (c) => {
     `).bind(...recParams).all(),
   ]);
   const settledKeys = await settledPromise;
-  const { available, cashTotal, bankTotal, cardEvents } = startingBalance;
+  const { available, cashTotal, bankTotal, immediateCardDeduct, cardEvents } = startingBalance;
   let balance = available;
 
   const items = recRows.results as unknown as ForecastRecurringItem[];
@@ -583,6 +583,7 @@ forecast.get('/', async (c) => {
       startingBalance: Math.round(available * 100) / 100,
       cashTotal: Math.round(cashTotal * 100) / 100,
       bankTotal: Math.round(bankTotal * 100) / 100,
+      cardDeduction: Math.round(immediateCardDeduct * 100) / 100,
       dailyBalances,
       minBalance: Math.round(minBalance * 100) / 100,
       minDate,

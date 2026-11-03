@@ -416,8 +416,8 @@ export default function Forecast() {
             <span>{isCustomRange ? '區間最低餘額點' : '預測期最低餘額點'}</span>
             <FormulaTooltip
               label="檢視預測期最低餘額點計算公式"
-              formula="第 0 天起始餘額（現金＋銀行存款）逐日加減未勾選已繳之週期收支、已出帳卡費（扣繳日扣除）與未出帳卡費（出帳後扣繳日扣除）後，於所選查詢區間內之最低值"
-              calculation={`起始（現金 ${formatCurrency(forecast?.cashTotal ?? 0)} + 存款 ${formatCurrency(forecast?.bankTotal ?? 0)} = ${formatCurrency(forecast?.startingBalance ?? 0)}）→ 區間最低點 ${formatCurrency(filteredMinBalance)}（${filteredMinDate || '無變動'}）`}
+              formula="第 0 天起始餘額（現金＋銀行存款－未來 30 天外或未設繳款日之預扣信用卡待繳款）逐日加減未勾選已繳之週期收支、已出帳卡費（扣繳日扣除）與未出帳卡費（出帳後扣繳日扣除）後，於所選查詢區間內之最低值"
+              calculation={`起始（現金 ${formatCurrency(forecast?.cashTotal ?? 0)} + 存款 ${formatCurrency(forecast?.bankTotal ?? 0)}${(forecast?.cardDeduction ?? 0) > 0 ? ` - 預扣卡款 ${formatCurrency(forecast?.cardDeduction ?? 0)}` : ''} = ${formatCurrency(forecast?.startingBalance ?? 0)}）→ 區間最低點 ${formatCurrency(filteredMinBalance)}（${filteredMinDate || '無變動'}）`}
             />
           </span>
           <div

@@ -1,6 +1,7 @@
-﻿import { Hono } from 'hono';
+import { Hono } from 'hono';
 import { Env } from '../types';
 import { hashPassword, generateSalt, generateId, createJWT, authMiddleware } from '../middleware/jwt';
+import { handleHouseholdMemberDeparture } from './households';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -40,11 +41,14 @@ auth.post('/login', async (c) => {
 });
 
 
-// DELETE /auth/account (App Store Review Guideline 5.1.1(v) 要求)
+// DELETE /auth/account (App Store Review Guideline 5.1.1(v) 要求；ADR 0035 #121 自動移交家庭擁有權)
 auth.delete('/account', authMiddleware, async (c) => {
   const userId = c.get('userId');
   const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first();
   if (!user) return c.json({ success: false, error: '帳號不存在' }, 404);
+
+  // 若所屬家庭尚有其他成員，先將家庭 created_by 與 admin 權限移交給下一順位成員，避免 ON DELETE CASCADE 連帶刪除整個家庭
+  await handleHouseholdMemberDeparture(c.env.DB, userId);
 
   // 刪除用戶 (外鍵 ON DELETE CASCADE 會自動連帶清除帳戶、交易、目標、預算、綁定等全部資料)
   await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();

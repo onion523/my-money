@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   is_billed INTEGER NOT NULL DEFAULT 0,
   defer_to_next_statement INTEGER NOT NULL DEFAULT 0,
   reimbursement_id TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT NULL
 );
 
 -- 固定收支

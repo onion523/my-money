@@ -35,6 +35,9 @@ export async function ensureAccountsSchema(db: any) {
         await db.prepare('ALTER TABLE transactions ADD COLUMN pair_tx_id TEXT').run();
       } catch (_) {}
       try {
+        await db.prepare('ALTER TABLE transactions ADD COLUMN updated_at DATETIME DEFAULT NULL').run();
+      } catch (_) {}
+      try {
         // ADR-0034：idx_tx_pair 與 idx_tx_pair_id 同欄位重複，移除舊名稱減少寫入成本
         await db.prepare('DROP INDEX IF EXISTS idx_tx_pair').run();
       } catch (_) {}
@@ -169,6 +172,8 @@ accounts.get('/', async (c) => {
         return {
           ...acc,
           credit_limit: null,
+          payment_account_id: null,
+          payment_account_name: null,
           balance: acc.billed_shared_debt || 0,
           unbilled: acc.unbilled_shared_debt || 0,
           billed_shared_debt: acc.billed_shared_debt || 0,
@@ -186,15 +191,45 @@ accounts.get('/', async (c) => {
   return c.json({ success: true, data: finalResults });
 });
 
+async function validatePaymentAccountId(
+  db: D1Database,
+  paymentAccountId: string,
+  userId: string,
+  memberUserIds: string[]
+): Promise<string | null> {
+  const placeholders = memberUserIds.map(() => '?').join(',');
+  const payAcc = await db.prepare(
+    `SELECT id, user_id, type, is_joint FROM accounts WHERE id = ? AND user_id IN (${placeholders})`
+  ).bind(paymentAccountId, ...memberUserIds).first<{ id: string; user_id: string; type: string; is_joint: number }>();
+
+  if (!payAcc) {
+    return '預設扣款帳戶不存在';
+  }
+  if (payAcc.type !== 'bank') {
+    return '預設扣款帳戶必須為銀行存款帳戶';
+  }
+  if ((payAcc.is_joint === 0 || payAcc.is_joint === null) && payAcc.user_id !== userId) {
+    return '權限不足：無法綁定他人的個人銀行存款帳戶';
+  }
+  return null;
+}
+
 // POST /accounts
 accounts.post('/', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.json();
   const { name, type, balance = 0, credit_limit, statement_day, payment_due_day, payment_account_id, unbilled = 0, color = '#FF8A8A', is_joint = 0 } = body;
-  await ensureAccountsSchema(c.env.DB);
+  const [, { memberUserIds }] = await Promise.all([
+    ensureAccountsSchema(c.env.DB),
+    getUserHousehold(c.env.DB, userId),
+  ]);
   if (!name || !type) return c.json({ success: false, error: '請填寫帳戶名稱和類型' }, 400);
-  const id = generateId();
   const resolvedPayAccId = type === 'credit_card' && payment_account_id ? String(payment_account_id) : null;
+  if (resolvedPayAccId) {
+    const err = await validatePaymentAccountId(c.env.DB, resolvedPayAccId, userId, memberUserIds);
+    if (err) return c.json({ success: false, error: err }, 400);
+  }
+  const id = generateId();
   await c.env.DB.prepare(
     'INSERT INTO accounts (id, user_id, name, type, balance, credit_limit, statement_day, payment_due_day, payment_account_id, unbilled, color, is_joint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(id, userId, name, type, balance, credit_limit ?? null, statement_day ?? null, payment_due_day ?? null, resolvedPayAccId, unbilled, color, is_joint ? 1 : 0).run();
@@ -223,9 +258,16 @@ accounts.put('/:id', async (c) => {
     return c.json({ success: false, error: '權限不足：家庭共同帳戶僅限建立者或家庭管理員修改' }, 403);
   }
 
-  const nextPayAccId = payment_account_id !== undefined
-    ? (payment_account_id ? String(payment_account_id) : null)
-    : existing.payment_account_id;
+  let nextPayAccId: string | null = null;
+  if (existing.type === 'credit_card') {
+    nextPayAccId = payment_account_id !== undefined
+      ? (payment_account_id ? String(payment_account_id) : null)
+      : existing.payment_account_id;
+    if (payment_account_id !== undefined && nextPayAccId) {
+      const err = await validatePaymentAccountId(c.env.DB, nextPayAccId, userId, memberUserIds);
+      if (err) return c.json({ success: false, error: err }, 400);
+    }
+  }
 
   await c.env.DB.prepare(
     'UPDATE accounts SET name = ?, balance = ?, credit_limit = ?, statement_day = ?, payment_due_day = ?, payment_account_id = ?, unbilled = ?, color = ?, is_joint = ? WHERE id = ?'

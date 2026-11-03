@@ -560,3 +560,13 @@ _Avoid_: 依賴字串 LIKE 前綴查詢阻礙索引範圍查找 (using string LI
 `computeCreditCardsReadOnlyMetrics` 由 SQLite / D1 端以 CTE `GROUP BY` 單次批次聚合各卡之當期未出帳消費／刷退／還款沖抵與已出帳公私帳分流（每張卡僅回傳單列彙總數據），不再將信用卡全部歷史交易明細載入 Worker 記憶體逐筆迴圈計算，並維持公私帳欠款與已報銷代墊轉列私帳之 100% 會計準確度。同時，`forecast_settled_events` 讀取嚴格限定本人與家庭成員（`WHERE user_id IN (...)`），杜絕跨家庭全表讀取；`transactions` 補齊排序專用複合索引 `idx_tx_user_sort ON transactions(user_id, date DESC, created_at DESC, id DESC)` 並移除重複索引 `idx_tx_pair`。
 _Avoid_: 將全歷史信用卡交易撈入 Worker 記憶體逐筆累加 (loading full card transaction history into Worker memory)、無 `WHERE` 全表讀取 `forecast_settled_events` (unscoped full-table scan on settled events)、同欄位重複索引增加寫入開銷 (duplicate indexes on `pair_tx_id`)
 
+**Server-Side Transaction Filtering, Range Summary & Modification Timestamp (後端收支篩選、區間全量統計與修改時間追蹤)**:
+`GET /transactions` 支援 `type`（`income` | `expense`）與 `q`（不分大小寫模糊比對備註 `t.note`、分類名稱 `t.category`、帳戶名稱 `a.name`、記帳人名稱 `u.name`）查詢參數，並可與 `scope`、`from`、`to`、`account_id`、`category`、`cursor`、`limit` 組合使用。同時提供 `GET /transactions/summary/range` 端點，接收相同篩選條件並依全量加總規則（包含信用卡還款、內部轉帳、ATM提款、公帳代墊報銷等系統分類）回傳 `{ total_income, total_expense, count, by_day: [{ date, income, expense }] }`，供分頁客戶端直接取得精確區間總計與每日小計。`transactions` 資料表新增 `updated_at` 欄位（新建與歷史資料為 `null`，於 `PUT /transactions/:id` 時寫入 UTC 時間字串並隨 API 回傳）。
+_Avoid_: 分頁客戶端僅對已載入頁面局部加總導致總計與每日小計失真 (summing only loaded page rows on paginated clients)、新建收支時預填 `updated_at` (populating `updated_at` on creation)
+
+**Masked Card Payment Account Privacy, Household Ownership Succession & Forecast Card Deduction Transparency (私卡扣款帳戶遮蔽、家庭擁有者無縫繼承與預測預扣卡款透明化)**:
+1. **私卡預設扣款帳戶脫敏與寫入校驗（#156）**：`GET /accounts` 中他人私卡脫敏分支（`is_masked: true`）強制將 `payment_account_id` 與 `payment_account_name` 設為 `null`；`POST /accounts` 與 `PUT /accounts/:id` 僅允許 `type === 'credit_card'` 寫入 `payment_account_id`（非信用卡強制為 `null`），且綁定目標必須為當前使用者可見（本人擁有或 `is_joint = 1` 家庭共同帳戶）之 `bank` 類型帳戶。
+2. **家庭建立者刪帳／退群無縫繼承（#121）**：當使用者執行 `DELETE /auth/account` 或 `DELETE /households/leave` 且所屬家庭尚有其他成員時，系統自動將下一順位成員（優先其他 `admin`，其次最早加入之 `member`）升為 `admin` 並接手 `households.created_by`（及有效邀請碼之 `inviter_id`），防止 `ON DELETE CASCADE` 連帶毀滅整個家庭群組。
+3. **預測起始餘額預扣卡款欄位（#98）**：`GET /forecast` 回傳新增 `cardDeduction`（第 0 天預扣之信用卡待繳款），Web 端預測頁當 `cardDeduction > 0` 時於公式氣泡明確列出 `現金 + 存款 - 預扣卡款 = 起始餘額`。
+4. **跨端（Web / iOS）顯示詞彙對照備忘（#87）**：Web 端維持本文件標準術語（「銀行存款帳戶」、「現金錢包」、「收支明細」），iOS 端（`raychiutw/my-money.ios`）於部分介面呈現精簡詞彙（「活存帳戶」、「現金」、功能入口「記帳」），雙方共享完全一致之 API wire 欄位與系統分類名稱。
+_Avoid_: 脫敏私卡洩漏個人扣款帳戶 ID 與名稱 (leaking `payment_account_id`/`payment_account_name` on masked cards)、原建立者刪帳導致多成員家庭遭 `CASCADE` 連帶抹除 (cascading deletion of multi-member household on creator account deletion)、預測頁起始餘額算式漏列預扣卡款導致恆等式不成立 (omitting `cardDeduction` from starting balance formula)
