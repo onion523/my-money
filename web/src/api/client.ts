@@ -9,6 +9,7 @@ function getToken(): string | null {
 interface CacheEntry {
   etag: string;
   data: any;
+  nextCursor?: string | null;
 }
 const apiCache = new Map<string, CacheEntry>();
 
@@ -16,7 +17,7 @@ export function clearApiCache() {
   apiCache.clear();
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function requestEnvelope<T>(path: string, options: RequestInit = {}): Promise<{ data: T; nextCursor: string | null }> {
   const token = getToken();
   const method = (options.method || 'GET').toUpperCase();
   const isGet = method === 'GET';
@@ -40,7 +41,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (res.status === 304) {
     const latestCached = cached || (isGet ? apiCache.get(path) : undefined);
     if (latestCached) {
-      return latestCached.data as T;
+      return { data: latestCached.data as T, nextCursor: latestCached.nextCursor ?? null };
     }
     const retryHeaders = { ...reqHeaders };
     delete retryHeaders['If-None-Match'];
@@ -77,14 +78,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (isGet) {
     const etag = res.headers.get('ETag') || res.headers.get('etag');
     if (etag) {
-      apiCache.set(path, { etag, data: data.data });
+      apiCache.set(path, { etag, data: data.data, nextCursor: data.next_cursor ?? null });
     }
   } else {
     // 寫入操作 (POST, PUT, DELETE) 立即清空快取以維持資料即時一致
     apiCache.clear();
   }
 
-  return data.data as T;
+  return { data: data.data as T, nextCursor: data.next_cursor ?? null };
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return (await requestEnvelope<T>(path, options)).data;
 }
 
 const get = <T>(path: string) => request<T>(path);
@@ -221,21 +226,23 @@ export interface TransactionRangeSummary {
   by_day: Array<{ date: string; income: number; expense: number }>;
 }
 
+function toQueryString(params?: Record<string, string | undefined>): string {
+  if (!params) return '';
+  const clean = Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
+  ) as Record<string, string>;
+  const qs = new URLSearchParams(clean).toString();
+  return qs ? `?${qs}` : '';
+}
+
 export const txApi = {
-  list: (params?: TransactionFilterParams) => {
-    const clean = params
-      ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== '')) as Record<string, string>
-      : undefined;
-    const qs = clean ? new URLSearchParams(clean).toString() : '';
-    return get<Transaction[]>(`/transactions${qs ? '?' + qs : ''}`);
-  },
-  summaryRange: (params?: Omit<TransactionFilterParams, 'cursor' | 'limit' | 'offset'>) => {
-    const clean = params
-      ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== '')) as Record<string, string>
-      : undefined;
-    const qs = clean ? new URLSearchParams(clean).toString() : '';
-    return get<TransactionRangeSummary>(`/transactions/summary/range${qs ? '?' + qs : ''}`);
-  },
+  list: (params?: TransactionFilterParams) =>
+    get<Transaction[]>(`/transactions${toQueryString(params)}`),
+  // 無限捲動分頁載入 (ADR 0036)：同時回傳 next_cursor
+  listPage: (params?: TransactionFilterParams) =>
+    requestEnvelope<Transaction[]>(`/transactions${toQueryString(params)}`),
+  summaryRange: (params?: Omit<TransactionFilterParams, 'cursor' | 'limit' | 'offset'>) =>
+    get<TransactionRangeSummary>(`/transactions/summary/range${toQueryString(params)}`),
   summary: (month?: string, scope?: string) => {
     const q = new URLSearchParams();
     if (month) q.set('month', month);

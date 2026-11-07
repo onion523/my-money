@@ -23,6 +23,14 @@ _Avoid_: 僅記錄日期無時間 (date-only without time)、手動修改時分�
 總覽頁顯示最近 6 筆收支明細的區塊（原「最近交易記錄」），單筆格式與收支明細頁共用同一元件：第一行「分類 · 備註」與公私帳、已出帳／延至下期徽章，第二行「MM/DD HH:mm · 帳戶：名稱」與記帳人徽章；不含編輯／刪除。所有收支明細列表遇長備註或多徽章一律自動換行完整顯示，不得截斷為單行省略。
 _Avoid_: 最近交易記錄 (recent transaction records)、單行省略 (single-line ellipsis)
 
+**Infinite Scroll Pagination of Transactions (收支明細無限捲動分頁載入)**:
+「收支明細」(`Transactions`) 頁不得再以單次 `limit=200` 截斷資料，必須能瀏覽帳簿內「所有」符合條件的收支明細。採 cursor 分頁（`next_cursor`），每頁 50 筆，由 `IntersectionObserver` 哨兵元素提前觸發自動載入；載入中於清單底部顯示骨架，全部載完顯示「已顯示全部 N 筆」。
+- **篩選下推後端**：類型、分類、帳戶、關鍵字、日期區間一律以查詢參數交由後端篩選（`type` / `category` / `account_id` / `q` / `from` / `to`），前端不再對已載入資料做本地篩選；條件變更即重置回第一頁。
+- **合計以後端彙總為準**：頂部收入／支出合計與符合筆數，取自後端 `GET /transactions/summary/range`（與清單相同篩選條件），不受已載入頁數影響。
+- **異動後就地重載**：新增／編輯／刪除後，就地重新載入「目前已載入的範圍」並保留捲動位置，不跳回頂部；僅篩選條件變更才重置。
+- **歷史備忘維持現狀**：新增表單的歷史備忘推薦 (`buildHistoryMemo`) 仍僅以已載入資料建立。
+_Avoid_: 單次 200 筆上限 (hard 200-row cap)、前端本地篩選 (client-side filtering of partial data)、僅合計已載入筆數 (totals over loaded rows only)、載入更多按鈕 (load-more button)
+
 **Transaction Balance Synchronization (收支餘額雙向連動)**:
 在建立、編輯 (PUT) 或刪除 (DELETE) 收支時，系統必須嚴格維持收支金額與所屬資產帳戶餘額／信用卡未出帳金額的雙向即時同步。若編輯收支時變更所屬帳戶，舊帳戶必須全額回滾原收支金額，新帳戶則扣抵／認列新收支金額；若僅變更金額，則按差額補退；刪除收支時則全額回滾該帳戶之餘額或未出帳負債。
 _Avoid_: 單向更新 (unilateral update)、非連動記帳 (detached logging)

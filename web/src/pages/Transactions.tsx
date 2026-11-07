@@ -1,6 +1,6 @@
-import { TransactionsSkeleton } from '../components/Skeleton'
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { txApi, accountsApi, exportApi, householdApi, Transaction, Account } from '../api/client'
+import { Skeleton, TransactionsSkeleton } from '../components/Skeleton'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { txApi, accountsApi, exportApi, householdApi, Transaction, Account, TransactionRangeSummary } from '../api/client'
 import { useStore } from '../store/useStore'
 import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, buildHistoryMemo, recommendCategory, compareTransactionsNewestFirst } from '../components/utils'
 import Modal from '../components/Modal'
@@ -27,13 +27,24 @@ import {
   ChevronUp,
 } from 'lucide-react'
 
+const PAGE_SIZE = 50
+
 export default function Transactions() {
   const { user } = useStore()
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [summary, setSummary] = useState<TransactionRangeSummary | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [myRole, setMyRole] = useState<'admin' | 'member' | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [loadMoreError, setLoadMoreError] = useState(false)
   const hasLoadedContextRef = useRef(false)
+  const loadRequestRef = useRef(0)
+  const loadingMoreRef = useRef(false)
+  const transactionsCountRef = useRef(0)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   // 篩選狀態
   const [categoryFilter, setCategoryFilter] = useState('全部')
@@ -43,7 +54,23 @@ export default function Transactions() {
   const [startDate, setStartDate] = useState(`${thisMonth()}-01`)
   const [endDate, setEndDate] = useState(today())
   const [keyword, setKeyword] = useState('')
+  const [debouncedKeyword, setDebouncedKeyword] = useState('')
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+
+  useEffect(() => {
+    transactionsCountRef.current = transactions.length
+  }, [transactions.length])
+
+  useEffect(() => {
+    if (!keyword.trim()) {
+      setDebouncedKeyword('')
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setDebouncedKeyword(keyword)
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [keyword])
 
   // Modal 狀態
   const [showModal, setShowModal] = useState(false)
@@ -84,39 +111,94 @@ export default function Transactions() {
     }
   }, [scopeFilter, scopedAccounts])
 
-  // 載入資料（篩選器變更時僅請求 txApi.list；初次掛載或收支異動後才更新 accounts）
-  const loadData = async (refreshAccounts = false) => {
+  // 後端篩選參數（類型／分類／帳戶／關鍵字／日期／範疇全部下推後端，ADR 0036）
+  const filterParams = useMemo<Record<string, string>>(() => {
+    const params: Record<string, string> = {
+      from: startDate,
+      to: endDate,
+      scope: scopeFilter,
+    }
+    if (accountFilter !== 'all') params.account_id = accountFilter
+    if (typeFilter !== 'all') params.type = typeFilter
+    if (categoryFilter !== '全部') params.category = categoryFilter
+    if (debouncedKeyword.trim()) params.q = debouncedKeyword.trim()
+    return params
+  }, [startDate, endDate, scopeFilter, accountFilter, typeFilter, categoryFilter, debouncedKeyword])
+
+  // 載入資料（以 cursor 分頁；keepRange 為 true 時就地重載目前已載入的範圍並保留捲動位置）
+  // 初次掛載或收支異動後才更新 accounts
+  const loadData = async ({ refreshAccounts = false, keepRange = false }: { refreshAccounts?: boolean; keepRange?: boolean } = {}) => {
+    const requestId = ++loadRequestRef.current
     try {
       setLoading(true)
-      const params: Record<string, string> = {
-        from: startDate,
-        to: endDate,
-        scope: scopeFilter,
-        limit: '200'
-      }
-      if (accountFilter !== 'all') {
-        params.account_id = accountFilter
-      }
+      setLoadError(false)
+      setLoadMoreError(false)
+      const targetCount = keepRange ? Math.max(transactionsCountRef.current, PAGE_SIZE) : PAGE_SIZE
       const isInitialMount = !hasLoadedContextRef.current
       const shouldFetchAccounts = isInitialMount || refreshAccounts
 
-      const [txs, accs, householdData] = await Promise.all([
-        txApi.list(params),
+      const fetchRange = async () => {
+        const rows: Transaction[] = []
+        let cursor: string | null = null
+        do {
+          const page: { data: Transaction[]; nextCursor: string | null } = await txApi.listPage({
+            ...filterParams,
+            limit: String(PAGE_SIZE),
+            ...(cursor ? { cursor } : {}),
+          })
+          rows.push(...page.data)
+          cursor = page.nextCursor
+        } while (cursor && rows.length < targetCount)
+        return { rows, cursor }
+      }
+
+      const [range, summaryData, accs, householdData] = await Promise.all([
+        fetchRange(),
+        txApi.summaryRange(filterParams),
         shouldFetchAccounts ? accountsApi.list() : Promise.resolve(null),
         isInitialMount ? householdApi.current().catch(() => null) : Promise.resolve(undefined),
       ])
-      setTransactions(txs)
+      if (requestId !== loadRequestRef.current) return
+      setTransactions(range.rows)
+      setNextCursor(range.cursor)
+      setSummary(summaryData)
       if (accs !== null) setAccounts(accs)
       if (householdData !== undefined) {
         setMyRole(householdData?.myRole || null)
       }
       if (isInitialMount) hasLoadedContextRef.current = true
     } catch (err) {
+      if (requestId !== loadRequestRef.current) return
       console.error(err)
+      setLoadError(true)
     } finally {
-      setLoading(false)
+      if (requestId === loadRequestRef.current) setLoading(false)
     }
   }
+
+  // 載入下一頁（無限捲動）
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMoreRef.current || loading) return
+    const requestId = loadRequestRef.current
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    setLoadMoreError(false)
+    try {
+      const page = await txApi.listPage({ ...filterParams, limit: String(PAGE_SIZE), cursor: nextCursor })
+      if (requestId !== loadRequestRef.current) return
+      setTransactions(prev => {
+        const seen = new Set(prev.map(t => t.id))
+        return [...prev, ...page.data.filter(t => !seen.has(t.id))]
+      })
+      setNextCursor(page.nextCursor)
+    } catch (err) {
+      console.error(err)
+      if (requestId === loadRequestRef.current) setLoadMoreError(true)
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }, [nextCursor, loading, filterParams])
 
   // 權限檢查輔助函數 (ADR 0013, ADR 0031)
   const canModifyTx = (tx: Transaction) => {
@@ -134,8 +216,24 @@ export default function Transactions() {
   }
 
   useEffect(() => {
-    loadData(false)
-  }, [startDate, endDate, scopeFilter, accountFilter])
+    loadData()
+  }, [filterParams])
+
+  // IntersectionObserver 哨兵：提前自動載入下一頁
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !nextCursor || loading || loadingMore || loadMoreError) return
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting) {
+          loadMore()
+        }
+      },
+      { rootMargin: '240px 0px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [nextCursor, loading, loadingMore, loadMoreError, loadMore])
 
   // 開啟新增 Modal
   const handleOpenAdd = () => {
@@ -215,7 +313,7 @@ export default function Transactions() {
         })
       }
       setShowModal(false)
-      loadData(true)
+      loadData({ refreshAccounts: true, keepRange: true })
     } catch (err: any) {
       setErrorMsg(err.message || '操作失敗')
     } finally {
@@ -237,7 +335,7 @@ export default function Transactions() {
     if (!window.confirm(confirmMsg)) return
     try {
       await txApi.remove(id)
-      loadData(true)
+      loadData({ refreshAccounts: true, keepRange: true })
     } catch (err: any) {
       alert(err.message || '刪除失敗')
     }
@@ -248,36 +346,36 @@ export default function Transactions() {
     exportApi.csv(startDate, endDate)
   }
 
-  // 本地篩選並以最新時間優先排序 (date DESC, created_at DESC)
-  const filtered = [...transactions].filter(t => {
-    if (accountFilter !== 'all' && t.account_id !== accountFilter) return false
-    if (typeFilter !== 'all' && t.type !== typeFilter) return false
-    if (categoryFilter !== '全部' && t.category !== categoryFilter) return false
-    if (keyword) {
-      const matchNote = t.note?.toLowerCase().includes(keyword.toLowerCase())
-      const matchCat = t.category?.toLowerCase().includes(keyword.toLowerCase())
-      const matchAcc = t.account_name?.toLowerCase().includes(keyword.toLowerCase())
-      const matchUser = t.user_name?.toLowerCase().includes(keyword.toLowerCase())
-      if (!matchNote && !matchCat && !matchAcc && !matchUser) return false
-    }
-    return true
-  }).sort(compareTransactionsNewestFirst)
+  // 篩選已全部下推後端 (ADR 0036)；前端僅維持最新時間優先排序與跨頁同日合併分組
+  const sortedTransactions = useMemo(
+    () => [...transactions].sort(compareTransactionsNewestFirst),
+    [transactions]
+  )
 
-  // 按日期分組 (每日群組內維持最新記錄時間在最上方)
+  // 按日期分組 (跨頁同一天自動合併於同一日期卡片，每日群組內維持最新記錄時間在最上方)
   const groupedByDate: Record<string, Transaction[]> = {}
-  filtered.forEach(tx => {
+  sortedTransactions.forEach(tx => {
     if (!groupedByDate[tx.date]) groupedByDate[tx.date] = []
     groupedByDate[tx.date].push(tx)
   })
   const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a))
 
-  // 計算篩選後收支總額（Direct Ledger Sign Aggregation：所有相關紀錄全部加入計算，正的列入收入、負的列入支出）
-  const totalIncome = filtered
-    .filter(t => t.type === 'income')
-    .reduce((s, t) => s + t.amount, 0);
-  const totalExpense = filtered
-    .filter(t => t.type === 'expense')
-    .reduce((s, t) => s + t.amount, 0);
+  const daySummaryMap = useMemo(() => {
+    const map = new Map<string, { income: number; expense: number }>()
+    summary?.by_day?.forEach(d => {
+      map.set(d.date, { income: d.income, expense: d.expense })
+    })
+    return map
+  }, [summary])
+
+  // 頂部收支總額與符合筆數以後端區間彙總 (summary/range) 為準，不受已載入頁數影響
+  const totalCount = summary ? summary.count : sortedTransactions.length
+  const totalIncome = summary
+    ? summary.total_income
+    : sortedTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+  const totalExpense = summary
+    ? summary.total_expense
+    : sortedTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
 
   const activeFilterCount =
     (typeFilter !== 'all' ? 1 : 0) +
@@ -434,7 +532,7 @@ export default function Transactions() {
         {/* 篩選結果加總橫條 */}
         <div className="tx-summary-strip">
           <div className="tx-summary-count">
-            篩選筆數：<strong>{filtered.length}</strong> 筆
+            篩選筆數：<strong>{totalCount}</strong> 筆
           </div>
           <div className="tx-summary-metrics">
             <div className="tx-summary-metric">
@@ -443,7 +541,7 @@ export default function Transactions() {
                 <FormulaTooltip
                   label="檢視篩選結果總收入計算公式"
                   formula="當前篩選條件下所有正項（+ 收入）紀錄全部加總"
-                  calculation={`共 ${filtered.filter(t => t.type === 'income').length} 筆收入 = +${formatCurrency(totalIncome)}`}
+                  calculation={`篩選範圍全部收入合計 = +${formatCurrency(totalIncome)}`}
                 />
               </span>
               <strong style={{ color: 'var(--color-success)' }}>+{formatCurrency(totalIncome)}</strong>
@@ -454,7 +552,7 @@ export default function Transactions() {
                 <FormulaTooltip
                   label="檢視篩選結果總支出計算公式"
                   formula="當前篩選條件下所有負項（- 支出）紀錄全部加總"
-                  calculation={`共 ${filtered.filter(t => t.type === 'expense').length} 筆支出 = -${formatCurrency(totalExpense)}`}
+                  calculation={`篩選範圍全部支出合計 = -${formatCurrency(totalExpense)}`}
                 />
               </span>
               <strong style={{ color: 'var(--color-danger)' }}>-{formatCurrency(totalExpense)}</strong>
@@ -476,9 +574,17 @@ export default function Transactions() {
         </div>
       </div>
 
-      {/* 收支清單 (依日期分組) */}
+      {/* 收支清單 (依日期分組 + 無限捲動分頁載入) */}
       {loading && transactions.length === 0 ? (
         <TransactionsSkeleton />
+      ) : loadError && transactions.length === 0 ? (
+        <div className="card empty-state">
+          <h3>載入收支明細失敗</h3>
+          <p style={{ fontSize: '0.875rem', marginBottom: 16 }}>請檢查網路連線後重試</p>
+          <button className="btn btn-primary" onClick={() => loadData()}>
+            重試載入
+          </button>
+        </div>
       ) : sortedDates.length === 0 ? (
         <div className="card empty-state">
           <div className="emoji"><Search size={40} /></div>
@@ -492,12 +598,13 @@ export default function Transactions() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {sortedDates.map(dateStr => {
             const dayTxs = groupedByDate[dateStr]
-            const dayIncome = dayTxs
-              .filter(t => t.type === 'income')
-              .reduce((s, t) => s + t.amount, 0)
-            const dayExpense = dayTxs
-              .filter(t => t.type === 'expense')
-              .reduce((s, t) => s + t.amount, 0)
+            const dayStat = daySummaryMap.get(dateStr)
+            const dayIncome = dayStat
+              ? dayStat.income
+              : dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+            const dayExpense = dayStat
+              ? dayStat.expense
+              : dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
 
             return (
               <div key={dateStr} className="card tx-day-card">
@@ -546,6 +653,50 @@ export default function Transactions() {
               </div>
             )
           })}
+
+          {/* 無限捲動哨兵元素 */}
+          <div ref={sentinelRef} data-testid="tx-scroll-sentinel" style={{ height: 1 }} />
+
+          {/* 分頁載入中底部骨架 */}
+          {loadingMore && (
+            <div className="card" data-testid="tx-load-more-skeleton">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {[1, 2].map(row => (
+                  <div key={row} className="flex items-center justify-between gap-3" style={{ padding: '8px 0' }}>
+                    <div className="flex items-center gap-3" style={{ minWidth: 0, flex: 1 }}>
+                      <Skeleton variant="circle" width={36} height={36} />
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <Skeleton variant="text" width="55%" height={16} style={{ marginBottom: 6 }} />
+                        <Skeleton variant="text" width="75%" height={12} />
+                      </div>
+                    </div>
+                    <Skeleton variant="text" width={68} height={18} style={{ flexShrink: 0 }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 分頁載入失敗重試 */}
+          {loadMoreError && !loadingMore && (
+            <div className="card" style={{ textAlign: 'center', padding: '14px 16px' }}>
+              <span className="text-muted" style={{ fontSize: '0.875rem', marginRight: 12 }}>載入更多明細失敗</span>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={loadMore}>
+                重試
+              </button>
+            </div>
+          )}
+
+          {/* 全部載完結尾提示 */}
+          {!nextCursor && !loading && !loadingMore && (
+            <div
+              data-testid="tx-end-of-list"
+              className="text-muted"
+              style={{ textAlign: 'center', fontSize: '0.82rem', padding: '8px 0 4px' }}
+            >
+              已顯示全部 {totalCount} 筆
+            </div>
+          )}
         </div>
       )}
 
