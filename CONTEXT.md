@@ -154,7 +154,9 @@ _Avoid_: 讀取帳戶列表或餘額時夾帶資料庫寫入與逐卡 N+1 迴圈
 4. **未出帳私帳累計 (`unbilled_personal_debt`)**：未出帳區間內累積之持卡人個人私密消費淨額。
 5. **還款預設與沖銷順序**：點擊「繳家庭代墊」時，若有已出帳公帳（`billed_shared_debt > 0`），系統預設代入「已出帳公帳」金額，避免共同基金提早溢繳尚未出帳之消費，並於繳款彈窗中提供快捷切換；共同基金還款流水（`is_shared = 1`）優先沖銷已出帳公帳，餘額溢出方沖銷未出帳公帳。
 6. **他人私卡公帳視角脫敏防線**：在家庭公帳視角或非持卡人檢視伴侶之個人私卡時，清楚揭露 `billed_shared_debt` 與 `unbilled_shared_debt`，並提供「繳家庭代墊」操作；而個人私帳金額（`credit_limit`、`billed_personal_debt`、`unbilled_personal_debt`、`balance`）全面落實隱私脫敏遮蔽。
-_Avoid_: 混淆已出帳與未出帳導致公帳盲目全額溢繳 (mixing billed and unbilled causing premature joint fund payment)、他人私卡揭露個人私帳金額 (leaking personal debt details of other members' cards)
+7. **當期帳單獨立結算邊界與上限約束（ADR-0037）**：全系統（帳戶列表 `GET /accounts`、淨可用資金 `GET /accounts/balance`、現金流預測 `GET /forecast` 與出帳作業 `rollover-preview` / `rollover-statement`）一律以交易之真實出帳狀態（`is_billed = 1 AND defer_to_next_statement = 0` 與 `billed_statement_date`）作為已出帳／未出帳與當期帳單組成之唯一判準。前期已結清帳單之歷史公私還款差額自動封存歸零，嚴禁跨期溢扣或侵蝕本期新出帳之公私帳拆解；本期 `billed_shared_debt` 與 `billed_personal_debt` 各自嚴格受「本期實際出帳之公帳／私帳淨額（扣除當期對應還款）」上限約束（例如本期僅有公帳 $637、私帳 $0，出帳後必為 `公 $637 · 私 $0`）。
+8. **「全額結清」智慧預設歸屬（ADR-0037）**：點擊信用卡「全額結清」開啟繳款彈窗時，若卡片僅有私帳欠款（`shared_debt <= 0` 且 `personal_debt > 0`）或預設扣款銀行為個人私帳（`is_joint = 0`），預設歸屬為「個人私帳還款 (`is_shared = 0`)」；若預設扣款銀行為家庭共同帳戶（`is_joint = 1`）或僅有公帳欠款，則預設為「家庭公帳還款 (`is_shared = 1`)」；且切換扣款銀行帳戶時若尚未手動鎖定，可聯動對齊扣款帳戶之公私性質。
+_Avoid_: 混淆已出帳與未出帳導致公帳盲目全額溢繳 (mixing billed and unbilled causing premature joint fund payment)、他人私卡揭露個人私帳金額 (leaking personal debt details of other members' cards)、全歷史還款差額跨期污染新帳單公私拆解 (lifetime repayment deficit polluting current cycle shared/personal breakdown)、讀取端自行用日期切點推算未出帳導致與 `is_billed` 脫節 (divergent cutoff-date heuristic vs `is_billed` truth)
 
 **Credit Card Default Payment Account & Bank Auto-Debit Liability Projection (信用卡預設扣款帳戶與銀行待扣款負債預覽)**:
 在信用卡帳戶（`type = 'credit_card'`）上支援綁定「預設扣款銀行帳戶（`payment_account_id`）」，串聯信用卡繳費預設帶入與銀行存款卡片之待扣款負債預警：

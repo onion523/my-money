@@ -328,7 +328,17 @@ export default function Accounts() {
 
   const handleOpenPay = (card: Account, payType: 'shared' | 'personal' | 'full' = 'full') => {
     setPayCardModal(card)
-    
+
+    const isOtherMemberPrivateCard = card.is_joint === 0 && Boolean(user && card.user_id !== user.id)
+    const availableBanks = accounts.filter(a => a.type === 'bank' && (!isOtherMemberPrivateCard || a.is_joint === 1))
+    let defaultBankId = ''
+    if (card.payment_account_id && availableBanks.some(b => b.id === card.payment_account_id)) {
+      defaultBankId = card.payment_account_id
+    } else if (isOtherMemberPrivateCard) {
+      defaultBankId = availableBanks[0]?.id || ''
+    }
+    const defaultBank = availableBanks.find(b => b.id === defaultBankId)
+
     let defaultAmount = (card.balance || 0) + (card.unbilled || 0)
     let isSharedTarget = 1
     if (payType === 'shared') {
@@ -341,15 +351,23 @@ export default function Accounts() {
       const unbilledPersonal = card.unbilled_personal_debt ?? (card.personal_debt ?? 0)
       defaultAmount = billedPersonal > 0 ? billedPersonal : (card.personal_debt ?? unbilledPersonal)
       isSharedTarget = 0
-    }
-
-    const isOtherMemberPrivateCard = card.is_joint === 0 && Boolean(user && card.user_id !== user.id)
-    const availableBanks = accounts.filter(a => a.type === 'bank' && (!isOtherMemberPrivateCard || a.is_joint === 1))
-    let defaultBankId = ''
-    if (card.payment_account_id && availableBanks.some(b => b.id === card.payment_account_id)) {
-      defaultBankId = card.payment_account_id
-    } else if (isOtherMemberPrivateCard) {
-      defaultBankId = availableBanks[0]?.id || ''
+    } else {
+      // ADR-0037：點擊「全額結清」時，依當期欠款結構與預設扣款銀行帳戶屬性智慧預設 is_shared
+      if (isOtherMemberPrivateCard) {
+        isSharedTarget = 1
+      } else {
+        const totalShared = card.shared_debt ?? ((card.billed_shared_debt ?? 0) + (card.unbilled_shared_debt ?? 0))
+        const totalPersonal = card.personal_debt ?? ((card.billed_personal_debt ?? 0) + (card.unbilled_personal_debt ?? 0))
+        if (totalShared <= 0 && totalPersonal > 0) {
+          isSharedTarget = 0
+        } else if (defaultBank) {
+          isSharedTarget = defaultBank.is_joint === 1 ? 1 : 0
+        } else if (totalPersonal <= 0 && totalShared > 0) {
+          isSharedTarget = 1
+        } else {
+          isSharedTarget = card.is_joint === 1 ? 1 : 0
+        }
+      }
     }
 
     setPayForm({
@@ -1562,7 +1580,21 @@ export default function Accounts() {
               <select
                 className="input"
                 value={payForm.bank_account_id}
-                onChange={e => setPayForm(p => ({ ...p, bank_account_id: e.target.value }))}
+                onChange={e => {
+                  const newBankId = e.target.value
+                  const selectedBank = bankAccounts.find(b => b.id === newBankId)
+                  setPayForm(p => {
+                    let nextShared = p.is_shared
+                    if (p.note.endsWith('(全額)') && selectedBank) {
+                      const totalShared = payCardModal.shared_debt ?? ((payCardModal.billed_shared_debt ?? 0) + (payCardModal.unbilled_shared_debt ?? 0))
+                      const totalPersonal = payCardModal.personal_debt ?? ((payCardModal.billed_personal_debt ?? 0) + (payCardModal.unbilled_personal_debt ?? 0))
+                      if (!(totalShared <= 0 && totalPersonal > 0)) {
+                        nextShared = selectedBank.is_joint === 1 ? 1 : 0
+                      }
+                    }
+                    return { ...p, bank_account_id: newBankId, is_shared: nextShared }
+                  })
+                }}
                 required
               >
                 <option value="" disabled>-- 請選擇扣款銀行 --</option>

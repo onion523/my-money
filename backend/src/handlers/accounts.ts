@@ -578,18 +578,18 @@ accounts.get('/:id/rollover-preview', async (c) => {
     billed_statement_date?: string | null;
   }>;
 
-  // 基礎歷史數據（排除本期候選 txs，供動態預覽精準試算）
-  let cycleTxIdList = rawTxs.map(t => t.id);
-  let cycleIdPlaceholders = cycleTxIdList.length > 0 ? cycleTxIdList.map(() => '?').join(',') : '';
-
+  // 基礎歷史數據（排除本期候選 txs，使用固定 5 參數條件避免超過 D1 100 綁定參數上限）
   const [baseBilledRes, repayRes, baseUnbilledRes] = await c.env.DB.batch([
     c.env.DB.prepare(`
       SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE -amount END), 0) as net_billed
       FROM transactions
       WHERE account_id = ? AND is_billed = 1
         AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-        ${cycleTxIdList.length > 0 ? `AND id NOT IN (${cycleIdPlaceholders})` : ''}
-    `).bind(...(cycleTxIdList.length > 0 ? [id, ...cycleTxIdList] : [id])),
+        AND NOT (
+          (date >= ? AND date <= ?)
+          OR (date <= ? AND (is_billed = 0 OR COALESCE(billed_statement_date, '') = ?))
+        )
+    `).bind(id, startDate, endDate, prevStatementDate, statementDate),
     c.env.DB.prepare(`
       SELECT COALESCE(SUM(amount - COALESCE(unbilled_offset, 0)), 0) as total_repay
       FROM transactions
@@ -602,8 +602,11 @@ accounts.get('/:id/rollover-preview', async (c) => {
       FROM transactions
       WHERE account_id = ? AND (is_billed = 0 OR defer_to_next_statement = 1)
         AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-        ${cycleTxIdList.length > 0 ? `AND id NOT IN (${cycleIdPlaceholders})` : ''}
-    `).bind(...(cycleTxIdList.length > 0 ? [id, ...cycleTxIdList] : [id])),
+        AND NOT (
+          (date >= ? AND date <= ?)
+          OR (date <= ? AND (is_billed = 0 OR COALESCE(billed_statement_date, '') = ?))
+        )
+    `).bind(id, startDate, endDate, prevStatementDate, statementDate),
   ]);
 
   let baseNetBilled = Number((baseBilledRes.results?.[0] as any)?.net_billed || 0);
@@ -750,7 +753,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
 
   // 撈取結帳週期全量明細（含已出帳與未出帳，以及早於起始日的歷史未結或本期已歸屬延入款項，ADR-0030）
   const cycleQuery = `
-    SELECT id, amount, is_shared, type
+    SELECT id, amount, is_shared, type, date, billed_statement_date
     FROM transactions
     WHERE account_id = ?
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
@@ -762,7 +765,50 @@ accounts.post('/:id/rollover-statement', async (c) => {
   const cycleParams: (string | number)[] = [id, startDate, endDate, prevStatementDate, statementDate];
 
   const cycleTxsResult = await c.env.DB.prepare(cycleQuery).bind(...cycleParams).all();
-  const cycleTxs = (cycleTxsResult.results || []) as Array<{ id: string; amount: number; is_shared: number; type: string }>;
+  let cycleTxs = (cycleTxsResult.results || []) as Array<{ id: string; amount: number; is_shared: number; type: string; date: string; billed_statement_date?: string | null }>;
+  const alreadyRolledThisStatement = cycleTxs.some(t => t.billed_statement_date === statementDate);
+
+  // 若直接呼叫 rollover-statement（未先經 preview）且存在尚未標記 billed_statement_date 的前期未結清差額，同步匹配歸入本期（固定 5 綁定參數避免 D1 100 參數上限）
+  const [baseBilledRes, repayRes] = await c.env.DB.batch([
+    c.env.DB.prepare(`
+      SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE -amount END), 0) as net_billed
+      FROM transactions
+      WHERE account_id = ? AND is_billed = 1
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+        AND NOT (
+          (date >= ? AND date <= ?)
+          OR (date <= ? AND (is_billed = 0 OR COALESCE(billed_statement_date, '') = ?))
+        )
+    `).bind(id, startDate, endDate, prevStatementDate, statementDate),
+    c.env.DB.prepare(`
+      SELECT COALESCE(SUM(amount - COALESCE(unbilled_offset, 0)), 0) as total_repay
+      FROM transactions
+      WHERE account_id = ? AND type = 'income' AND category = '信用卡還款'
+    `).bind(id),
+  ]);
+  const unpaidPriorCarryover = Math.round(
+    Number((baseBilledRes.results?.[0] as any)?.net_billed || 0) - Number((repayRes.results?.[0] as any)?.total_repay || 0)
+  );
+  if (unpaidPriorCarryover > 0) {
+    const priorCandidatesRes = await c.env.DB.prepare(`
+      SELECT id, amount, is_shared, type, date
+      FROM transactions
+      WHERE account_id = ?
+        AND date <= ?
+        AND is_billed = 1
+        AND (billed_statement_date IS NULL OR billed_statement_date = '')
+        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+      ORDER BY date DESC, created_at DESC
+      LIMIT 40
+    `).bind(id, prevStatementDate).all();
+    const matchedPriorTxs = findMatchingPriorCarryoverTxs(
+      (priorCandidatesRes.results || []) as typeof cycleTxs,
+      unpaidPriorCarryover
+    );
+    if (matchedPriorTxs.length > 0) {
+      cycleTxs = [...cycleTxs, ...matchedPriorTxs];
+    }
+  }
 
   if (cycleTxs.length === 0 && deferredTxIds.length === 0) {
     return c.json({ success: false, error: '目前結帳週期內無任何刷卡記錄' }, 400);
@@ -785,10 +831,12 @@ accounts.post('/:id/rollover-statement', async (c) => {
     );
   }
 
-  // 3. 同步結算已在區間內沖抵的還款流水
-  batchStatements.push(
-    c.env.DB.prepare("UPDATE transactions SET is_billed = 1 WHERE account_id = ? AND category = '信用卡還款' AND is_billed = 0 AND date <= ?").bind(id, endDate)
-  );
+  // 3. 同步結算前期已沖抵的還款流水（首次執行本期出帳時，將出帳前已發生之前期帳單還款封存為 is_billed = 1；同週期重複執行出帳則保留出帳後新增之當期還款為 is_billed = 0）
+  if (!alreadyRolledThisStatement) {
+    batchStatements.push(
+      c.env.DB.prepare("UPDATE transactions SET is_billed = 1 WHERE account_id = ? AND category = '信用卡還款' AND is_billed = 0").bind(id)
+    );
+  }
 
   // 4. 記錄最後出帳時間戳記
   batchStatements.push(
@@ -922,8 +970,9 @@ export async function computeCreditCardsReadOnlyMetrics(
   }>();
   if (!cards || cards.length === 0) return result;
 
-  // ADR-0034：改由 SQL 端以單一聚合查詢取得各卡分類加總（每卡僅回傳一列），
-  // 不再把信用卡全部歷史交易載入 Worker 記憶體逐筆計算。分類規則與逐筆版本完全一致。
+  // ADR-0034 & ADR-0037：改由 SQL 端以單一聚合查詢取得各卡分類加總（每卡僅回傳一列），
+  // 並針對已執行出帳作業之信用卡（具有 billed_statement_date）以當期最新帳單（含上期未結清延入）作為獨立結算邊界，
+  // 阻斷已結清前期歷史還款歸屬差額或後期家庭中心報銷改標跨期侵蝕當期公私帳拆解。
   type CardAgg = {
     unb_exp_shared: number; unb_exp_personal: number;
     unb_ref_shared: number; unb_ref_personal: number;
@@ -931,6 +980,10 @@ export async function computeCreditCardsReadOnlyMetrics(
     bil_exp_shared: number; bil_exp_personal: number;
     bil_ref_shared: number; bil_ref_personal: number;
     bil_repay_shared: number; bil_repay_personal: number;
+    has_stmt: number;
+    stmt_exp_shared: number; stmt_exp_personal: number;
+    stmt_ref_shared: number; stmt_ref_personal: number;
+    stmt_repay_shared: number; stmt_repay_personal: number;
   };
   const cardCutoffs = cards.map((card) => ({
     card,
@@ -947,28 +1000,56 @@ export async function computeCreditCardsReadOnlyMetrics(
     slice.forEach((cc, i) => binds.push(start + i, cc.card.id, cc.cutoffStatementDate, cc.prevCutoffStatementDate));
     aggStmts.push(db.prepare(`
       WITH c(idx, card_id, cutoff, prev) AS (VALUES ${values}),
-      t AS (
+      m AS (
         SELECT
           c.idx AS idx,
+          c.card_id AS card_id,
+          c.cutoff AS cutoff,
+          c.prev AS prev,
+          MAX(
+            CASE
+              WHEN x.is_billed = 1
+                AND x.defer_to_next_statement = 0
+                AND x.billed_statement_date IS NOT NULL
+                AND TRIM(x.billed_statement_date) <> ''
+              THEN TRIM(x.billed_statement_date)
+              ELSE NULL
+            END
+          ) AS latest_stmt,
+          MAX(CASE WHEN x.is_billed = 1 THEN 1 ELSE 0 END) AS has_any_billed
+        FROM c
+        LEFT JOIN transactions x ON x.account_id = c.card_id
+        GROUP BY c.idx, c.card_id, c.cutoff, c.prev
+      ),
+      t AS (
+        SELECT
+          m.idx AS idx,
+          m.latest_stmt AS latest_stmt,
           x.type AS type,
           x.amount AS amount,
+          x.is_billed AS is_billed,
+          TRIM(COALESCE(x.billed_statement_date, '')) AS billed_stmt,
           CASE WHEN x.category = '信用卡還款' THEN 1 ELSE 0 END AS is_repay,
           CASE WHEN x.category IN ('內部轉帳', 'ATM提款', '公帳代墊報銷') THEN 1 ELSE 0 END AS is_sys,
           CASE WHEN x.is_shared = 1 THEN 1 ELSE 0 END AS shared_raw,
           CASE WHEN x.reimbursement_id IS NOT NULL AND TRIM(x.reimbursement_id) <> '' THEN 1 ELSE 0 END AS reimb,
           COALESCE(x.unbilled_offset, 0) AS off,
           CASE
-            WHEN c.cutoff <> '' AND c.prev <> '' THEN
-              CASE WHEN x.date > c.cutoff OR (x.date > c.prev AND x.date <= c.cutoff AND x.defer_to_next_statement = 1) THEN 1 ELSE 0 END
+            WHEN x.defer_to_next_statement = 1 THEN 1
+            WHEN m.latest_stmt IS NOT NULL OR COALESCE(m.has_any_billed, 0) = 0 THEN
+              CASE WHEN x.is_billed = 0 THEN 1 ELSE 0 END
+            WHEN m.cutoff <> '' AND m.prev <> '' THEN
+              CASE WHEN x.date > m.cutoff THEN 1 ELSE 0 END
             ELSE
-              CASE WHEN x.is_billed = 0 OR x.defer_to_next_statement = 1 THEN 1 ELSE 0 END
+              CASE WHEN x.is_billed = 0 THEN 1 ELSE 0 END
           END AS unb
-        FROM c
-        JOIN transactions x ON x.account_id = c.card_id
+        FROM m
+        JOIN transactions x ON x.account_id = m.card_id
       ),
       s AS (
         SELECT *,
-          CASE WHEN shared_raw = 1 AND NOT (type = 'expense' AND reimb = 1) THEN 1 ELSE 0 END AS shared_eff
+          CASE WHEN shared_raw = 1 AND NOT (type = 'expense' AND reimb = 1) THEN 1 ELSE 0 END AS shared_eff,
+          CASE WHEN latest_stmt IS NOT NULL AND unb = 0 AND billed_stmt = latest_stmt THEN 1 ELSE 0 END AS in_stmt
         FROM t
       )
       SELECT
@@ -984,7 +1065,14 @@ export async function computeCreditCardsReadOnlyMetrics(
         COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND unb = 0 AND type = 'income' AND shared_eff = 1 THEN amount END), 0) AS bil_ref_shared,
         COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND unb = 0 AND type = 'income' AND shared_eff = 0 THEN amount END), 0) AS bil_ref_personal,
         COALESCE(SUM(CASE WHEN is_repay = 1 AND shared_raw = 1 THEN MAX(0, amount - MIN(amount, off)) END), 0) AS bil_repay_shared,
-        COALESCE(SUM(CASE WHEN is_repay = 1 AND shared_raw = 0 THEN MAX(0, amount - MIN(amount, off)) END), 0) AS bil_repay_personal
+        COALESCE(SUM(CASE WHEN is_repay = 1 AND shared_raw = 0 THEN MAX(0, amount - MIN(amount, off)) END), 0) AS bil_repay_personal,
+        MAX(CASE WHEN latest_stmt IS NOT NULL THEN 1 ELSE 0 END) AS has_stmt,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND in_stmt = 1 AND type = 'expense' AND shared_eff = 1 THEN amount END), 0) AS stmt_exp_shared,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND in_stmt = 1 AND type = 'expense' AND shared_eff = 0 THEN amount END), 0) AS stmt_exp_personal,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND in_stmt = 1 AND type = 'income' AND shared_eff = 1 THEN amount END), 0) AS stmt_ref_shared,
+        COALESCE(SUM(CASE WHEN is_repay = 0 AND is_sys = 0 AND in_stmt = 1 AND type = 'income' AND shared_eff = 0 THEN amount END), 0) AS stmt_ref_personal,
+        COALESCE(SUM(CASE WHEN is_repay = 1 AND is_billed = 0 AND shared_raw = 1 THEN MAX(0, amount - MIN(amount, off)) END), 0) AS stmt_repay_shared,
+        COALESCE(SUM(CASE WHEN is_repay = 1 AND is_billed = 0 AND shared_raw = 0 THEN MAX(0, amount - MIN(amount, off)) END), 0) AS stmt_repay_personal
       FROM s
       GROUP BY idx
     `).bind(...binds));
@@ -999,6 +1087,9 @@ export async function computeCreditCardsReadOnlyMetrics(
     unb_repay_shared: 0, unb_repay_personal: 0,
     bil_exp_shared: 0, bil_exp_personal: 0, bil_ref_shared: 0, bil_ref_personal: 0,
     bil_repay_shared: 0, bil_repay_personal: 0,
+    has_stmt: 0,
+    stmt_exp_shared: 0, stmt_exp_personal: 0, stmt_ref_shared: 0, stmt_ref_personal: 0,
+    stmt_repay_shared: 0, stmt_repay_personal: 0,
   };
 
   for (let cardIdx = 0; cardIdx < cards.length; cardIdx++) {
@@ -1025,10 +1116,50 @@ export async function computeCreditCardsReadOnlyMetrics(
     const unbilled_shared_debt = Math.min(newUnbilled, netUnbilledShared);
     const unbilled_personal_debt = Math.max(0, newUnbilled - unbilled_shared_debt);
 
-    // 已出帳公私帳分流 (保證和等於 cardBalance)
-    const netBilledShared = Math.max(0, billedExpShared - billedRefShared - billedRepayShared);
-    const billed_shared_debt = Math.min(cardBalance, netBilledShared);
-    const billed_personal_debt = Math.max(0, cardBalance - billed_shared_debt);
+    // 已出帳公私帳分流 (保證和等於 cardBalance，ADR-0037 當期帳單獨立結算邊界)
+    let billed_shared_debt = 0;
+    let billed_personal_debt = 0;
+    if (Number(agg.has_stmt) === 1) {
+      const stmtExpShared = Number(agg.stmt_exp_shared);
+      const stmtExpPersonal = Number(agg.stmt_exp_personal);
+      const stmtRefShared = Number(agg.stmt_ref_shared);
+      const stmtRefPersonal = Number(agg.stmt_ref_personal);
+      const stmtRepayShared = Number(agg.stmt_repay_shared);
+      const stmtRepayPersonal = Number(agg.stmt_repay_personal);
+
+      const stmtNet = Math.max(0, (stmtExpShared + stmtExpPersonal) - (stmtRefShared + stmtRefPersonal));
+      const stmtShared = Math.min(stmtNet, Math.max(0, stmtExpShared - stmtRefShared));
+      const stmtPersonal = Math.max(0, stmtNet - stmtShared);
+
+      // 依 FIFO 還款原則：所有還款必先沖抵前期未結清餘額，剩餘才沖抵當期帳單 (stmtNet)
+      // 因此前期尚未結清之延入餘額恆為 max(0, cardBalance - stmtNet)，當期已沖抵還款額恆為 max(0, stmtNet - cardBalance)
+      const priorUnpaid = Math.max(0, cardBalance - stmtNet);
+      const paidTowardStmt = Math.max(0, stmtNet - cardBalance);
+
+      const priorHistoricalShared = Math.max(
+        0,
+        (billedExpShared - stmtExpShared) - (billedRefShared - stmtRefShared) - (billedRepayShared - stmtRepayShared)
+      );
+      const priorCarryShared = Math.min(priorUnpaid, priorHistoricalShared);
+      const priorCarryPersonal = Math.max(0, priorUnpaid - priorCarryShared);
+
+      const effRepayShared = Math.min(paidTowardStmt, stmtRepayShared);
+      const effRepayPersonal = Math.min(paidTowardStmt - effRepayShared, stmtRepayPersonal);
+
+      const remShared = Math.max(0, stmtShared + priorCarryShared - effRepayShared);
+      const remPersonal = Math.max(0, stmtPersonal + priorCarryPersonal - effRepayPersonal);
+
+      billed_shared_debt = Math.min(cardBalance, remShared);
+      billed_personal_debt = Math.max(0, cardBalance - billed_shared_debt);
+      if (billed_personal_debt > remPersonal) {
+        billed_personal_debt = Math.min(cardBalance, remPersonal);
+        billed_shared_debt = Math.max(0, cardBalance - billed_personal_debt);
+      }
+    } else {
+      const netBilledShared = Math.max(0, billedExpShared - billedRefShared - billedRepayShared);
+      billed_shared_debt = Math.min(cardBalance, netBilledShared);
+      billed_personal_debt = Math.max(0, cardBalance - billed_shared_debt);
+    }
 
     const shared_debt = billed_shared_debt + unbilled_shared_debt;
     const personal_debt = billed_personal_debt + unbilled_personal_debt;
