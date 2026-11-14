@@ -1,4 +1,4 @@
-﻿name = "my-money-api"
+name = "my-money-api"
 main = "src/index.ts"
 compatibility_date = "2025-07-18"
 compatibility_flags = ["nodejs_compat"]
@@ -9,10 +9,17 @@ binding = "DB"
 database_name = "my-money-db"
 database_id = "b4486e74-b114-47ad-8999-ccb17e405d58"
 
+[vars]
+WEB_URL = "https://my-money-onion.pages.dev"
+ENVIRONMENT = "production"
+
 # ?脩垢??啣?蝬? (?瑁? wrangler deploy ??GitHub Actions ?蝙??
 # 雿輻??瑁? wrangler d1 create my-money-db ???祕 database_id
 [env.production]
 name = "my-money-api-prod"
+[env.production.vars]
+WEB_URL = "https://my-money-onion.pages.dev"
+ENVIRONMENT = "production"
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "my-money-db"
