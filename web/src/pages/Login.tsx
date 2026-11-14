@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
-import { BookHeart, LogIn, UserPlus } from 'lucide-react';
-import { startOAuthLogin } from '../auth/oauth';
+import { useNavigate } from 'react-router-dom';
+import { BookHeart, KeyRound, LogIn, UserPlus } from 'lucide-react';
+import { loginWithPasskey, startOAuthLogin } from '../auth/oauth';
 
 export default function Login() {
+  const navigate = useNavigate();
   const [redirecting, setRedirecting] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -12,6 +16,19 @@ export default function Login() {
       startOAuthLogin('login');
     }
   }, []);
+
+  const handlePasskeyLogin = async () => {
+    setError('');
+    setPasskeyBusy(true);
+    try {
+      await loginWithPasskey();
+      navigate('/', { replace: true });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Passkey 登入失敗，請改用密碼登入');
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
 
   return (
     <div style={{
@@ -40,26 +57,54 @@ export default function Login() {
           個人與家庭雙帳本 · 安全授權登入
         </p>
 
+        {error && (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 14,
+              padding: '10px 12px',
+              borderRadius: 10,
+              background: 'rgba(239, 68, 68, 0.1)',
+              color: 'var(--color-danger, #ef4444)',
+              fontSize: '0.86rem',
+              textAlign: 'left',
+            }}
+          >
+            {error}
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <button
             type="button"
             className="btn btn-primary"
             style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }}
-            disabled={redirecting}
+            disabled={redirecting || passkeyBusy}
+            onClick={handlePasskeyLogin}
+          >
+            <KeyRound size={18} />
+            {passkeyBusy ? '驗證 Passkey 中...' : '使用 Passkey 登入'}
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }}
+            disabled={redirecting || passkeyBusy}
             onClick={() => {
               setRedirecting(true);
               startOAuthLogin('login');
             }}
           >
             <LogIn size={18} />
-            {redirecting ? '正在前往登入頁...' : '前往登入'}
+            {redirecting ? '正在前往登入頁...' : '使用帳號密碼登入'}
           </button>
 
           <button
             type="button"
             className="btn btn-ghost"
             style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }}
-            disabled={redirecting}
+            disabled={redirecting || passkeyBusy}
             onClick={() => {
               setRedirecting(true);
               startOAuthLogin('register');

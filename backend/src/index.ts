@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { etag, RETAINED_304_HEADERS } from 'hono/etag';
 import type { Env } from './types';
 import auth from './handlers/auth';
+import passkey from './handlers/passkey';
 import oauth, { buildOAuthMetadata } from './handlers/oauth';
 import accounts from './handlers/accounts';
 import transactions from './handlers/transactions';
@@ -25,7 +26,7 @@ app.use('*', cors({
   origin: (origin) => resolveAllowOrigin(origin),
   allowHeaders: ['Content-Type', 'Authorization', 'If-None-Match', 'DPoP'],
   exposeHeaders: ['ETag', 'Date', 'WWW-Authenticate'],
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }));
 
 // HTTP ETag (304 Not Modified 條件式快取，ADR-0033 / ADR-0034：保留跨網域 CORS 標頭避免瀏覽器阻擋 304)
@@ -45,6 +46,7 @@ app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
 app.get('/.well-known/oauth-authorization-server', (c) => c.json(buildOAuthMetadata(c.req.url)));
 app.route('/oauth', oauth);
 app.route('/auth', auth);
+app.route('/auth', passkey);
 app.route('/accounts', accounts);
 app.route('/transactions', transactions);
 app.route('/recurring', recurring);

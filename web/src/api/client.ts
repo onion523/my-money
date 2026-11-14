@@ -117,6 +117,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 const get = <T>(path: string) => request<T>(path);
 const post = <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined });
 const put = <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined });
+const patch = <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined });
 const del = <T>(path: string) => request<T>(path, { method: 'DELETE' });
 
 // Auth & Sessions
@@ -137,6 +138,22 @@ export const authApi = {
   changePassword: (body: { current_password: string; new_password: string }) =>
     post<{ message: string }>('/auth/password', body),
   deleteAccount: () => del<{ message: string }>('/auth/account'),
+};
+
+export interface PasskeyInfo {
+  id: string;
+  name: string;
+  created_at: number;
+  last_used_at: number | null;
+}
+
+export const passkeysApi = {
+  list: () => get<PasskeyInfo[]>('/auth/passkeys'),
+  registerOptions: () => post<any>('/auth/passkey/register/options'),
+  registerVerify: (response: unknown, name?: string) =>
+    post<PasskeyInfo>('/auth/passkey/register/verify', { response, name }),
+  rename: (id: string, name: string) => patch<{ id: string; name: string }>(`/auth/passkeys/${id}`, { name }),
+  remove: (id: string) => del<{ deleted: boolean }>(`/auth/passkeys/${id}`),
 };
 
 // Accounts

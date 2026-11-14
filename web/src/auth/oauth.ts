@@ -1,3 +1,4 @@
+import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
 import { useStore } from '../store/useStore';
 import { clearDpopKey, createDpopProof, generateDpopKey, noteServerDate } from './dpop';
 
@@ -176,6 +177,70 @@ export async function handleOAuthCallback(search: string): Promise<void> {
   }
 
   persistOAuthSession(data.access_token, data.refresh_token, data.token_type);
+}
+
+/** 以 Passkey（WebAuthn）登入並透過 /oauth/passkey/authorize 橋接取得 DPoP-bound OAuth Session */
+export async function loginWithPasskey(): Promise<void> {
+  if (!browserSupportsWebAuthn()) {
+    throw new Error('此瀏覽器或裝置不支援 Passkey');
+  }
+
+  const optRes = await fetch(`${API_BASE}/auth/passkey/login/options`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const optJson = await optRes.json().catch(() => ({}));
+  if (!optRes.ok || !optJson.success || !optJson.data) {
+    throw new Error(optJson.error || '無法取得 Passkey 驗證資訊');
+  }
+
+  let assertion;
+  try {
+    assertion = await startAuthentication({ optionsJSON: optJson.data });
+  } catch (err: unknown) {
+    const name = err && typeof err === 'object' && 'name' in err ? String((err as { name: string }).name) : '';
+    if (name === 'NotAllowedError' || name === 'AbortError') {
+      throw new Error('已取消 Passkey 驗證，請重試或改用密碼登入');
+    }
+    throw new Error(err instanceof Error ? err.message : 'Passkey 驗證失敗');
+  }
+
+  const verifier = generateRandomBase64url(48);
+  const challenge = await computeCodeChallenge(verifier);
+  const state = generateRandomBase64url(24);
+  sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+  sessionStorage.setItem(OAUTH_STATE_KEY, state);
+
+  await generateDpopKey();
+
+  try {
+    const authRes = await fetch(`${API_BASE}/oauth/passkey/authorize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        response: assertion,
+        client_id: 'web',
+        redirect_uri: getRedirectUri(),
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+        state,
+        scope: 'full',
+      }),
+    });
+    const authJson = await authRes.json().catch(() => ({}));
+    if (!authRes.ok || !authJson.success || !authJson.data?.code) {
+      throw new Error(authJson.error || 'Passkey 登入失敗，請改用密碼登入');
+    }
+
+    await handleOAuthCallback(
+      `?code=${encodeURIComponent(authJson.data.code)}&state=${encodeURIComponent(authJson.data.state || state)}`
+    );
+  } catch (err) {
+    sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
+    await clearDpopKey();
+    throw err;
+  }
 }
 
 async function performRefresh(): Promise<string | null> {

@@ -12,6 +12,8 @@ database_id = "b4486e74-b114-47ad-8999-ccb17e405d58"
 [vars]
 WEB_URL = "https://my-money-onion.pages.dev"
 ENVIRONMENT = "production"
+WEBAUTHN_RP_ID = "my-money-onion.pages.dev"
+WEBAUTHN_ORIGIN = "https://my-money-onion.pages.dev"
 
 # ?脩垢??啣?蝬? (?瑁? wrangler deploy ??GitHub Actions ?蝙??
 # 雿輻??瑁? wrangler d1 create my-money-db ???祕 database_id
@@ -20,6 +22,8 @@ name = "my-money-api-prod"
 [env.production.vars]
 WEB_URL = "https://my-money-onion.pages.dev"
 ENVIRONMENT = "production"
+WEBAUTHN_RP_ID = "my-money-onion.pages.dev"
+WEBAUTHN_ORIGIN = "https://my-money-onion.pages.dev"
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "my-money-db"

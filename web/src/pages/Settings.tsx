@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, Laptop, LogOut, ShieldCheck, Smartphone } from 'lucide-react';
-import { authApi, type SessionInfo } from '../api/client';
+import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
+import { Fingerprint, KeyRound, Laptop, LogOut, Pencil, Plus, ShieldCheck, Smartphone, Trash2 } from 'lucide-react';
+import { authApi, passkeysApi, type PasskeyInfo, type SessionInfo } from '../api/client';
 import { Skeleton } from '../components/Skeleton';
 
 function formatTimestamp(sec: number): string {
@@ -34,6 +35,14 @@ export default function Settings() {
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState('');
 
+  const [passkeys, setPasskeys] = useState<PasskeyInfo[]>([]);
+  const [loadingPasskeys, setLoadingPasskeys] = useState(true);
+  const [passkeyName, setPasskeyName] = useState('');
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [passkeyError, setPasskeyError] = useState('');
+  const [editingPasskeyId, setEditingPasskeyId] = useState<string | null>(null);
+  const [editingPasskeyName, setEditingPasskeyName] = useState('');
+
   const loadSessions = async () => {
     setLoadingSessions(true);
     setSessionError('');
@@ -47,9 +56,73 @@ export default function Settings() {
     }
   };
 
+  const loadPasskeys = async () => {
+    setLoadingPasskeys(true);
+    setPasskeyError('');
+    try {
+      setPasskeys(await passkeysApi.list());
+    } catch (err: unknown) {
+      setPasskeyError(err instanceof Error ? err.message : '無法載入 Passkey 清單');
+    } finally {
+      setLoadingPasskeys(false);
+    }
+  };
+
   useEffect(() => {
     loadSessions();
+    loadPasskeys();
   }, []);
+
+  const handleAddPasskey = async () => {
+    if (!browserSupportsWebAuthn()) {
+      setPasskeyError('此瀏覽器或裝置不支援 Passkey');
+      return;
+    }
+    setPasskeyBusy(true);
+    setPasskeyError('');
+    try {
+      const options = await passkeysApi.registerOptions();
+      const response = await startRegistration({ optionsJSON: options });
+      const created = await passkeysApi.registerVerify(response, passkeyName.trim() || undefined);
+      setPasskeys((prev) => [created, ...prev]);
+      setPasskeyName('');
+    } catch (err: unknown) {
+      const name = err && typeof err === 'object' && 'name' in err ? String((err as { name: string }).name) : '';
+      if (name === 'NotAllowedError' || name === 'AbortError') {
+        setPasskeyError('已取消建立 Passkey');
+      } else if (name === 'InvalidStateError') {
+        setPasskeyError('此裝置已註冊過同一帳號的 Passkey');
+      } else {
+        setPasskeyError(err instanceof Error ? err.message : '建立 Passkey 失敗');
+      }
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
+
+  const handleRenamePasskey = async (id: string) => {
+    const trimmed = editingPasskeyName.trim();
+    if (!trimmed) return;
+    setPasskeyError('');
+    try {
+      const updated = await passkeysApi.rename(id, trimmed);
+      setPasskeys((prev) => prev.map((p) => (p.id === id ? { ...p, name: updated.name } : p)));
+      setEditingPasskeyId(null);
+      setEditingPasskeyName('');
+    } catch (err: unknown) {
+      setPasskeyError(err instanceof Error ? err.message : '重新命名失敗');
+    }
+  };
+
+  const handleDeletePasskey = async (id: string) => {
+    setPasskeyError('');
+    try {
+      await passkeysApi.remove(id);
+      setPasskeys((prev) => prev.filter((p) => p.id !== id));
+    } catch (err: unknown) {
+      setPasskeyError(err instanceof Error ? err.message : '刪除 Passkey 失敗');
+    }
+  };
 
   const handleRevokeOne = async (id: string) => {
     setBusyId(id);
@@ -122,6 +195,143 @@ export default function Settings() {
           </p>
         </div>
       </div>
+
+      {/* Passkey 通行金鑰 */}
+      <section className="card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <Fingerprint size={18} style={{ color: 'var(--color-primary)' }} />
+          <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Passkey 通行金鑰</h2>
+        </div>
+        <p style={{ margin: '0 0 14px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          使用 Face ID / Touch ID 或裝置密碼免密碼安全登入。刪除 Passkey 僅停用該金鑰未來登入。
+        </p>
+
+        {passkeyError && (
+          <div style={{
+            padding: '10px 12px',
+            borderRadius: 10,
+            background: 'rgba(239, 68, 68, 0.1)',
+            color: 'var(--color-danger, #ef4444)',
+            fontSize: '0.88rem',
+            marginBottom: 12,
+          }}>
+            {passkeyError}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+          <input
+            type="text"
+            className="input"
+            placeholder="名稱（選填，例如：iPhone、MacBook）"
+            maxLength={60}
+            value={passkeyName}
+            onChange={(e) => setPasskeyName(e.target.value)}
+            style={{ flex: '1 1 220px', maxWidth: 320 }}
+          />
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={passkeyBusy}
+            onClick={handleAddPasskey}
+          >
+            <Plus size={16} />
+            {passkeyBusy ? '建立中...' : '新增 Passkey'}
+          </button>
+        </div>
+
+        {loadingPasskeys ? (
+          <Skeleton height={56} />
+        ) : passkeys.length === 0 ? (
+          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+            尚未建立任何 Passkey
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {passkeys.map((pk) => (
+              <div
+                key={pk.id}
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  background: 'var(--bg-surface-2)',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                <div style={{ flex: '1 1 220px' }}>
+                  {editingPasskeyId === pk.id ? (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        className="input"
+                        maxLength={60}
+                        value={editingPasskeyName}
+                        onChange={(e) => setEditingPasskeyName(e.target.value)}
+                        style={{ maxWidth: 220 }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => handleRenamePasskey(pk.id)}
+                      >
+                        儲存
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => {
+                          setEditingPasskeyId(null);
+                          setEditingPasskeyName('');
+                        }}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontWeight: 600 }}>{pk.name}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                        建立：{formatTimestamp(pk.created_at)} · 最後使用：{pk.last_used_at ? formatTimestamp(pk.last_used_at) : '尚未使用'}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {editingPasskeyId !== pk.id && (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      title="重新命名"
+                      onClick={() => {
+                        setEditingPasskeyId(pk.id);
+                        setEditingPasskeyName(pk.name);
+                      }}
+                    >
+                      <Pencil size={15} />
+                      改名
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      title="刪除 Passkey"
+                      onClick={() => handleDeletePasskey(pk.id)}
+                    >
+                      <Trash2 size={15} />
+                      刪除
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* 已登入的裝置 */}
       <section className="card">

@@ -10,6 +10,7 @@
     "db:seed": "wrangler d1 execute my-money-db --local --file=src/db/seed.sql"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^14.1.0",
     "hono": "^4.6.0"
   },
   "devDependencies": {

@@ -10,6 +10,8 @@ export interface Env {
   ENVIRONMENT?: string;
   LEGACY_AUTH_ENABLED?: string;
   DPOP_REQUIRED?: string;
+  WEBAUTHN_RP_ID?: string;
+  WEBAUTHN_ORIGIN?: string;
 }
 
 export interface User {

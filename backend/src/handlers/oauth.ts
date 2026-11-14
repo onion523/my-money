@@ -13,6 +13,7 @@ import {
 } from '../middleware/jwt';
 import { renderOAuthErrorPage, renderOAuthLoginPage } from './oauthLoginPage';
 import { claimDpopJti, ensureDpopSchema, verifyDpopProof } from '../middleware/dpop';
+import { verifyPasskeyAssertion } from './passkey';
 
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 分鐘
 export const SESSION_IDLE_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 天
@@ -555,6 +556,56 @@ oauth.post('/authorize', async (c) => {
   redirectUrl.searchParams.set('code', code);
   if (tx.state) redirectUrl.searchParams.set('state', tx.state);
   return c.redirect(redirectUrl.toString(), 302);
+});
+
+// POST /oauth/passkey/authorize (前端以 Passkey assertion + PKCE 參數換取 OAuth 授權碼)
+oauth.post('/passkey/authorize', async (c) => {
+  await ensureOAuthSchema(c.env.DB);
+  const body = (await c.req.json().catch(() => ({}))) as {
+    response?: Parameters<typeof verifyPasskeyAssertion>[2];
+    client_id?: string;
+    redirect_uri?: string;
+    code_challenge?: string;
+    code_challenge_method?: string;
+    state?: string;
+    scope?: string;
+  };
+
+  const clientId = body.client_id || '';
+  const redirectUri = body.redirect_uri || '';
+  const codeChallenge = body.code_challenge || '';
+  const codeChallengeMethod = body.code_challenge_method || '';
+  const state = body.state || '';
+  const scope = body.scope || 'full';
+
+  const allowedUris = getAllowedRedirectUris(clientId, c.env);
+  if (!allowedUris || !redirectUri || !allowedUris.includes(redirectUri)) {
+    return c.json({ success: false, error: 'client_id 或 redirect_uri 未經允許' }, 400);
+  }
+  if (!codeChallenge || codeChallengeMethod !== 'S256') {
+    return c.json({ success: false, error: '必須提供 PKCE code_challenge 與 S256' }, 400);
+  }
+  if (scope !== 'full') {
+    return c.json({ success: false, error: '不支援的 scope' }, 400);
+  }
+
+  const verified = await verifyPasskeyAssertion(c.env.DB, c.env, body.response);
+  if (!verified.ok) {
+    return c.json({ success: false, error: verified.error }, 401);
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const code = randomToken(32);
+  const codeHash = await sha256Base64url(code);
+  await c.env.DB.prepare(
+    `INSERT INTO oauth_codes (code_hash, user_id, client_id, redirect_uri, code_challenge, scope, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(codeHash, verified.user.id, clientId, redirectUri, codeChallenge, scope, now + AUTH_CODE_TTL_SECONDS)
+    .run();
+
+  c.header('Cache-Control', 'no-store');
+  return c.json({ success: true, data: { code, state } });
 });
 
 // POST /oauth/token

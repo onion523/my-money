@@ -497,6 +497,14 @@ _Avoid_: 裝置綁定 (device binding)、token 加密 (token encryption)
 Key-Bound Session 的 client 隨每個請求附上、用私鑰簽出的短效（±60 秒）一次性憑證，證明「這個請求確實由持有私鑰者發出」，且只對該次請求的方法、網址與 Access Token 有效。伺服器對 token 端點與寫入類請求（POST/PUT/DELETE）拒絕重送；讀取類請求只靠短時間窗與 token 綁定防護。
 _Avoid_: 簽章 (signature)、第二個 token (second token)
 
+**Passkey (通行金鑰)**:
+基於 WebAuthn 的無密碼登入憑證，綁定前端網域（Relying Party ID = `my-money-onion.pages.dev`），私鑰由裝置安全硬體或系統鑰匙圈（如 iCloud 鑰匙圈）保存，伺服器僅儲存公鑰與計數器。使用者可在已登入的設定頁註冊、命名或刪除 Passkey；刪除 Passkey 僅停用該金鑰未來登入，不會主動撤銷既有 Session。
+_Avoid_: 生物辨識密碼 (biometric password)、Keychain 密碼
+
+**WebAuthn OAuth Bridge (WebAuthn 授權橋接)**:
+因 Web 前端（`pages.dev`）與授權伺服器（`workers.dev`）分屬不同 Public Suffix 網域無法共用 RP ID，Web 端由前端登入頁發起 Passkey 驗證並將簽章 assertion 與 PKCE `code_challenge` 送至後端 `POST /oauth/passkey/authorize`，換取授權碼後再經既有 `/oauth/token`（含 DPoP 綁定）領取 Access Token 與 Refresh Token。
+_Avoid_: 跨網域 cookie、直接發放永久 token
+
 ---
 
 ### 前端視覺主題與載入體驗 (Frontend Theme & Loading UX)

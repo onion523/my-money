@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   salt TEXT NOT NULL,
   legacy_token_valid_after INTEGER,
+  webauthn_user_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -220,6 +221,27 @@ CREATE TABLE IF NOT EXISTS dpop_jti (
 );
 
 CREATE INDEX IF NOT EXISTS idx_dpop_jti_exp ON dpop_jti(expires_at);
+
+CREATE TABLE IF NOT EXISTS passkeys (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  credential_id TEXT NOT NULL UNIQUE,
+  public_key TEXT NOT NULL,
+  sign_count INTEGER NOT NULL DEFAULT 0,
+  transports TEXT,
+  name TEXT NOT NULL DEFAULT 'Passkey',
+  created_at INTEGER NOT NULL,
+  last_used_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_passkeys_user ON passkeys(user_id);
+
+CREATE TABLE IF NOT EXISTS webauthn_challenges (
+  challenge TEXT PRIMARY KEY,
+  purpose TEXT NOT NULL CHECK(purpose IN ('register', 'login')),
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL
+);
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_session ON refresh_tokens(session_id);
