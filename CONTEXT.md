@@ -459,6 +459,38 @@ _Avoid_: 聊天指令 (chat command)、提示詞 (prompt)、快速指令 (quick 
 
 ---
 
+### 認證與登入 (Authentication & Sign-in)
+
+**Authorization Server (授權伺服器)**:
+負責驗證使用者身分並核發 token 的一方，其登入頁是唯一可以輸入密碼（或日後的 passkey）的地方。自家 client 不會直接接觸到密碼。
+_Avoid_: 登入 API (login API)、認證後端 (auth backend)
+
+**Client (用戶端)**:
+代表使用者向 API 存取資料的應用程式。目前只有兩個 first-party public client：`web` 與 `ios`，兩者都沒有 client secret。
+_Avoid_: 裝置 (device)、前端 (frontend)
+
+**Session (登入工作階段)**:
+某位使用者在某一個 client 實例（一支手機、一個瀏覽器）上的一次持續登入，也就是「已登入的裝置」清單裡的一列。可以單獨撤銷；連續閒置 30 天沒使用就失效，沒有絕對上限。
+_Avoid_: 裝置 (device)、登入紀錄 (login record)、cookie
+
+**Access Token (存取權杖)**:
+短效（15 分鐘）的通行證，代表某個 Session 在效期內存取 API 的權利。撤銷 Session 後，已經發出的 Access Token 仍然有效到過期為止。
+_Avoid_: token（未加限定詞）、JWT
+
+**Refresh Token (更新權杖)**:
+屬於某個 Session、用來換取新 Access Token 的憑證。每次使用都會被換掉（輪替）；已經換掉的舊 Refresh Token 如果在緩衝期過後又被拿來使用，就視為外洩，整個 Session 會被撤銷。
+_Avoid_: 長效 token (long-lived token)、記住我 (remember me)
+
+**Legacy Token (舊版權杖)**:
+相容期間由舊版 `/auth/login`、`/auth/register` 核發、效期 30 天、不屬於任何 Session 的權杖。不會出現在裝置清單，只有在修改密碼時會失效；相容模式結束後全面停用。
+_Avoid_: 舊 session (old session)、Access Token
+
+**Sign Out (登出)**:
+撤銷目前這個 Session。授權伺服器不會記住瀏覽器的登入狀態，所以登出後再登入一定要重新驗證身分。
+_Avoid_: 清除 token (clear token)、登出全部 (sign out everywhere，那是「登出其他所有裝置」)
+
+---
+
 ### 前端視覺主題與載入體驗 (Frontend Theme & Loading UX)
 
 **Dual-Theme Color System (雙主題視覺色票系統：柔和水彩淺色 ＆ 月影鈦銀灰深色)**:
