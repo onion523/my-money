@@ -81,6 +81,17 @@ export async function startOAuthLogin(mode: 'login' | 'register' = 'login'): Pro
   window.location.assign(`${AUTH_SERVER_BASE}/oauth/authorize?${params.toString()}`);
 }
 
+function persistOAuthSession(accessToken: string, refreshToken: string): { id: string; email: string; name: string } {
+  const user = parseUserFromJwt(accessToken);
+  if (!user) {
+    throw new Error('無效的存取權杖');
+  }
+  memoryAccessToken = accessToken;
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  useStore.getState().setAuth(user, accessToken);
+  return user;
+}
+
 export async function handleOAuthCallback(search: string): Promise<void> {
   const params = new URLSearchParams(search);
   const err = params.get('error');
@@ -116,15 +127,7 @@ export async function handleOAuthCallback(search: string): Promise<void> {
     throw new Error(data.error_description || data.error || '換取權杖失敗');
   }
 
-  const user = parseUserFromJwt(data.access_token);
-  if (!user) {
-    throw new Error('無效的存取權杖');
-  }
-
-  memoryAccessToken = data.access_token;
-  localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-  useStore.getState().setAuth(user, data.access_token);
+  persistOAuthSession(data.access_token, data.refresh_token);
 }
 
 async function performRefresh(): Promise<string | null> {
@@ -147,16 +150,7 @@ async function performRefresh(): Promise<string | null> {
       return null;
     }
 
-    const user = parseUserFromJwt(data.access_token);
-    if (!user) {
-      clearAllAuth();
-      return null;
-    }
-
-    memoryAccessToken = data.access_token;
-    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-    useStore.getState().setAuth(user, data.access_token);
+    persistOAuthSession(data.access_token, data.refresh_token);
     return data.access_token as string;
   } catch {
     return null;

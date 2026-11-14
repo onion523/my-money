@@ -146,7 +146,15 @@ function getSecret(env: Env): string {
 }
 
 export function getClientIp(c: Context): string | null {
-  return c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() || null;
+  return c.req.header('CF-Connecting-IP') || null;
+}
+
+export async function rehashPasswordIfNeeded(db: D1Database, userId: string, password: string): Promise<void> {
+  const newSalt = generateSalt();
+  const newHash = await hashPasswordPBKDF2(password, newSalt);
+  await db.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?')
+    .bind(newHash, newSalt, userId)
+    .run();
 }
 
 export async function isRateLimited(db: D1Database, keys: string[], now: number): Promise<boolean> {
@@ -484,11 +492,7 @@ oauth.post('/authorize', async (c) => {
     await clearAuthFailures(c.env.DB, emailKey);
 
     if (needsRehash) {
-      const newSalt = generateSalt();
-      const newHash = await hashPasswordPBKDF2(password, newSalt);
-      await c.env.DB.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?')
-        .bind(newHash, newSalt, user.id)
-        .run();
+      await rehashPasswordIfNeeded(c.env.DB, user.id, password);
     }
     authenticatedUserId = user.id;
   }

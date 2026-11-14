@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from './store/useStore'
 import { bootstrapAuth } from './auth/oauth'
+import { Skeleton } from './components/Skeleton'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import OAuthCallback from './pages/OAuthCallback'
@@ -31,8 +32,12 @@ export default function App() {
 
   if (!authReady) {
     return (
-      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>載入工作階段中...</p>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div className="card" style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Skeleton variant="text" width="45%" height={24} />
+          <Skeleton variant="rect" height={42} borderRadius={12} />
+          <Skeleton variant="rect" height={42} borderRadius={12} />
+        </div>
       </div>
     )
   }

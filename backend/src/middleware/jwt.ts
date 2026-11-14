@@ -198,8 +198,11 @@ export async function authMiddleware(
       if (!user || (user.legacy_token_valid_after != null && payload.iat < user.legacy_token_valid_after)) {
         return unauthorized(c, 'Token 已失效，請重新登入');
       }
-    } catch {
-      // 舊測試資料庫尚未含 legacy_token_valid_after 欄位時略過
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('no such column')) {
+        throw err;
+      }
     }
   }
   c.set('userId', payload.sub);

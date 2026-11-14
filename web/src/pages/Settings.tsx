@@ -124,7 +124,7 @@ export default function Settings() {
       </div>
 
       {/* 已登入的裝置 */}
-      <section className="card" style={{ padding: 20 }}>
+      <section className="card">
         <div style={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -251,7 +251,7 @@ export default function Settings() {
       </section>
 
       {/* 修改密碼 */}
-      <section className="card" style={{ padding: 20 }}>
+      <section className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
           <KeyRound size={18} style={{ color: 'var(--color-primary)' }} />
           <h2 style={{ margin: 0, fontSize: '1.1rem' }}>修改密碼</h2>
@@ -274,7 +274,7 @@ export default function Settings() {
               padding: '10px 12px',
               borderRadius: 10,
               background: 'rgba(16, 185, 129, 0.12)',
-              color: '#059669',
+              color: 'var(--color-success, #059669)',
               fontSize: '0.88rem',
             }}>
               {pwSuccess}

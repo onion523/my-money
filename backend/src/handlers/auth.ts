@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Env } from '../types';
 import { hashPasswordPBKDF2, verifyPassword, generateSalt, generateId, createJWT, authMiddleware } from '../middleware/jwt';
 import { handleHouseholdMemberDeparture } from './households';
-import { clearAuthFailures, ensureOAuthSchema, getClientIp, isRateLimited, recordAuthFailure } from './oauth';
+import { clearAuthFailures, ensureOAuthSchema, getClientIp, isRateLimited, recordAuthFailure, rehashPasswordIfNeeded } from './oauth';
 
 const auth = new Hono<{ Bindings: Env; Variables: { userId: string; userEmail: string; userName: string; sessionId?: string } }>();
 
@@ -44,11 +44,7 @@ auth.post('/login', async (c) => {
   if (!valid) return c.json({ success: false, error: 'Email 或密碼錯誤' }, 401);
 
   if (needsRehash) {
-    const newSalt = generateSalt();
-    const newHash = await hashPasswordPBKDF2(password, newSalt);
-    await c.env.DB.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?')
-      .bind(newHash, newSalt, user.id)
-      .run();
+    await rehashPasswordIfNeeded(c.env.DB, user.id, password);
   }
 
   const token = await createJWT({ sub: user.id, email: user.email, name: user.name }, c.env.JWT_SECRET || 'dev-secret-key');
