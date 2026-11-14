@@ -135,6 +135,7 @@ button {
   margin-top: 4px;
 }
 button:hover { background: var(--primary-hover); }
+button:disabled { opacity: 0.7; cursor: wait; }
 .err {
   padding: 10px 12px;
   border-radius: 10px;
@@ -159,6 +160,7 @@ export function renderOAuthLoginPage(opts: {
   error?: string;
   clientLabel?: string;
   switchUrlBase?: string;
+  scriptNonce?: string;
 }): string {
   const mode = opts.mode ?? 'login';
   const isRegister = mode === 'register';
@@ -209,7 +211,24 @@ export function renderOAuthLoginPage(opts: {
       <button type="submit">${isRegister ? '建立帳號並繼續' : '登入'}</button>
     </form>
     <p class="hint">安全驗證由 My Money 授權伺服器提供</p>
-  </main>
+  </main>${
+    opts.scriptNonce
+      ? `
+  <script nonce="${escapeHtml(opts.scriptNonce)}">
+    (function(){
+      var f = document.querySelector('form');
+      if (!f) return;
+      f.addEventListener('submit', function(e){
+        var b = f.querySelector('button[type="submit"]');
+        if (!b) return;
+        if (b.disabled) { e.preventDefault(); return; }
+        b.disabled = true;
+        b.textContent = ${isRegister ? "'建立帳號中...'" : "'登入中...'"};
+      });
+    })();
+  </script>`
+      : ''
+  }
 </body>
 </html>`;
 }

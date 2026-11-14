@@ -314,10 +314,12 @@ function buildCookieString(name: string, value: string, maxAge: number, reqUrl: 
   ].join('; ');
 }
 
-function applySecurityHeaders(c: Context) {
+function applySecurityHeaders(c: Context, scriptNonce?: string) {
+  const scriptDirective = scriptNonce ? ` script-src 'nonce-${scriptNonce}';` : '';
+  // 不設 form-action 'self'：Chromium 會以 form-action 檢查 POST 後的 302 重導目標，導致跨來源 OAuth callback 被阻擋
   c.header(
     'Content-Security-Policy',
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+    `default-src 'none'; style-src 'unsafe-inline';${scriptDirective} frame-ancestors 'none'; base-uri 'none'`
   );
   c.header('X-Frame-Options', 'DENY');
   c.header('Cache-Control', 'no-store');
@@ -393,6 +395,8 @@ oauth.get('/authorize', async (c) => {
     .bind(txHash, clientId, redirectUri, codeChallenge, state, scope, now + TX_TTL_SECONDS)
     .run();
 
+  const scriptNonce = randomToken(16);
+  applySecurityHeaders(c, scriptNonce);
   const mode = c.req.query('mode') === 'register' ? 'register' : 'login';
   const html = renderOAuthLoginPage({
     csrfToken: txToken,
@@ -405,6 +409,7 @@ oauth.get('/authorize', async (c) => {
       state,
       scope,
     }),
+    scriptNonce,
   });
   return c.html(html, 200);
 });
@@ -448,8 +453,10 @@ oauth.post('/authorize', async (c) => {
   const name = (body.get('name') || '').trim();
   const switchUrlBase = buildSwitchUrlBase(tx);
 
-  const renderFormError = (errorMsg: string, status: 400 | 401 | 409 | 429) =>
-    c.html(
+  const renderFormError = (errorMsg: string, status: 400 | 401 | 409 | 429) => {
+    const scriptNonce = randomToken(16);
+    applySecurityHeaders(c, scriptNonce);
+    return c.html(
       renderOAuthLoginPage({
         csrfToken: txToken,
         mode,
@@ -458,9 +465,11 @@ oauth.post('/authorize', async (c) => {
         error: errorMsg,
         clientLabel: getClientDisplayName(tx.client_id),
         switchUrlBase,
+        scriptNonce,
       }),
       status
     );
+  };
 
   let authenticatedUserId: string;
 
