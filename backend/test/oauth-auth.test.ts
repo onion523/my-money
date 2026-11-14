@@ -146,7 +146,6 @@ describe('Auth & OAuth 2.1 (#194)', () => {
       expect(getRes.status).toBe(200);
       const html = await getRes.text();
       const csrf = extractCsrfToken(html);
-      const cookie = extractSetCookie(getRes.headers, 'mm_oauth_tx');
 
       const form = new URLSearchParams({
         email: opts.email,
@@ -157,7 +156,6 @@ describe('Auth & OAuth 2.1 (#194)', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          Cookie: cookie,
           ...(opts.userAgent ? { 'User-Agent': opts.userAgent } : {}),
         },
         body: form.toString(),
@@ -367,12 +365,11 @@ describe('Auth & OAuth 2.1 (#194)', () => {
       const getRes = await rawFetch(
         `/oauth/authorize?response_type=code&client_id=web&redirect_uri=${encodeURIComponent(WEB_REDIRECT)}&code_challenge=${challenge}&code_challenge_method=S256`
       );
-      const cookie = extractSetCookie(getRes.headers, 'mm_oauth_tx');
 
       // Missing CSRF token
       const noCsrf = await rawFetch('/oauth/authorize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ email: 'oauth1@x.com', password: 'password123' }).toString(),
       });
       expect(noCsrf.status).toBe(403);
@@ -381,7 +378,7 @@ describe('Auth & OAuth 2.1 (#194)', () => {
       const csrf = extractCsrfToken(await getRes.text());
       const badPass = await rawFetch('/oauth/authorize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ email: 'oauth1@x.com', password: 'wrong', csrf_token: csrf }).toString(),
       });
       expect(badPass.status).toBe(401);
@@ -404,10 +401,9 @@ describe('Auth & OAuth 2.1 (#194)', () => {
         `/oauth/authorize?response_type=code&client_id=web&redirect_uri=${encodeURIComponent(WEB_REDIRECT)}&code_challenge=${challenge}&code_challenge_method=S256&state=s`
       );
       const csrf = extractCsrfToken(await getRes.text());
-      const cookie = extractSetCookie(getRes.headers, 'mm_oauth_tx');
       const postRes = await rawFetch('/oauth/authorize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ email, password, csrf_token: csrf }).toString(),
       });
       const code = new URL(postRes.headers.get('location')!).searchParams.get('code')!;
@@ -584,17 +580,16 @@ describe('Auth & OAuth 2.1 (#194)', () => {
       expect(getRes.status).toBe(200);
       const html = await getRes.text();
       const csrf = extractCsrfToken(html);
-      const cookie = extractSetCookie(getRes.headers, 'mm_oauth_tx');
-      return { csrf, cookie, verifier, html };
+      return { csrf, verifier, html };
     }
 
     it('registers a new user on /oauth/authorize and immediately issues an authorization code', async () => {
-      const { csrf, cookie, verifier, html } = await startAuthorize('register');
+      const { csrf, verifier, html } = await startAuthorize('register');
       expect(html).toContain('建立帳號並繼續');
 
       const postRes = await rawFetch('/oauth/authorize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           mode: 'register',
           name: 'RegOAuth',
@@ -624,12 +619,12 @@ describe('Auth & OAuth 2.1 (#194)', () => {
     });
 
     it('shows validation errors on registration form (duplicate email, short password, missing fields)', async () => {
-      const { csrf, cookie } = await startAuthorize('register');
+      const { csrf } = await startAuthorize('register');
 
       // Short password
       const shortRes = await rawFetch('/oauth/authorize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           mode: 'register',
           name: 'Short',
@@ -644,7 +639,7 @@ describe('Auth & OAuth 2.1 (#194)', () => {
       // Duplicate email
       const dupRes = await rawFetch('/oauth/authorize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           mode: 'register',
           name: 'Dup',
@@ -665,14 +660,14 @@ describe('Auth & OAuth 2.1 (#194)', () => {
           method: 'POST',
           body: { email: 'ratelimit@x.com', password: 'correct-password', name: 'RL' },
         });
-        const { csrf, cookie } = await startAuthorize('login');
+        const { csrf } = await startAuthorize('login');
 
         // 5 failed attempts with wrong password
         let msgExisting = '';
         for (let i = 0; i < 5; i++) {
           const r = await rawFetch('/oauth/authorize', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
               mode: 'login',
               email: 'ratelimit@x.com',
@@ -687,7 +682,7 @@ describe('Auth & OAuth 2.1 (#194)', () => {
         // Non-existent email returns identical error message
         const nonExistRes = await rawFetch('/oauth/authorize', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
             mode: 'login',
             email: 'no-such-user@x.com',
@@ -702,7 +697,7 @@ describe('Auth & OAuth 2.1 (#194)', () => {
         // 6th attempt even with CORRECT password is locked
         const lockedRes = await rawFetch('/oauth/authorize', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
             mode: 'login',
             email: 'ratelimit@x.com',
@@ -712,12 +707,12 @@ describe('Auth & OAuth 2.1 (#194)', () => {
         });
         expect(lockedRes.status).toBe(429);
 
-        // Advance 15m + 1s -> unlocked & success resets counter (start a fresh authorize session since tx cookie TTL is 10m)
+        // Advance 15m + 1s -> unlocked & success resets counter (start a fresh authorize session since tx TTL is 15m)
         vi.setSystemTime(new Date(FIXED_NOW.getTime() + 15 * 60 * 1000 + 1000));
-        const { csrf: csrf2, cookie: cookie2 } = await startAuthorize('login');
+        const { csrf: csrf2 } = await startAuthorize('login');
         const okRes = await rawFetch('/oauth/authorize', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie2 },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
             mode: 'login',
             email: 'ratelimit@x.com',
@@ -728,10 +723,10 @@ describe('Auth & OAuth 2.1 (#194)', () => {
         expect(okRes.status).toBe(302);
 
         // Verify counter was reset (1 failure does not lock)
-        const { csrf: csrf3, cookie: cookie3 } = await startAuthorize('login');
+        const { csrf: csrf3 } = await startAuthorize('login');
         const oneFail = await rawFetch('/oauth/authorize', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie3 },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
             mode: 'login',
             email: 'ratelimit@x.com',
@@ -750,13 +745,12 @@ describe('Auth & OAuth 2.1 (#194)', () => {
       vi.setSystemTime(FIXED_NOW);
       try {
         const testIp = '203.0.113.42';
-        const { csrf, cookie } = await startAuthorize('login', testIp);
+        const { csrf } = await startAuthorize('login', testIp);
         for (let i = 0; i < 20; i++) {
           const r = await rawFetch('/oauth/authorize', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
-              Cookie: cookie,
               'CF-Connecting-IP': testIp,
             },
             body: new URLSearchParams({
@@ -774,7 +768,6 @@ describe('Auth & OAuth 2.1 (#194)', () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            Cookie: cookie,
             'CF-Connecting-IP': testIp,
           },
           body: new URLSearchParams({
@@ -806,10 +799,9 @@ describe('Auth & OAuth 2.1 (#194)', () => {
         { headers: { 'User-Agent': ua } }
       );
       const csrf = extractCsrfToken(await getRes.text());
-      const cookie = extractSetCookie(getRes.headers, 'mm_oauth_tx');
       const postRes = await rawFetch('/oauth/authorize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie, 'User-Agent': ua },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': ua },
         body: new URLSearchParams({ email, password, csrf_token: csrf }).toString(),
       });
       const code = new URL(postRes.headers.get('location')!).searchParams.get('code')!;

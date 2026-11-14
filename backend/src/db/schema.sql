@@ -203,6 +203,17 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   locked_until INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS oauth_tx (
+  tx_hash TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  state TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_session ON refresh_tokens(session_id);
 

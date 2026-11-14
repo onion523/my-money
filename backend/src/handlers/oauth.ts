@@ -20,7 +20,7 @@ export const REFRESH_GRACE_SECONDS = 30; // 30 秒輪替冪等緩衝
 export const RATE_LIMIT_WINDOW_SECONDS = 15 * 60; // 15 分鐘
 export const EMAIL_MAX_FAILURES = 5;
 export const IP_MAX_FAILURES = 20;
-const TX_COOKIE_NAME = 'mm_oauth_tx';
+const TX_TTL_SECONDS = 15 * 60; // 15 分鐘
 const TX_COOKIE_TTL_SECONDS = 10 * 60; // 10 分鐘
 
 const initializedDbs = new WeakSet<object>();
@@ -62,6 +62,16 @@ export async function ensureOAuthSchema(db: D1Database): Promise<void> {
       failures INTEGER NOT NULL DEFAULT 0,
       window_start INTEGER NOT NULL,
       locked_until INTEGER
+    )`,
+    `CREATE TABLE IF NOT EXISTS oauth_tx (
+      tx_hash TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      code_challenge TEXT NOT NULL,
+      state TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER
     )`,
     `CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_refresh_session ON refresh_tokens(session_id)`,
@@ -374,25 +384,27 @@ oauth.get('/authorize', async (c) => {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const csrf = randomToken(24);
-  const txPayload: TxCookiePayload = {
-    csrf,
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    code_challenge: codeChallenge,
-    state,
-    scope,
-    exp: now + TX_COOKIE_TTL_SECONDS,
-  };
-  const cookieVal = await encodeTxCookie(txPayload, getSecret(c.env));
-  c.header('Set-Cookie', buildCookieString(TX_COOKIE_NAME, cookieVal, TX_COOKIE_TTL_SECONDS, c.req.url));
+  const txToken = randomToken(24);
+  const txHash = await sha256Base64url(txToken);
+  await c.env.DB.prepare(
+    `INSERT INTO oauth_tx (tx_hash, client_id, redirect_uri, code_challenge, state, scope, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(txHash, clientId, redirectUri, codeChallenge, state, scope, now + TX_TTL_SECONDS)
+    .run();
 
   const mode = c.req.query('mode') === 'register' ? 'register' : 'login';
   const html = renderOAuthLoginPage({
-    csrfToken: csrf,
+    csrfToken: txToken,
     mode,
     clientLabel: getClientDisplayName(clientId),
-    switchUrlBase: buildSwitchUrlBase(txPayload),
+    switchUrlBase: buildSwitchUrlBase({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: codeChallenge,
+      state,
+      scope,
+    }),
   });
   return c.html(html, 200);
 });
@@ -402,17 +414,32 @@ oauth.post('/authorize', async (c) => {
   await ensureOAuthSchema(c.env.DB);
   applySecurityHeaders(c);
 
-  const secret = getSecret(c.env);
-  const rawCookie = readCookie(c.req.header('Cookie'), TX_COOKIE_NAME);
-  const tx = await decodeTxCookie(rawCookie, secret);
-  if (!tx) {
-    return c.html(renderOAuthErrorPage('登入階段已逾時', '請回到應用程式重新發起登入。'), 403);
+  const now = Math.floor(Date.now() / 1000);
+  const backUrl = c.env.WEB_URL ? `${c.env.WEB_URL.replace(/\/+$/, '')}/login` : undefined;
+  const body = new URLSearchParams(await c.req.text());
+  const txToken = body.get('csrf_token') || '';
+  if (!txToken) {
+    return c.html(renderOAuthErrorPage('登入階段已逾時', '請回到應用程式重新發起登入。', backUrl), 403);
   }
 
-  const body = new URLSearchParams(await c.req.text());
-  const csrfToken = body.get('csrf_token') || '';
-  if (!csrfToken || !constantTimeEqual(csrfToken, tx.csrf)) {
-    return c.html(renderOAuthErrorPage('CSRF 驗證失敗', '請回到應用程式重新發起登入。'), 403);
+  const txHash = await sha256Base64url(txToken);
+  const tx = await c.env.DB.prepare(
+    `SELECT client_id, redirect_uri, code_challenge, state, scope, expires_at, used_at
+     FROM oauth_tx WHERE tx_hash = ?`
+  )
+    .bind(txHash)
+    .first<{
+      client_id: string;
+      redirect_uri: string;
+      code_challenge: string;
+      state: string;
+      scope: string;
+      expires_at: number;
+      used_at: number | null;
+    }>();
+
+  if (!tx || tx.used_at !== null || tx.expires_at < now) {
+    return c.html(renderOAuthErrorPage('登入階段已逾時', '請回到應用程式重新發起登入。', backUrl), 403);
   }
 
   const mode = body.get('mode') === 'register' ? 'register' : 'login';
@@ -424,7 +451,7 @@ oauth.post('/authorize', async (c) => {
   const renderFormError = (errorMsg: string, status: 400 | 401 | 409 | 429) =>
     c.html(
       renderOAuthLoginPage({
-        csrfToken: tx.csrf,
+        csrfToken: txToken,
         mode,
         email,
         name,
@@ -464,7 +491,6 @@ oauth.post('/authorize', async (c) => {
       return renderFormError('請填寫 Email 和密碼', 400);
     }
 
-    const now = Math.floor(Date.now() / 1000);
     const ip = getClientIp(c);
     const emailKey = `email:${email}`;
     const limitKeys = ip ? [emailKey, `ip:${ip}`] : [emailKey];
@@ -497,7 +523,15 @@ oauth.post('/authorize', async (c) => {
     authenticatedUserId = user.id;
   }
 
-  const now = Math.floor(Date.now() / 1000);
+  const claimTx = await c.env.DB.prepare(
+    'UPDATE oauth_tx SET used_at = ? WHERE tx_hash = ? AND used_at IS NULL'
+  )
+    .bind(now, txHash)
+    .run();
+  if (!claimTx.meta.changes) {
+    return c.html(renderOAuthErrorPage('登入階段已逾時', '請回到應用程式重新發起登入。', backUrl), 403);
+  }
+
   const code = randomToken(32);
   const codeHash = await sha256Base64url(code);
   await c.env.DB.prepare(
@@ -507,7 +541,6 @@ oauth.post('/authorize', async (c) => {
     .bind(codeHash, authenticatedUserId, tx.client_id, tx.redirect_uri, tx.code_challenge, tx.scope, now + AUTH_CODE_TTL_SECONDS)
     .run();
 
-  c.header('Set-Cookie', buildCookieString(TX_COOKIE_NAME, '', 0, c.req.url));
   const redirectUrl = new URL(tx.redirect_uri);
   redirectUrl.searchParams.set('code', code);
   if (tx.state) redirectUrl.searchParams.set('state', tx.state);

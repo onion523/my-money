@@ -214,7 +214,10 @@ export function renderOAuthLoginPage(opts: {
 </html>`;
 }
 
-export function renderOAuthErrorPage(title: string, message: string): string {
+export function renderOAuthErrorPage(title: string, message: string, backUrl?: string): string {
+  const actionHtml = backUrl
+    ? `<a href="${escapeHtml(backUrl)}" style="display:block;text-align:center;padding:12px;border-radius:12px;background:var(--primary);color:#fff;text-decoration:none;font-weight:700;margin-top:12px;">返回 My Money 重新登入</a>`
+    : `<p class="hint">請回到原本的應用程式重新發起登入。</p>`;
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -233,7 +236,7 @@ export function renderOAuthErrorPage(title: string, message: string): string {
       </div>
     </div>
     <div class="err" role="alert">${escapeHtml(message)}</div>
-    <p class="hint">請回到原本的應用程式重新發起登入。</p>
+    ${actionHtml}
   </main>
 </body>
 </html>`;
