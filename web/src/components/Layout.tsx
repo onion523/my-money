@@ -1,6 +1,8 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
+import { clearApiCache } from '../api/client'
+import { revokeAndLogout } from '../auth/oauth'
 import {
   LayoutDashboard,
   CreditCard,
@@ -62,8 +64,9 @@ export default function Layout() {
     }
   }, [mobileMenuOpen])
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    clearApiCache()
+    await revokeAndLogout()
     navigate('/login')
   }
 

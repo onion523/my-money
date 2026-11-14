@@ -32,19 +32,18 @@ interface AppStore {
   setLoading: (loading: boolean) => void;
 }
 
-function getStoredAuth(): { user: User | null; token: string | null } {
+function getStoredUser(): User | null {
   try {
-    const token = localStorage.getItem('mm_token');
+    const refreshToken = localStorage.getItem('mm_refresh_token');
     const userStr = localStorage.getItem('mm_user');
-    if (!token || !userStr) return { user: null, token: null };
-    const user = JSON.parse(userStr);
-    return { user, token };
-  } catch (e) {
+    if (!refreshToken || !userStr) return null;
+    return JSON.parse(userStr);
+  } catch {
     try {
-      localStorage.removeItem('mm_token');
+      localStorage.removeItem('mm_refresh_token');
       localStorage.removeItem('mm_user');
     } catch (_) {}
-    return { user: null, token: null };
+    return null;
   }
 }
 
@@ -60,19 +59,18 @@ function getStoredTheme(): 'light' | 'dark' {
 }
 
 export const useStore = create<AppStore>((set) => {
-  const { user, token } = getStoredAuth();
+  const user = getStoredUser();
   const theme = getStoredTheme();
   if (typeof document !== 'undefined') {
     document.documentElement.setAttribute('data-theme', theme);
   }
 
   return {
-    // Auth
+    // Auth（Access Token 僅存於記憶體，由 auth/oauth.ts 管理）
     user,
-    token,
+    token: null,
     setAuth: (user, token) => {
       try {
-        localStorage.setItem('mm_token', token);
         localStorage.setItem('mm_user', JSON.stringify(user));
       } catch (e) {}
       set({ user, token });
@@ -80,6 +78,7 @@ export const useStore = create<AppStore>((set) => {
     logout: () => {
       try {
         localStorage.removeItem('mm_token');
+        localStorage.removeItem('mm_refresh_token');
         localStorage.removeItem('mm_user');
       } catch (e) {}
       set({ user: null, token: null, accounts: [], transactions: [], recurring: [], goals: [], budgets: [], balance: null });

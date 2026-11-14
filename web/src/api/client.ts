@@ -1,8 +1,10 @@
 // API ?澆撅??????fetch 隢??絞銝?亙
+import { clearAllAuth, getMemoryAccessToken, refreshAccessToken } from '../auth/oauth';
+
 const BASE = (import.meta as any).env?.VITE_API_URL || '/api';
 
 function getToken(): string | null {
-  return localStorage.getItem('mm_token');
+  return getMemoryAccessToken();
 }
 
 // 客戶端記憶體快取 (支援 HTTP 304 Not Modified 條件式快取，ADR-0033)
@@ -53,14 +55,26 @@ async function requestEnvelope<T>(path: string, options: RequestInit = {}): Prom
     });
   }
 
-  if (res.status === 401 && !path.startsWith('/auth/')) {
-    try {
-      localStorage.removeItem('mm_token');
-      localStorage.removeItem('mm_user');
+  if (res.status === 401 && !path.startsWith('/oauth/') && path !== '/auth/password') {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      const retryHeaders: Record<string, string> = {
+        ...reqHeaders,
+        Authorization: `Bearer ${newToken}`,
+      };
+      delete retryHeaders['If-None-Match'];
+      delete retryHeaders['if-none-match'];
+      res = await fetch(`${BASE}${path}`, {
+        ...options,
+        cache: 'no-store',
+        headers: retryHeaders,
+      });
+    } else {
+      clearAllAuth();
       apiCache.clear();
-    } catch (_) {}
-    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-      window.location.href = '/login';
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
   }
 
@@ -97,12 +111,23 @@ const post = <T>(path: string, body?: unknown) => request<T>(path, { method: 'PO
 const put = <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined });
 const del = <T>(path: string) => request<T>(path, { method: 'DELETE' });
 
-// Auth
+// Auth & Sessions
+export interface SessionInfo {
+  id: string;
+  client_id: string;
+  device_name: string;
+  created_at: number;
+  last_used_at: number;
+  expires_at: number;
+  current: boolean;
+}
+
 export const authApi = {
-  login: (body: { email: string; password: string }) =>
-    post<{ token: string; user: { id: string; email: string; name: string } }>('/auth/login', body),
-  register: (body: { email: string; password: string; name: string }) =>
-    post<{ token: string; user: { id: string; email: string; name: string } }>('/auth/register', body),
+  sessions: () => get<SessionInfo[]>('/auth/sessions'),
+  revokeSession: (id: string) => del<{ id: string }>(`/auth/sessions/${id}`),
+  revokeOtherSessions: () => del<{ revoked_count: number }>('/auth/sessions?scope=others'),
+  changePassword: (body: { current_password: string; new_password: string }) =>
+    post<{ message: string }>('/auth/password', body),
   deleteAccount: () => del<{ message: string }>('/auth/account'),
 };
 
@@ -302,22 +327,50 @@ export const forecastApi = {
   toggleSettle: (event_key: string, settled: boolean) => post<{ event_key: string; is_settled: boolean }>('/forecast/settle', { event_key, settled }),
 };
 
+async function downloadAuthorizedFile(path: string, fallbackFilename: string): Promise<void> {
+  const send = (token: string | null) =>
+    fetch(`${BASE}${path}`, {
+      cache: 'no-store',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+  let res = await send(getToken());
+  if (res.status === 401) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      res = await send(newToken);
+    } else {
+      clearAllAuth();
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+      throw new Error('登入已過期，請重新登入');
+    }
+  }
+  if (!res.ok) {
+    throw new Error('匯出失敗');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fallbackFilename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // Export
 export const exportApi = {
   csv: (from?: string, to?: string) => {
     const params = new URLSearchParams();
     if (from) params.set('from', from);
     if (to) params.set('to', to);
-    const token = getToken();
-    if (token) params.set('token', token);
-    window.open(`${BASE}/export/csv?${params.toString()}`, '_blank');
+    const qs = params.toString();
+    return downloadAuthorizedFile(`/export/csv${qs ? `?${qs}` : ''}`, 'transactions.csv');
   },
-  recurringCsv: () => {
-    const params = new URLSearchParams();
-    const token = getToken();
-    if (token) params.set('token', token);
-    window.open(`${BASE}/export/recurring?${params.toString()}`, '_blank');
-  },
+  recurringCsv: () => downloadAuthorizedFile('/export/recurring', 'recurring.csv'),
 };
 
 // Household (摰嗅滬??)

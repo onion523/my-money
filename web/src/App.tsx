@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from './store/useStore'
+import { bootstrapAuth } from './auth/oauth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
-import Register from './pages/Register'
+import OAuthCallback from './pages/OAuthCallback'
 import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
 import Accounts from './pages/Accounts'
@@ -20,10 +22,25 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const [authReady, setAuthReady] = useState(false)
+
+  useEffect(() => {
+    bootstrapAuth().finally(() => setAuthReady(true))
+  }, [])
+
+  if (!authReady) {
+    return (
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'var(--text-secondary)' }}>載入工作階段中...</p>
+      </div>
+    )
+  }
+
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/oauth/callback" element={<OAuthCallback />} />
+      <Route path="/register" element={<Navigate to="/login" replace />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="transactions" element={<Transactions />} />
