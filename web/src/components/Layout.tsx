@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Users,
   Bot,
+  ShieldCheck,
   Sun,
   Moon,
   LogOut,
@@ -32,6 +33,7 @@ const navItems = [
   { to: '/forecast', icon: TrendingUp, label: '現金流預測' },
   { to: '/family', icon: Users, label: '家庭協同' },
   { to: '/bot', icon: Bot, label: '機器人記帳' },
+  { to: '/settings', icon: ShieldCheck, label: '帳號安全' },
 ]
 
 export default function Layout() {

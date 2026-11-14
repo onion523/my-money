@@ -14,6 +14,7 @@ import Analytics from './pages/Analytics'
 import Forecast from './pages/Forecast'
 import Family from './pages/Family'
 import BotIntegration from './pages/BotIntegration'
+import Settings from './pages/Settings'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useStore(s => s.token)
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="forecast" element={<Forecast />} />
         <Route path="family" element={<Family />} />
         <Route path="bot" element={<BotIntegration />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
