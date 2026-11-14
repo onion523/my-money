@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../types';
-import { hashPassword, generateSalt, generateId, createJWT, authMiddleware } from '../middleware/jwt';
+import { hashPasswordPBKDF2, verifyPassword, generateSalt, generateId, createJWT, authMiddleware } from '../middleware/jwt';
 import { handleHouseholdMemberDeparture } from './households';
 
 const auth = new Hono<{ Bindings: Env }>();
@@ -15,7 +15,7 @@ auth.post('/register', async (c) => {
   if (existing) return c.json({ success: false, error: '此 Email 已被使用' }, 409);
 
   const salt = generateSalt();
-  const hash = await hashPassword(password, salt);
+  const hash = await hashPasswordPBKDF2(password, salt);
   const id = generateId();
 
   await c.env.DB.prepare('INSERT INTO users (id, email, name, password_hash, salt) VALUES (?, ?, ?, ?, ?)')
@@ -33,8 +33,16 @@ auth.post('/login', async (c) => {
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email.toLowerCase()).first<{ id: string; email: string; name: string; password_hash: string; salt: string }>();
   if (!user) return c.json({ success: false, error: 'Email 或密碼錯誤' }, 401);
 
-  const hash = await hashPassword(password, user.salt);
-  if (hash !== user.password_hash) return c.json({ success: false, error: 'Email 或密碼錯誤' }, 401);
+  const { valid, needsRehash } = await verifyPassword(password, user.password_hash, user.salt);
+  if (!valid) return c.json({ success: false, error: 'Email 或密碼錯誤' }, 401);
+
+  if (needsRehash) {
+    const newSalt = generateSalt();
+    const newHash = await hashPasswordPBKDF2(password, newSalt);
+    await c.env.DB.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?')
+      .bind(newHash, newSalt, user.id)
+      .run();
+  }
 
   const token = await createJWT({ sub: user.id, email: user.email, name: user.name }, c.env.JWT_SECRET || 'dev-secret-key');
   return c.json({ success: true, data: { token, user: { id: user.id, email: user.email, name: user.name } } });

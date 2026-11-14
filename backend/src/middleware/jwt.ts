@@ -62,11 +62,87 @@ export async function verifyJWT(token: string, secret: string): Promise<JWTPaylo
   }
 }
 
-// SHA-256 密碼雜湊
+export const PBKDF2_ITERATIONS = 100_000;
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  if (/^[0-9a-fA-F]+$/.test(hex) && hex.length % 2 === 0) {
+    const out = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < out.length; i++) {
+      out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    return out;
+  }
+  return new TextEncoder().encode(hex);
+}
+
+export function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+// 舊版 SHA-256 密碼雜湊（僅供舊帳號驗證與遷移使用）
 export async function hashPassword(password: string, salt: string): Promise<string> {
   const data = new TextEncoder().encode(password + salt);
   const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return bytesToHex(new Uint8Array(hash));
+}
+
+async function derivePBKDF2Hex(password: string, salt: string, iterations: number): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: hexToBytes(salt),
+      iterations,
+      hash: 'SHA-256',
+    },
+    key,
+    256
+  );
+  return bytesToHex(new Uint8Array(bits));
+}
+
+// 新版 PBKDF2-SHA256 密碼雜湊（帶版本與迭代次數前綴）
+export async function hashPasswordPBKDF2(password: string, salt: string): Promise<string> {
+  const hex = await derivePBKDF2Hex(password, salt, PBKDF2_ITERATIONS);
+  return `pbkdf2$${PBKDF2_ITERATIONS}$${hex}`;
+}
+
+export async function verifyPassword(
+  password: string,
+  storedHash: string,
+  salt: string
+): Promise<{ valid: boolean; needsRehash: boolean }> {
+  if (storedHash.startsWith('pbkdf2$')) {
+    const parts = storedHash.split('$');
+    if (parts.length !== 3) return { valid: false, needsRehash: false };
+    const iterations = Number(parts[1]);
+    const expectedHex = parts[2];
+    if (!Number.isFinite(iterations) || iterations <= 0 || !expectedHex) {
+      return { valid: false, needsRehash: false };
+    }
+    const derived = await derivePBKDF2Hex(password, salt, iterations);
+    const valid = constantTimeEqual(derived, expectedHex);
+    return { valid, needsRehash: valid && iterations < PBKDF2_ITERATIONS };
+  }
+
+  const legacy = await hashPassword(password, salt);
+  const valid = constantTimeEqual(legacy, storedHash);
+  return { valid, needsRehash: valid };
 }
 
 // 產生隨機 salt
