@@ -2,7 +2,7 @@ import type { Context, Next } from 'hono';
 import type { Env, JWTPayload } from '../types';
 
 // Base64URL 編碼 (支援 UTF-8 字串及 Uint8Array)
-function base64urlEncode(data: string | Uint8Array): string {
+export function base64urlEncode(data: string | Uint8Array): string {
   let bytes: Uint8Array;
   if (typeof data === 'string') {
     bytes = new TextEncoder().encode(data);
@@ -16,7 +16,7 @@ function base64urlEncode(data: string | Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function base64urlDecode(str: string): string {
+export function base64urlDecode(str: string): string {
   str = str.replace(/-/g, '+').replace(/_/g, '/');
   while (str.length % 4) str += '=';
   const binary = atob(str);
@@ -28,7 +28,7 @@ function base64urlDecode(str: string): string {
 }
 
 // HMAC-SHA256 簽署
-async function sign(payload: string, secret: string): Promise<string> {
+export async function signHmac(payload: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
@@ -40,20 +40,25 @@ async function sign(payload: string, secret: string): Promise<string> {
   return base64urlEncode(new Uint8Array(sig));
 }
 
-export async function createJWT(payload: Omit<JWTPayload, 'iat' | 'exp'>, secret: string): Promise<string> {
+export async function createJWT(
+  payload: Omit<JWTPayload, 'iat' | 'exp'>,
+  secret: string,
+  ttlSeconds = 60 * 60 * 24 * 30
+): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  const fullPayload: JWTPayload = { ...payload, iat: now, exp: now + 60 * 60 * 24 * 30 };
+  const fullPayload: JWTPayload = { ...payload, iat: now, exp: now + ttlSeconds };
   const header = base64urlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const body = base64urlEncode(JSON.stringify(fullPayload));
-  const signature = await sign(`${header}.${body}`, secret);
+  const signature = await signHmac(`${header}.${body}`, secret);
   return `${header}.${body}.${signature}`;
 }
 
 export async function verifyJWT(token: string, secret: string): Promise<JWTPayload | null> {
   try {
     const [header, body, signature] = token.split('.');
-    const expected = await sign(`${header}.${body}`, secret);
-    if (expected !== signature) return null;
+    if (!header || !body || !signature) return null;
+    const expected = await signHmac(`${header}.${body}`, secret);
+    if (!constantTimeEqual(expected, signature)) return null;
     const payload: JWTPayload = JSON.parse(base64urlDecode(body));
     if (payload.exp < Math.floor(Date.now() / 1000)) return null;
     return payload;
@@ -157,19 +162,36 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
-// JWT 認證中介層（支援 Header Authorization 或 URL query param token）
-export async function authMiddleware(c: Context<{ Bindings: Env; Variables: { userId: string; userEmail: string; userName: string } }>, next: Next) {
+function unauthorized(c: Context, message: string) {
+  c.header('WWW-Authenticate', 'Bearer error="invalid_token"');
+  return c.json({ success: false, error: message }, 401);
+}
+
+// JWT 認證中介層（新格式 OAuth Access Token 僅接受 Authorization header；相容期間 Legacy Token 支援 header 與 ?token=）
+export async function authMiddleware(
+  c: Context<{ Bindings: Env; Variables: { userId: string; userEmail: string; userName: string; sessionId?: string } }>,
+  next: Next
+) {
   const auth = c.req.header('Authorization');
-  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : c.req.query('token');
+  const bearerToken = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+  const queryToken = c.req.query('token');
+  const token = bearerToken || queryToken;
+  const fromQuery = !bearerToken && Boolean(queryToken);
   if (!token) {
-    return c.json({ success: false, error: '未授權，請先登入' }, 401);
+    return unauthorized(c, '未授權，請先登入');
   }
   const payload = await verifyJWT(token, c.env.JWT_SECRET || 'dev-secret-key');
   if (!payload) {
-    return c.json({ success: false, error: 'Token 無效或已過期' }, 401);
+    return unauthorized(c, 'Token 無效或已過期');
+  }
+  if (payload.sid && fromQuery) {
+    return unauthorized(c, 'Access Token 不可透過網址參數傳遞');
   }
   c.set('userId', payload.sub);
   c.set('userEmail', payload.email);
   c.set('userName', payload.name);
+  if (payload.sid) {
+    c.set('sessionId', payload.sid);
+  }
   await next();
 }

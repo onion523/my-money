@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { etag, RETAINED_304_HEADERS } from 'hono/etag';
 import type { Env } from './types';
 import auth from './handlers/auth';
+import oauth, { buildOAuthMetadata } from './handlers/oauth';
 import accounts from './handlers/accounts';
 import transactions from './handlers/transactions';
 import recurring from './handlers/recurring';
@@ -41,6 +42,8 @@ app.use('*', etag({
 app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
 
 // Routes
+app.get('/.well-known/oauth-authorization-server', (c) => c.json(buildOAuthMetadata(c.req.url)));
+app.route('/oauth', oauth);
 app.route('/auth', auth);
 app.route('/accounts', accounts);
 app.route('/transactions', transactions);

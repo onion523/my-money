@@ -1,0 +1,240 @@
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const SHARED_CSS = `
+:root {
+  --bg: linear-gradient(135deg, #fff5f5 0%, #ffe8ea 50%, #eef7fb 100%);
+  --card: rgba(255, 255, 255, 0.86);
+  --border: rgba(255, 190, 190, 0.65);
+  --text: #2d2628;
+  --muted: #6f6266;
+  --primary: #ff7b7b;
+  --primary-hover: #f06565;
+  --input-bg: rgba(255, 255, 255, 0.92);
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --error-text: #c81e1e;
+  --shadow: 0 20px 50px rgba(255, 138, 138, 0.16);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: linear-gradient(135deg, #121318 0%, #1a1c24 60%, #151923 100%);
+    --card: rgba(28, 31, 40, 0.86);
+    --border: rgba(255, 255, 255, 0.12);
+    --text: #f3f4f6;
+    --muted: #a1a7b3;
+    --primary: #ff8a8a;
+    --primary-hover: #ff7070;
+    --input-bg: rgba(18, 20, 27, 0.85);
+    --error-bg: rgba(248, 113, 113, 0.14);
+    --error-text: #fca5a5;
+    --shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+.card {
+  width: 100%;
+  max-width: 400px;
+  padding: 28px 24px;
+  border-radius: 22px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 18px;
+}
+h1 { margin: 0; font-size: 20px; font-weight: 700; }
+.sub { margin: 0 0 20px; font-size: 13px; color: var(--muted); }
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  margin-bottom: 18px;
+}
+.tab {
+  display: block;
+  text-align: center;
+  padding: 8px 10px;
+  border-radius: 9px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.tab.active {
+  background: var(--primary);
+  color: #fff;
+}
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+input[type="email"],
+input[type="password"],
+input[type="text"] {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 16px;
+  margin-bottom: 14px;
+  outline: none;
+}
+input:focus { border-color: var(--primary); }
+button {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 4px;
+}
+button:hover { background: var(--primary-hover); }
+.err {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--error-bg);
+  color: var(--error-text);
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+.hint {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+`;
+
+export function renderOAuthLoginPage(opts: {
+  csrfToken: string;
+  mode?: 'login' | 'register';
+  email?: string;
+  name?: string;
+  error?: string;
+  clientLabel?: string;
+  switchUrlBase?: string;
+}): string {
+  const mode = opts.mode ?? 'login';
+  const isRegister = mode === 'register';
+  const emailVal = escapeHtml(opts.email || '');
+  const nameVal = escapeHtml(opts.name || '');
+  const csrfVal = escapeHtml(opts.csrfToken);
+  const clientText = opts.clientLabel ? `正在登入 ${escapeHtml(opts.clientLabel)}` : '個人與家庭雙帳本';
+
+  const tabsHtml = opts.switchUrlBase
+    ? `<div class="tabs">
+        <a class="tab${!isRegister ? ' active' : ''}" href="${escapeHtml(opts.switchUrlBase)}&mode=login">登入</a>
+        <a class="tab${isRegister ? ' active' : ''}" href="${escapeHtml(opts.switchUrlBase)}&mode=register">註冊新帳號</a>
+      </div>`
+    : '';
+
+  const nameField = isRegister
+    ? `<label for="name">顯示名稱</label>
+       <input id="name" name="name" type="text" autocomplete="name" required value="${nameVal}" placeholder="例如：小華">`
+    : '';
+
+  return `<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${isRegister ? '註冊帳號' : '登入'} — My Money</title>
+  <style>${SHARED_CSS}</style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">
+      <div class="logo">M</div>
+      <div>
+        <h1>My Money</h1>
+        <p class="sub">${clientText}</p>
+      </div>
+    </div>
+    ${tabsHtml}
+    ${opts.error ? `<div class="err" role="alert">${escapeHtml(opts.error)}</div>` : ''}
+    <form method="post" action="/oauth/authorize">
+      <input type="hidden" name="csrf_token" value="${csrfVal}">
+      <input type="hidden" name="mode" value="${mode}">
+      ${nameField}
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required value="${emailVal}" placeholder="you@example.com">
+      <label for="password">密碼</label>
+      <input id="password" name="password" type="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" ${isRegister ? 'minlength="6"' : ''} required placeholder="${isRegister ? '至少 6 個字元' : '請輸入密碼'}">
+      <button type="submit">${isRegister ? '建立帳號並繼續' : '登入'}</button>
+    </form>
+    <p class="hint">安全驗證由 My Money 授權伺服器提供</p>
+  </main>
+</body>
+</html>`;
+}
+
+export function renderOAuthErrorPage(title: string, message: string): string {
+  return `<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)} — My Money</title>
+  <style>${SHARED_CSS}</style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">
+      <div class="logo">M</div>
+      <div>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="sub">授權請求無法完成</p>
+      </div>
+    </div>
+    <div class="err" role="alert">${escapeHtml(message)}</div>
+    <p class="hint">請回到原本的應用程式重新發起登入。</p>
+  </main>
+</body>
+</html>`;
+}

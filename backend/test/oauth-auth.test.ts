@@ -1,6 +1,28 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createHarness, type Harness } from './harness';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import app from '../src/index';
+import { createHarness, FIXED_NOW, type Harness } from './harness';
 import { hashPassword } from '../src/middleware/jwt';
+
+async function sha256Base64url(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  let binary = '';
+  for (const b of new Uint8Array(digest)) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function extractCsrfToken(html: string): string {
+  const m = html.match(/name="csrf_token"\s+value="([^"]+)"/);
+  if (!m) throw new Error('csrf_token not found in HTML');
+  return m[1];
+}
+
+function extractSetCookie(headers: Headers, name: string): string {
+  const raw = headers.get('set-cookie') || '';
+  const m = raw.match(new RegExp(`${name}=([^;]+)`));
+  if (!m) throw new Error(`cookie ${name} not found in Set-Cookie: ${raw}`);
+  return `${name}=${m[1]}`;
+}
 
 describe('Auth & OAuth 2.1 (#194)', () => {
   let h: Harness;
@@ -91,6 +113,280 @@ describe('Auth & OAuth 2.1 (#194)', () => {
       });
       expect(loginRes2.status).toBe(200);
       expect(loginRes2.json.success).toBe(true);
+    });
+  });
+
+  describe('#196 OAuth 2.1 Authorization Code + PKCE & Worker Login Page', () => {
+    const WEB_REDIRECT = 'http://localhost:5173/oauth/callback';
+    const IOS_REDIRECT = 'com.raychiu.mymoney:/oauth/callback';
+
+    async function rawFetch(path: string, init: RequestInit = {}) {
+      return app.fetch(new Request(`http://localhost${path}`, init), h.env as any);
+    }
+
+    async function authorizeAndGetCode(opts: {
+      email: string;
+      password: string;
+      verifier?: string;
+      clientId?: string;
+      redirectUri?: string;
+      state?: string;
+      userAgent?: string;
+    }) {
+      const verifier = opts.verifier ?? 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+      const challenge = await sha256Base64url(verifier);
+      const clientId = opts.clientId ?? 'web';
+      const redirectUri = opts.redirectUri ?? WEB_REDIRECT;
+      const state = opts.state ?? 'st-123';
+
+      const getRes = await rawFetch(
+        `/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=S256&state=${encodeURIComponent(state)}`,
+        { headers: opts.userAgent ? { 'User-Agent': opts.userAgent } : undefined }
+      );
+      expect(getRes.status).toBe(200);
+      const html = await getRes.text();
+      const csrf = extractCsrfToken(html);
+      const cookie = extractSetCookie(getRes.headers, 'mm_oauth_tx');
+
+      const form = new URLSearchParams({
+        email: opts.email,
+        password: opts.password,
+        csrf_token: csrf,
+      });
+      const postRes = await rawFetch('/oauth/authorize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Cookie: cookie,
+          ...(opts.userAgent ? { 'User-Agent': opts.userAgent } : {}),
+        },
+        body: form.toString(),
+      });
+      return { getRes, html, postRes, verifier, clientId, redirectUri, state };
+    }
+
+    it('serves RFC 8414 metadata at /.well-known/oauth-authorization-server', async () => {
+      const res = await rawFetch('/.well-known/oauth-authorization-server');
+      expect(res.status).toBe(200);
+      const meta: any = await res.json();
+      expect(meta.issuer).toBe('http://localhost');
+      expect(meta.authorization_endpoint).toBe('http://localhost/oauth/authorize');
+      expect(meta.token_endpoint).toBe('http://localhost/oauth/token');
+      expect(meta.revocation_endpoint).toBe('http://localhost/oauth/revoke');
+      expect(meta.response_types_supported).toEqual(['code']);
+      expect(meta.grant_types_supported).toEqual(['authorization_code', 'refresh_token']);
+      expect(meta.code_challenge_methods_supported).toEqual(['S256']);
+      expect(meta.scopes_supported).toEqual(['full']);
+    });
+
+    it('completes full authorization_code + PKCE flow, issues 15m access token, and calls API', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(FIXED_NOW);
+      try {
+        await h.request('/auth/register', {
+          method: 'POST',
+          body: { email: 'oauth1@x.com', password: 'password123', name: 'OAuthOne' },
+        });
+
+        const { getRes, postRes, verifier } = await authorizeAndGetCode({
+          email: 'oauth1@x.com',
+          password: 'password123',
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0.0.0',
+        });
+
+        // Security headers on login page
+        expect(getRes.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+        expect(getRes.headers.get('x-frame-options')).toBe('DENY');
+
+        expect(postRes.status).toBe(302);
+        const location = new URL(postRes.headers.get('location')!);
+        expect(location.origin + location.pathname).toBe(WEB_REDIRECT);
+        expect(location.searchParams.get('state')).toBe('st-123');
+        const code = location.searchParams.get('code')!;
+        expect(code).toBeTruthy();
+
+        const tokenRes = await rawFetch('/oauth/token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Origin: 'http://localhost:5173',
+          },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: WEB_REDIRECT,
+            client_id: 'web',
+            code_verifier: verifier,
+          }).toString(),
+        });
+        expect(tokenRes.status).toBe(200);
+        expect(tokenRes.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+        const tok: any = await tokenRes.json();
+        expect(tok.token_type).toBe('Bearer');
+        expect(tok.expires_in).toBe(900);
+        expect(tok.scope).toBe('full');
+        expect(tok.access_token).toBeTruthy();
+        expect(tok.refresh_token).toBeTruthy();
+
+        // Access token works on existing APIs via Authorization header
+        const apiRes = await rawFetch('/accounts', {
+          headers: { Authorization: `Bearer ${tok.access_token}` },
+        });
+        expect(apiRes.status).toBe(200);
+
+        // New-format access token is rejected in ?token= query param
+        const queryRes = await rawFetch(`/accounts?token=${encodeURIComponent(tok.access_token)}`);
+        expect(queryRes.status).toBe(401);
+        expect(queryRes.headers.get('www-authenticate')).toContain('invalid_token');
+
+        // Access token expires after 15 minutes
+        vi.setSystemTime(new Date(FIXED_NOW.getTime() + 15 * 60 * 1000 + 1000));
+        const expiredRes = await rawFetch('/accounts', {
+          headers: { Authorization: `Bearer ${tok.access_token}` },
+        });
+        expect(expiredRes.status).toBe(401);
+        expect(expiredRes.headers.get('www-authenticate')).toContain('invalid_token');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('supports iOS custom scheme redirect_uri', async () => {
+      const { postRes } = await authorizeAndGetCode({
+        email: 'oauth1@x.com',
+        password: 'password123',
+        clientId: 'ios',
+        redirectUri: IOS_REDIRECT,
+      });
+      expect(postRes.status).toBe(302);
+      const loc = postRes.headers.get('location')!;
+      expect(loc.startsWith(`${IOS_REDIRECT}?code=`)).toBe(true);
+    });
+
+    it('shows error page without redirecting when client_id or redirect_uri is invalid', async () => {
+      const challenge = await sha256Base64url('verifier-xyz');
+      const badClient = await rawFetch(
+        `/oauth/authorize?response_type=code&client_id=evil&redirect_uri=${encodeURIComponent(WEB_REDIRECT)}&code_challenge=${challenge}&code_challenge_method=S256`
+      );
+      expect(badClient.status).toBe(400);
+      expect(badClient.headers.get('location')).toBeNull();
+
+      const badRedirect = await rawFetch(
+        `/oauth/authorize?response_type=code&client_id=web&redirect_uri=${encodeURIComponent('https://evil.example/cb')}&code_challenge=${challenge}&code_challenge_method=S256`
+      );
+      expect(badRedirect.status).toBe(400);
+      expect(badRedirect.headers.get('location')).toBeNull();
+    });
+
+    it('rejects missing PKCE or plain code_challenge_method via redirect error', async () => {
+      const missingPkce = await rawFetch(
+        `/oauth/authorize?response_type=code&client_id=web&redirect_uri=${encodeURIComponent(WEB_REDIRECT)}&state=s1`
+      );
+      expect(missingPkce.status).toBe(302);
+      const loc1 = new URL(missingPkce.headers.get('location')!);
+      expect(loc1.searchParams.get('error')).toBe('invalid_request');
+      expect(loc1.searchParams.get('state')).toBe('s1');
+
+      const plainPkce = await rawFetch(
+        `/oauth/authorize?response_type=code&client_id=web&redirect_uri=${encodeURIComponent(WEB_REDIRECT)}&code_challenge=abc&code_challenge_method=plain&state=s2`
+      );
+      expect(plainPkce.status).toBe(302);
+      const loc2 = new URL(plainPkce.headers.get('location')!);
+      expect(loc2.searchParams.get('error')).toBe('invalid_request');
+    });
+
+    it('rejects wrong code_verifier, code reuse, and expired code', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(FIXED_NOW);
+      try {
+        const { postRes } = await authorizeAndGetCode({
+          email: 'oauth1@x.com',
+          password: 'password123',
+          verifier: 'correct-verifier-string-1234567890',
+        });
+        const code1 = new URL(postRes.headers.get('location')!).searchParams.get('code')!;
+
+        // Wrong code_verifier
+        const wrongVerRes = await rawFetch('/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code: code1,
+            redirect_uri: WEB_REDIRECT,
+            client_id: 'web',
+            code_verifier: 'wrong-verifier-string',
+          }).toString(),
+        });
+        expect(wrongVerRes.status).toBe(400);
+        expect(((await wrongVerRes.json()) as any).error).toBe('invalid_grant');
+
+        // Reuse code (even with correct verifier after failed attempt) -> rejected
+        const reuseRes = await rawFetch('/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code: code1,
+            redirect_uri: WEB_REDIRECT,
+            client_id: 'web',
+            code_verifier: 'correct-verifier-string-1234567890',
+          }).toString(),
+        });
+        expect(reuseRes.status).toBe(400);
+        expect(((await reuseRes.json()) as any).error).toBe('invalid_grant');
+
+        // Expired code (> 60s)
+        const { postRes: postRes2 } = await authorizeAndGetCode({
+          email: 'oauth1@x.com',
+          password: 'password123',
+          verifier: 'correct-verifier-string-2222222222',
+        });
+        const code2 = new URL(postRes2.headers.get('location')!).searchParams.get('code')!;
+        vi.setSystemTime(new Date(FIXED_NOW.getTime() + 65 * 1000));
+        const expRes = await rawFetch('/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code: code2,
+            redirect_uri: WEB_REDIRECT,
+            client_id: 'web',
+            code_verifier: 'correct-verifier-string-2222222222',
+          }).toString(),
+        });
+        expect(expRes.status).toBe(400);
+        expect(((await expRes.json()) as any).error).toBe('invalid_grant');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('rejects POST /oauth/authorize without valid CSRF token and returns generic error on bad credentials', async () => {
+      const challenge = await sha256Base64url('v-csrf');
+      const getRes = await rawFetch(
+        `/oauth/authorize?response_type=code&client_id=web&redirect_uri=${encodeURIComponent(WEB_REDIRECT)}&code_challenge=${challenge}&code_challenge_method=S256`
+      );
+      const cookie = extractSetCookie(getRes.headers, 'mm_oauth_tx');
+
+      // Missing CSRF token
+      const noCsrf = await rawFetch('/oauth/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        body: new URLSearchParams({ email: 'oauth1@x.com', password: 'password123' }).toString(),
+      });
+      expect(noCsrf.status).toBe(403);
+
+      // Bad password -> generic error without leaking existence
+      const csrf = extractCsrfToken(await getRes.text());
+      const badPass = await rawFetch('/oauth/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        body: new URLSearchParams({ email: 'oauth1@x.com', password: 'wrong', csrf_token: csrf }).toString(),
+      });
+      expect(badPass.status).toBe(401);
+      const badHtml = await badPass.text();
+      expect(badHtml).toContain('Email 或密碼錯誤');
     });
   });
 });

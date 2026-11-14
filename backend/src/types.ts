@@ -5,6 +5,10 @@ export interface Env {
   LINE_CHANNEL_SECRET?: string;
   LINE_CHANNEL_ACCESS_TOKEN?: string;
   TELEGRAM_BOT_TOKEN?: string;
+  WEB_URL?: string;
+  OAUTH_WEB_REDIRECT_URIS?: string;
+  ENVIRONMENT?: string;
+  LEGACY_AUTH_ENABLED?: string;
 }
 
 export interface User {
@@ -125,6 +129,9 @@ export interface JWTPayload {
   sub: string;  // user id
   email: string;
   name: string;
+  sid?: string;
+  client_id?: string;
+  scope?: string;
   iat: number;
   exp: number;
 }

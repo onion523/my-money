@@ -160,3 +160,48 @@ CREATE INDEX IF NOT EXISTS idx_invitations_code ON household_invitations(code);
 CREATE INDEX IF NOT EXISTS idx_bot_user ON bot_bindings(user_id);
 CREATE INDEX IF NOT EXISTS idx_bot_platform_user ON bot_bindings(platform, platform_user_id);
 
+-- =====================
+-- OAuth 2.1 授權與 Session (ADR-0038)
+-- =====================
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_id TEXT NOT NULL,
+  device_name TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  last_used_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  revoked_at INTEGER,
+  dpop_jkt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS oauth_codes (
+  code_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_id TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  token_hash TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  rotated_at INTEGER,
+  replaced_by TEXT,
+  grace_token_encrypted TEXT
+);
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+  attempt_key TEXT PRIMARY KEY,
+  failures INTEGER NOT NULL DEFAULT 0,
+  window_start INTEGER NOT NULL,
+  locked_until INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_session ON refresh_tokens(session_id);
+
