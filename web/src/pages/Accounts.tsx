@@ -77,6 +77,8 @@ export default function Accounts() {
   })
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState('')
+  const [payIsFull, setPayIsFull] = useState(false)
+  const [paySharedTouched, setPaySharedTouched] = useState(false)
 
   // ATM 提款 / 帳戶轉帳 Modal
   const [showTransferModal, setShowTransferModal] = useState(false)
@@ -377,6 +379,8 @@ export default function Accounts() {
       note: `扣繳【${card.name}】卡費 (${payType === 'shared' ? '家庭公帳代墊' : payType === 'personal' ? '個人私帳' : '全額'})`,
       is_shared: isSharedTarget,
     })
+    setPayIsFull(payType === 'full')
+    setPaySharedTouched(false)
     setPayError('')
   }
 
@@ -1585,7 +1589,7 @@ export default function Accounts() {
                   const selectedBank = bankAccounts.find(b => b.id === newBankId)
                   setPayForm(p => {
                     let nextShared = p.is_shared
-                    if (p.note.endsWith('(全額)') && selectedBank) {
+                    if (payIsFull && !paySharedTouched && selectedBank) {
                       const totalShared = payCardModal.shared_debt ?? ((payCardModal.billed_shared_debt ?? 0) + (payCardModal.unbilled_shared_debt ?? 0))
                       const totalPersonal = payCardModal.personal_debt ?? ((payCardModal.billed_personal_debt ?? 0) + (payCardModal.unbilled_personal_debt ?? 0))
                       if (!(totalShared <= 0 && totalPersonal > 0)) {
@@ -1710,6 +1714,7 @@ export default function Accounts() {
                   className={`btn ${payForm.is_shared === 1 ? 'btn-primary' : 'btn-secondary'}`}
                   style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   onClick={() => {
+                    setPaySharedTouched(true)
                     const billedShared = payCardModal.billed_shared_debt ?? 0
                     const defaultShared = billedShared > 0 ? billedShared : (payCardModal.shared_debt ?? 0)
                     setPayForm(p => ({
@@ -1727,6 +1732,7 @@ export default function Accounts() {
                   className={`btn ${payForm.is_shared === 0 ? 'btn-primary' : 'btn-secondary'}`}
                   style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   onClick={() => {
+                    setPaySharedTouched(true)
                     const billedPersonal = payCardModal.billed_personal_debt ?? 0
                     const defaultPersonal = billedPersonal > 0 ? billedPersonal : (payCardModal.personal_debt ?? 0)
                     setPayForm(p => ({
