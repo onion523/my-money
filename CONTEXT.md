@@ -489,6 +489,14 @@ _Avoid_: 舊 session (old session)、Access Token
 撤銷目前這個 Session。授權伺服器不會記住瀏覽器的登入狀態，所以登出後再登入一定要重新驗證身分。
 _Avoid_: 清除 token (clear token)、登出全部 (sign out everywhere，那是「登出其他所有裝置」)
 
+**Key-Bound Session (金鑰綁定工作階段)**:
+領碼時由 client 出示持有的私鑰簽出之證明，並在該 Session 記下對應公鑰指紋的 Session。此後它的 Access Token 與 Refresh Token 都只有持同一把私鑰的 client 能使用，換金鑰（同一 Session 不允許）等同重新登入。沒有綁定的 Session（過渡期）行為與現行相同。
+_Avoid_: 裝置綁定 (device binding)、token 加密 (token encryption)
+
+**Proof (所有權證明)**:
+Key-Bound Session 的 client 隨每個請求附上、用私鑰簽出的短效（±60 秒）一次性憑證，證明「這個請求確實由持有私鑰者發出」，且只對該次請求的方法、網址與 Access Token 有效。伺服器對 token 端點與寫入類請求（POST/PUT/DELETE）拒絕重送；讀取類請求只靠短時間窗與 token 綁定防護。
+_Avoid_: 簽章 (signature)、第二個 token (second token)
+
 ---
 
 ### 前端視覺主題與載入體驗 (Frontend Theme & Loading UX)

@@ -1,5 +1,5 @@
 // API ?澆撅??????fetch 隢??絞銝?亙
-import { clearAllAuth, getMemoryAccessToken, refreshAccessToken } from '../auth/oauth';
+import { adjustClockFromDpopError, buildAuthHeaders, clearAllAuth, getMemoryAccessToken, refreshAccessToken } from '../auth/oauth';
 
 const BASE = (import.meta as any).env?.VITE_API_URL || '/api';
 
@@ -24,18 +24,21 @@ async function requestEnvelope<T>(path: string, options: RequestInit = {}): Prom
   const method = (options.method || 'GET').toUpperCase();
   const isGet = method === 'GET';
 
-  const cached = isGet ? apiCache.get(path) : undefined;
-  const reqHeaders: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(isGet && cached?.etag ? { 'If-None-Match': cached.etag } : {}),
-    ...(options.headers as Record<string, string> || {}),
+  const makeHeaders = async (tok: string | null, includeEtag: boolean): Promise<Record<string, string>> => {
+    const authHeaders = tok ? await buildAuthHeaders(method, path, tok) : {};
+    return {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+      ...(includeEtag && isGet && cached?.etag ? { 'If-None-Match': cached.etag } : {}),
+      ...(options.headers as Record<string, string> || {}),
+    };
   };
 
+  const cached = isGet ? apiCache.get(path) : undefined;
   let res = await fetch(`${BASE}${path}`, {
     ...options,
     cache: 'no-store',
-    headers: reqHeaders,
+    headers: await makeHeaders(token, true),
   });
 
   // 304 Not Modified: 直接複用客戶端記憶體快取 (零傳輸、零二次解析)；
@@ -45,29 +48,34 @@ async function requestEnvelope<T>(path: string, options: RequestInit = {}): Prom
     if (latestCached) {
       return { data: latestCached.data as T, nextCursor: latestCached.nextCursor ?? null };
     }
-    const retryHeaders = { ...reqHeaders };
-    delete retryHeaders['If-None-Match'];
-    delete retryHeaders['if-none-match'];
     res = await fetch(`${BASE}${path}`, {
       ...options,
       cache: 'no-store',
-      headers: retryHeaders,
+      headers: await makeHeaders(token, false),
     });
   }
 
-  if (res.status === 401 && !path.startsWith('/oauth/') && path !== '/auth/password') {
+  // 時鐘誤差導致 DPoP proof 驗證失敗：依伺服器 Date 校正後自動重試一次
+  if (res.status === 401 && token && adjustClockFromDpopError(res)) {
+    res = await fetch(`${BASE}${path}`, {
+      ...options,
+      cache: 'no-store',
+      headers: await makeHeaders(token, false),
+    });
+  }
+
+  if (
+    res.status === 401 &&
+    !path.startsWith('/oauth/') &&
+    path !== '/auth/password' &&
+    !(res.headers.get('WWW-Authenticate') || '').includes('invalid_dpop_proof')
+  ) {
     const newToken = await refreshAccessToken();
     if (newToken) {
-      const retryHeaders: Record<string, string> = {
-        ...reqHeaders,
-        Authorization: `Bearer ${newToken}`,
-      };
-      delete retryHeaders['If-None-Match'];
-      delete retryHeaders['if-none-match'];
       res = await fetch(`${BASE}${path}`, {
         ...options,
         cache: 'no-store',
-        headers: retryHeaders,
+        headers: await makeHeaders(newToken, false),
       });
     } else {
       clearAllAuth();
@@ -328,14 +336,18 @@ export const forecastApi = {
 };
 
 async function downloadAuthorizedFile(path: string, fallbackFilename: string): Promise<void> {
-  const send = (token: string | null) =>
+  const send = async (token: string | null) =>
     fetch(`${BASE}${path}`, {
       cache: 'no-store',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: token ? await buildAuthHeaders('GET', path, token) : {},
     });
 
-  let res = await send(getToken());
-  if (res.status === 401) {
+  const token = getToken();
+  let res = await send(token);
+  if (res.status === 401 && token && adjustClockFromDpopError(res)) {
+    res = await send(token);
+  }
+  if (res.status === 401 && !(res.headers.get('WWW-Authenticate') || '').includes('invalid_dpop_proof')) {
     const newToken = await refreshAccessToken();
     if (newToken) {
       res = await send(newToken);

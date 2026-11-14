@@ -23,8 +23,8 @@ function resolveAllowOrigin(origin?: string | null): string {
 // CORS
 app.use('*', cors({
   origin: (origin) => resolveAllowOrigin(origin),
-  allowHeaders: ['Content-Type', 'Authorization', 'If-None-Match'],
-  exposeHeaders: ['ETag'],
+  allowHeaders: ['Content-Type', 'Authorization', 'If-None-Match', 'DPoP'],
+  exposeHeaders: ['ETag', 'Date', 'WWW-Authenticate'],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }));
 

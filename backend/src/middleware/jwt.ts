@@ -1,5 +1,6 @@
 import type { Context, Next } from 'hono';
 import type { Env, JWTPayload } from '../types';
+import { claimDpopJti, verifyDpopProof } from './dpop';
 
 // Base64URL 編碼 (支援 UTF-8 字串及 Uint8Array)
 export function base64urlEncode(data: string | Uint8Array): string {
@@ -162,30 +163,59 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
-function unauthorized(c: Context, message: string) {
-  c.header('WWW-Authenticate', 'Bearer error="invalid_token"');
+function unauthorized(c: Context, message: string, scheme: 'Bearer' | 'DPoP' = 'Bearer', error = 'invalid_token') {
+  c.header('WWW-Authenticate', `${scheme} error="${error}"`);
+  c.header('Date', new Date().toUTCString());
   return c.json({ success: false, error: message }, 401);
 }
 
 // JWT 認證中介層（新格式 OAuth Access Token 僅接受 Authorization header；相容期間 Legacy Token 支援 header 與 ?token=）
+// 綁定金鑰的 Session（cnf.jkt）必須使用 `Authorization: DPoP <token>` + `DPoP: <proof>`（RFC 9449）
 export async function authMiddleware(
   c: Context<{ Bindings: Env; Variables: { userId: string; userEmail: string; userName: string; sessionId?: string } }>,
   next: Next
 ) {
   const auth = c.req.header('Authorization');
   const bearerToken = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+  const dpopToken = auth?.startsWith('DPoP ') ? auth.slice(5) : null;
   const queryToken = c.req.query('token');
-  const token = bearerToken || queryToken;
-  const fromQuery = !bearerToken && Boolean(queryToken);
+  const token = bearerToken || dpopToken || queryToken;
+  const fromQuery = !bearerToken && !dpopToken && Boolean(queryToken);
   if (!token) {
     return unauthorized(c, '未授權，請先登入');
   }
   const payload = await verifyJWT(token, c.env.JWT_SECRET || 'dev-secret-key');
   if (!payload) {
-    return unauthorized(c, 'Token 無效或已過期');
+    return unauthorized(c, 'Token 無效或已過期', dpopToken ? 'DPoP' : 'Bearer');
   }
   if (payload.sid && fromQuery) {
     return unauthorized(c, 'Access Token 不可透過網址參數傳遞');
+  }
+  if (payload.cnf?.jkt) {
+    if (!dpopToken) {
+      return unauthorized(c, '已綁定金鑰的 Token 必須使用 DPoP 授權', 'DPoP');
+    }
+    const verified = await verifyDpopProof({
+      proof: c.req.header('DPoP'),
+      method: c.req.method,
+      url: c.req.url,
+      accessToken: token,
+    });
+    if (!verified.ok) {
+      return unauthorized(c, verified.error, 'DPoP', 'invalid_dpop_proof');
+    }
+    if (verified.jkt !== payload.cnf.jkt) {
+      return unauthorized(c, 'DPoP proof 金鑰與 Token 綁定不符', 'DPoP', 'invalid_dpop_proof');
+    }
+    const method = c.req.method.toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (!(await claimDpopJti(c.env.DB, verified.jti, nowSec))) {
+        return unauthorized(c, 'DPoP proof 已被使用', 'DPoP', 'invalid_dpop_proof');
+      }
+    }
+  } else if (payload.sid && c.env.DPOP_REQUIRED === 'true') {
+    return unauthorized(c, '此工作階段未綁定金鑰，請重新登入');
   }
   if (!payload.sid) {
     if (c.env.LEGACY_AUTH_ENABLED === 'false') {

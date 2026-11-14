@@ -12,6 +12,7 @@ import {
   verifyPassword,
 } from '../middleware/jwt';
 import { renderOAuthErrorPage, renderOAuthLoginPage } from './oauthLoginPage';
+import { claimDpopJti, ensureDpopSchema, verifyDpopProof } from '../middleware/dpop';
 
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 分鐘
 export const SESSION_IDLE_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 天
@@ -559,8 +560,29 @@ oauth.post('/authorize', async (c) => {
 // POST /oauth/token
 oauth.post('/token', async (c) => {
   await ensureOAuthSchema(c.env.DB);
+  await ensureDpopSchema(c.env.DB);
   const body = new URLSearchParams(await c.req.text());
   const grantType = body.get('grant_type') || '';
+
+  const dpopError = (description: string) => {
+    c.header('Date', new Date().toUTCString());
+    return oauthError(c, 'invalid_dpop_proof', description);
+  };
+
+  // DPoP proof：先於授權碼 / Refresh Token 消費前驗證，時鐘誤差時 client 可用同一授權碼重試
+  let dpopJkt: string | null = null;
+  const dpopHeader = c.req.header('DPoP');
+  if (dpopHeader) {
+    const verified = await verifyDpopProof({ proof: dpopHeader, method: 'POST', url: c.req.url });
+    if (!verified.ok) return dpopError(verified.error);
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (!(await claimDpopJti(c.env.DB, verified.jti, nowSec))) {
+      return dpopError('DPoP proof 已被使用');
+    }
+    dpopJkt = verified.jkt;
+  } else if (c.env.DPOP_REQUIRED === 'true' && grantType === 'authorization_code') {
+    return dpopError('必須提供 DPoP proof');
+  }
 
   if (grantType === 'authorization_code') {
     const code = body.get('code') || '';
@@ -631,9 +653,9 @@ oauth.post('/token', async (c) => {
 
     await c.env.DB.batch([
       c.env.DB.prepare(
-        `INSERT INTO sessions (id, user_id, client_id, device_name, created_at, last_used_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).bind(sessionId, user.id, clientId, deviceName, now, now, now + SESSION_IDLE_TTL_SECONDS),
+        `INSERT INTO sessions (id, user_id, client_id, device_name, created_at, last_used_at, expires_at, dpop_jkt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(sessionId, user.id, clientId, deviceName, now, now, now + SESSION_IDLE_TTL_SECONDS, dpopJkt),
       c.env.DB.prepare(
         `INSERT INTO refresh_tokens (token_hash, session_id, created_at)
          VALUES (?, ?, ?)`
@@ -648,6 +670,7 @@ oauth.post('/token', async (c) => {
         sid: sessionId,
         client_id: clientId,
         scope: codeRow.scope,
+        ...(dpopJkt ? { cnf: { jkt: dpopJkt } } : {}),
       },
       getSecret(c.env),
       ACCESS_TOKEN_TTL_SECONDS
@@ -657,7 +680,7 @@ oauth.post('/token', async (c) => {
     c.header('Pragma', 'no-cache');
     return c.json({
       access_token: accessToken,
-      token_type: 'Bearer',
+      token_type: dpopJkt ? 'DPoP' : 'Bearer',
       expires_in: ACCESS_TOKEN_TTL_SECONDS,
       refresh_token: refreshToken,
       scope: codeRow.scope,
@@ -680,7 +703,7 @@ oauth.post('/token', async (c) => {
 
     const row = await c.env.DB.prepare(
       `SELECT rt.token_hash, rt.session_id, rt.rotated_at, rt.grace_token_encrypted,
-              s.user_id, s.client_id, s.expires_at, s.revoked_at,
+              s.user_id, s.client_id, s.expires_at, s.revoked_at, s.dpop_jkt,
               u.email, u.name
        FROM refresh_tokens rt
        JOIN sessions s ON s.id = rt.session_id
@@ -697,12 +720,22 @@ oauth.post('/token', async (c) => {
         client_id: string;
         expires_at: number;
         revoked_at: number | null;
+        dpop_jkt: string | null;
         email: string;
         name: string;
       }>();
 
     if (!row || row.client_id !== clientId || row.revoked_at !== null || row.expires_at < now) {
       return oauthError(c, 'invalid_grant', 'Refresh Token 無效或已過期');
+    }
+
+    if (row.dpop_jkt) {
+      // 綁定 Session：refresh 必須用同一把金鑰簽 proof，不允許換金鑰
+      if (!dpopJkt || dpopJkt !== row.dpop_jkt) {
+        return dpopError('此工作階段已綁定金鑰，必須使用相同金鑰的 DPoP proof');
+      }
+    } else if (c.env.DPOP_REQUIRED === 'true') {
+      return oauthError(c, 'invalid_grant', '此工作階段未綁定金鑰，請重新登入');
     }
 
     const secret = getSecret(c.env);
@@ -766,6 +799,7 @@ oauth.post('/token', async (c) => {
         sid: row.session_id,
         client_id: clientId,
         scope: 'full',
+        ...(row.dpop_jkt ? { cnf: { jkt: row.dpop_jkt } } : {}),
       },
       secret,
       ACCESS_TOKEN_TTL_SECONDS
@@ -775,7 +809,7 @@ oauth.post('/token', async (c) => {
     c.header('Pragma', 'no-cache');
     return c.json({
       access_token: accessToken,
-      token_type: 'Bearer',
+      token_type: row.dpop_jkt ? 'DPoP' : 'Bearer',
       expires_in: ACCESS_TOKEN_TTL_SECONDS,
       refresh_token: nextRefreshToken,
       scope: 'full',
@@ -818,6 +852,7 @@ export function buildOAuthMetadata(reqUrl: string) {
     code_challenge_methods_supported: ['S256'],
     scopes_supported: ['full'],
     token_endpoint_auth_methods_supported: ['none'],
+    dpop_signing_alg_values_supported: ['ES256'],
   };
 }
 

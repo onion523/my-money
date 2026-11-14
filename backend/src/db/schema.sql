@@ -214,6 +214,13 @@ CREATE TABLE IF NOT EXISTS oauth_tx (
   used_at INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS dpop_jti (
+  jti TEXT PRIMARY KEY,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dpop_jti_exp ON dpop_jti(expires_at);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_session ON refresh_tokens(session_id);
 

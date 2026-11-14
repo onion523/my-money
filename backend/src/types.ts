@@ -9,6 +9,7 @@ export interface Env {
   OAUTH_WEB_REDIRECT_URIS?: string;
   ENVIRONMENT?: string;
   LEGACY_AUTH_ENABLED?: string;
+  DPOP_REQUIRED?: string;
 }
 
 export interface User {
@@ -132,6 +133,7 @@ export interface JWTPayload {
   sid?: string;
   client_id?: string;
   scope?: string;
+  cnf?: { jkt: string };
   iat: number;
   exp: number;
 }
