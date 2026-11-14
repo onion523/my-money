@@ -389,4 +389,181 @@ describe('Auth & OAuth 2.1 (#194)', () => {
       expect(badHtml).toContain('Email 或密碼錯誤');
     });
   });
+
+  describe('#197 Refresh Token rotation, reuse detection, idle TTL & revocation', () => {
+    const WEB_REDIRECT = 'http://localhost:5173/oauth/callback';
+
+    async function rawFetch(path: string, init: RequestInit = {}) {
+      return app.fetch(new Request(`http://localhost${path}`, init), h.env as any);
+    }
+
+    async function loginViaOAuth(email: string, password: string) {
+      const verifier = `verifier-${Math.random().toString(36).slice(2)}-padding-1234567890`;
+      const challenge = await sha256Base64url(verifier);
+      const getRes = await rawFetch(
+        `/oauth/authorize?response_type=code&client_id=web&redirect_uri=${encodeURIComponent(WEB_REDIRECT)}&code_challenge=${challenge}&code_challenge_method=S256&state=s`
+      );
+      const csrf = extractCsrfToken(await getRes.text());
+      const cookie = extractSetCookie(getRes.headers, 'mm_oauth_tx');
+      const postRes = await rawFetch('/oauth/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        body: new URLSearchParams({ email, password, csrf_token: csrf }).toString(),
+      });
+      const code = new URL(postRes.headers.get('location')!).searchParams.get('code')!;
+      const tokenRes = await rawFetch('/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: WEB_REDIRECT,
+          client_id: 'web',
+          code_verifier: verifier,
+        }).toString(),
+      });
+      expect(tokenRes.status).toBe(200);
+      return (await tokenRes.json()) as { access_token: string; refresh_token: string; expires_in: number };
+    }
+
+    async function refreshCall(refreshToken: string, clientId = 'web') {
+      return rawFetch('/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'http://localhost:5173' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+          client_id: clientId,
+        }).toString(),
+      });
+    }
+
+    it('rotates refresh token and returns same refresh token idempotently within 30s grace window', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(FIXED_NOW);
+      try {
+        await h.request('/auth/register', {
+          method: 'POST',
+          body: { email: 'rt1@x.com', password: 'password123', name: 'RT1' },
+        });
+        const initial = await loginViaOAuth('rt1@x.com', 'password123');
+
+        // First refresh
+        const res1 = await refreshCall(initial.refresh_token);
+        expect(res1.status).toBe(200);
+        const tok1: any = await res1.json();
+        expect(tok1.refresh_token).toBeTruthy();
+        expect(tok1.refresh_token).not.toBe(initial.refresh_token);
+        expect(tok1.access_token).toBeTruthy();
+
+        // Reuse old token within 30s (e.g. +10s) -> idempotent, returns same new refresh token
+        vi.setSystemTime(new Date(FIXED_NOW.getTime() + 10 * 1000));
+        const resGrace = await refreshCall(initial.refresh_token);
+        expect(resGrace.status).toBe(200);
+        const tokGrace: any = await resGrace.json();
+        expect(tokGrace.refresh_token).toBe(tok1.refresh_token);
+
+        // New token still works
+        const res2 = await refreshCall(tok1.refresh_token);
+        expect(res2.status).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('revokes entire session when rotated refresh token is reused after 30s grace window', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(FIXED_NOW);
+      try {
+        const initial = await loginViaOAuth('rt1@x.com', 'password123');
+        const res1 = await refreshCall(initial.refresh_token);
+        expect(res1.status).toBe(200);
+        const tok1: any = await res1.json();
+
+        // Reuse old token after 31s -> invalid_grant AND revokes session (tok1 becomes invalid too)
+        vi.setSystemTime(new Date(FIXED_NOW.getTime() + 31 * 1000));
+        const reuseRes = await refreshCall(initial.refresh_token);
+        expect(reuseRes.status).toBe(400);
+        expect(((await reuseRes.json()) as any).error).toBe('invalid_grant');
+
+        const latestRes = await refreshCall(tok1.refresh_token);
+        expect(latestRes.status).toBe(400);
+        expect(((await latestRes.json()) as any).error).toBe('invalid_grant');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('expires session after 30 days of inactivity and slides expiration on active use', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(FIXED_NOW);
+      try {
+        const s1 = await loginViaOAuth('rt1@x.com', 'password123');
+        const s2 = await loginViaOAuth('rt1@x.com', 'password123');
+
+        // Advance 20 days: use s1 (slides s1 expiry to day 50), leave s2 idle
+        vi.setSystemTime(new Date(FIXED_NOW.getTime() + 20 * 86400 * 1000));
+        const r1 = await refreshCall(s1.refresh_token);
+        expect(r1.status).toBe(200);
+        const s1Next: any = await r1.json();
+
+        // Advance to day 31: s2 is expired (>30d idle), s1 is still valid
+        vi.setSystemTime(new Date(FIXED_NOW.getTime() + 31 * 86400 * 1000));
+        const r2Expired = await refreshCall(s2.refresh_token);
+        expect(r2Expired.status).toBe(400);
+
+        const r1StillValid = await refreshCall(s1Next.refresh_token);
+        expect(r1StillValid.status).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('revokes session via POST /oauth/revoke and returns 200 even for unknown tokens', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(FIXED_NOW);
+      try {
+        const s = await loginViaOAuth('rt1@x.com', 'password123');
+
+        const revokeRes = await rawFetch('/oauth/revoke', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'http://localhost:5173' },
+          body: new URLSearchParams({ token: s.refresh_token }).toString(),
+        });
+        expect(revokeRes.status).toBe(200);
+        expect(revokeRes.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+
+        const afterRevoke = await refreshCall(s.refresh_token);
+        expect(afterRevoke.status).toBe(400);
+
+        const unknownRevoke = await rawFetch('/oauth/revoke', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ token: 'non-existent-token' }).toString(),
+        });
+        expect(unknownRevoke.status).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('cascades session deletion when user deletes account', async () => {
+      await h.request('/auth/register', {
+        method: 'POST',
+        body: { email: 'del-oauth@x.com', password: 'password123', name: 'DelOAuth' },
+      });
+      const tok = await loginViaOAuth('del-oauth@x.com', 'password123');
+      const userRow = await h.db.prepare('SELECT id FROM users WHERE email = ?').bind('del-oauth@x.com').first<{ id: string }>();
+      expect(userRow).toBeTruthy();
+
+      const delRes = await rawFetch('/auth/account', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${tok.access_token}` },
+      });
+      expect(delRes.status).toBe(200);
+
+      const sessionsLeft = await h.db.prepare('SELECT id FROM sessions WHERE user_id = ?').bind(userRow!.id).all();
+      expect(sessionsLeft.results.length).toBe(0);
+    });
+  });
 });

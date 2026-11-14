@@ -15,6 +15,7 @@ import { renderOAuthErrorPage, renderOAuthLoginPage } from './oauthLoginPage';
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 分鐘
 export const SESSION_IDLE_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 天
 export const AUTH_CODE_TTL_SECONDS = 60; // 1 分鐘
+export const REFRESH_GRACE_SECONDS = 30; // 30 秒輪替冪等緩衝
 const TX_COOKIE_NAME = 'mm_oauth_tx';
 const TX_COOKIE_TTL_SECONDS = 10 * 60; // 10 分鐘
 
@@ -138,6 +139,47 @@ export async function sha256Base64url(input: string): Promise<string> {
 
 function getSecret(env: Env): string {
   return env.JWT_SECRET || 'dev-secret-key';
+}
+
+async function deriveAesKey(secret: string): Promise<CryptoKey> {
+  const keyMaterial = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`grace:${secret}`));
+  return crypto.subtle.importKey('raw', keyMaterial, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+function base64urlToBytes(str: string): Uint8Array {
+  let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function encryptGraceToken(token: string, secret: string): Promise<string> {
+  const key = await deriveAesKey(secret);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    new TextEncoder().encode(token)
+  );
+  return `${base64urlEncode(iv)}.${base64urlEncode(new Uint8Array(ct))}`;
+}
+
+async function decryptGraceToken(encrypted: string, secret: string): Promise<string | null> {
+  try {
+    const [ivStr, ctStr] = encrypted.split('.');
+    if (!ivStr || !ctStr) return null;
+    const key = await deriveAesKey(secret);
+    const pt = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: base64urlToBytes(ivStr) },
+      key,
+      base64urlToBytes(ctStr)
+    );
+    return new TextDecoder().decode(pt);
+  } catch {
+    return null;
+  }
 }
 
 interface TxCookiePayload {
@@ -473,7 +515,146 @@ oauth.post('/token', async (c) => {
     });
   }
 
+  if (grantType === 'refresh_token') {
+    const refreshToken = body.get('refresh_token') || '';
+    const clientId = body.get('client_id') || '';
+
+    if (!refreshToken || !clientId) {
+      return oauthError(c, 'invalid_request', '缺少必要參數');
+    }
+    if (!getAllowedRedirectUris(clientId, c.env)) {
+      return oauthError(c, 'invalid_client', '無效的 client_id', 401);
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const tokenHash = await sha256Base64url(refreshToken);
+
+    const row = await c.env.DB.prepare(
+      `SELECT rt.token_hash, rt.session_id, rt.rotated_at, rt.grace_token_encrypted,
+              s.user_id, s.client_id, s.expires_at, s.revoked_at,
+              u.email, u.name
+       FROM refresh_tokens rt
+       JOIN sessions s ON s.id = rt.session_id
+       JOIN users u ON u.id = s.user_id
+       WHERE rt.token_hash = ?`
+    )
+      .bind(tokenHash)
+      .first<{
+        token_hash: string;
+        session_id: string;
+        rotated_at: number | null;
+        grace_token_encrypted: string | null;
+        user_id: string;
+        client_id: string;
+        expires_at: number;
+        revoked_at: number | null;
+        email: string;
+        name: string;
+      }>();
+
+    if (!row || row.client_id !== clientId || row.revoked_at !== null || row.expires_at < now) {
+      return oauthError(c, 'invalid_grant', 'Refresh Token 無效或已過期');
+    }
+
+    const secret = getSecret(c.env);
+    let nextRefreshToken: string | null = null;
+
+    if (row.rotated_at === null) {
+      const candidateToken = randomToken(32);
+      const candidateHash = await sha256Base64url(candidateToken);
+      const encryptedGrace = await encryptGraceToken(candidateToken, secret);
+
+      const claim = await c.env.DB.prepare(
+        `UPDATE refresh_tokens
+         SET rotated_at = ?, replaced_by = ?, grace_token_encrypted = ?
+         WHERE token_hash = ? AND rotated_at IS NULL`
+      )
+        .bind(now, candidateHash, encryptedGrace, tokenHash)
+        .run();
+
+      if (claim.meta.changes === 1) {
+        await c.env.DB.batch([
+          c.env.DB.prepare(
+            'INSERT INTO refresh_tokens (token_hash, session_id, created_at) VALUES (?, ?, ?)'
+          ).bind(candidateHash, row.session_id, now),
+          c.env.DB.prepare(
+            'UPDATE sessions SET last_used_at = ?, expires_at = ? WHERE id = ?'
+          ).bind(now, now + SESSION_IDLE_TTL_SECONDS, row.session_id),
+        ]);
+        nextRefreshToken = candidateToken;
+      } else {
+        // 併發請求搶先輪替，改讀已寫入的緩衝資料
+        const latest = await c.env.DB.prepare(
+          'SELECT rotated_at, grace_token_encrypted FROM refresh_tokens WHERE token_hash = ?'
+        )
+          .bind(tokenHash)
+          .first<{ rotated_at: number | null; grace_token_encrypted: string | null }>();
+        if (latest?.rotated_at !== null && latest?.rotated_at !== undefined && now - latest.rotated_at <= REFRESH_GRACE_SECONDS && latest.grace_token_encrypted) {
+          nextRefreshToken = await decryptGraceToken(latest.grace_token_encrypted, secret);
+        }
+      }
+    } else if (now - row.rotated_at <= REFRESH_GRACE_SECONDS && row.grace_token_encrypted) {
+      nextRefreshToken = await decryptGraceToken(row.grace_token_encrypted, secret);
+    } else {
+      // 超過緩衝期的舊 token 重用：撤銷整個 Session
+      await c.env.DB.prepare(
+        'UPDATE sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL'
+      )
+        .bind(now, row.session_id)
+        .run();
+      return oauthError(c, 'invalid_grant', 'Refresh Token 已被重複使用，工作階段已撤銷');
+    }
+
+    if (!nextRefreshToken) {
+      return oauthError(c, 'invalid_grant', 'Refresh Token 無法更新');
+    }
+
+    const accessToken = await createJWT(
+      {
+        sub: row.user_id,
+        email: row.email,
+        name: row.name,
+        sid: row.session_id,
+        client_id: clientId,
+        scope: 'full',
+      },
+      secret,
+      ACCESS_TOKEN_TTL_SECONDS
+    );
+
+    c.header('Cache-Control', 'no-store');
+    c.header('Pragma', 'no-cache');
+    return c.json({
+      access_token: accessToken,
+      token_type: 'Bearer',
+      expires_in: ACCESS_TOKEN_TTL_SECONDS,
+      refresh_token: nextRefreshToken,
+      scope: 'full',
+    });
+  }
+
   return oauthError(c, 'unsupported_grant_type', '不支援的 grant_type');
+});
+
+// POST /oauth/revoke (RFC 7009)
+oauth.post('/revoke', async (c) => {
+  await ensureOAuthSchema(c.env.DB);
+  const body = new URLSearchParams(await c.req.text());
+  const token = body.get('token') || '';
+  if (token) {
+    const tokenHash = await sha256Base64url(token);
+    const rt = await c.env.DB.prepare('SELECT session_id FROM refresh_tokens WHERE token_hash = ?')
+      .bind(tokenHash)
+      .first<{ session_id: string }>();
+    if (rt) {
+      const now = Math.floor(Date.now() / 1000);
+      await c.env.DB.prepare('UPDATE sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL')
+        .bind(now, rt.session_id)
+        .run();
+    }
+  }
+  c.header('Cache-Control', 'no-store');
+  return c.json({ success: true }, 200);
 });
 
 export function buildOAuthMetadata(reqUrl: string) {
