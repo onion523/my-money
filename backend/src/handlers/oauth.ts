@@ -6,6 +6,7 @@ import {
   constantTimeEqual,
   createJWT,
   generateId,
+  generateSalt,
   hashPasswordPBKDF2,
   signHmac,
   verifyPassword,
@@ -16,6 +17,9 @@ export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 分鐘
 export const SESSION_IDLE_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 天
 export const AUTH_CODE_TTL_SECONDS = 60; // 1 分鐘
 export const REFRESH_GRACE_SECONDS = 30; // 30 秒輪替冪等緩衝
+export const RATE_LIMIT_WINDOW_SECONDS = 15 * 60; // 15 分鐘
+export const EMAIL_MAX_FAILURES = 5;
+export const IP_MAX_FAILURES = 20;
 const TX_COOKIE_NAME = 'mm_oauth_tx';
 const TX_COOKIE_TTL_SECONDS = 10 * 60; // 10 分鐘
 
@@ -139,6 +143,61 @@ export async function sha256Base64url(input: string): Promise<string> {
 
 function getSecret(env: Env): string {
   return env.JWT_SECRET || 'dev-secret-key';
+}
+
+export function getClientIp(c: Context): string | null {
+  return c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() || null;
+}
+
+export async function isRateLimited(db: D1Database, keys: string[], now: number): Promise<boolean> {
+  for (const key of keys) {
+    const row = await db
+      .prepare('SELECT locked_until FROM login_attempts WHERE attempt_key = ?')
+      .bind(key)
+      .first<{ locked_until: number | null }>();
+    if (row?.locked_until && row.locked_until > now) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function recordSingleFailure(db: D1Database, key: string, maxFailures: number, now: number): Promise<void> {
+  const existing = await db
+    .prepare('SELECT failures, window_start FROM login_attempts WHERE attempt_key = ?')
+    .bind(key)
+    .first<{ failures: number; window_start: number }>();
+
+  if (!existing || existing.window_start + RATE_LIMIT_WINDOW_SECONDS <= now) {
+    const lockedUntil = 1 >= maxFailures ? now + RATE_LIMIT_WINDOW_SECONDS : null;
+    await db
+      .prepare(
+        `INSERT INTO login_attempts (attempt_key, failures, window_start, locked_until)
+         VALUES (?, 1, ?, ?)
+         ON CONFLICT(attempt_key) DO UPDATE SET failures = 1, window_start = excluded.window_start, locked_until = excluded.locked_until`
+      )
+      .bind(key, now, lockedUntil)
+      .run();
+    return;
+  }
+
+  const nextFailures = existing.failures + 1;
+  const lockedUntil = nextFailures >= maxFailures ? now + RATE_LIMIT_WINDOW_SECONDS : null;
+  await db
+    .prepare('UPDATE login_attempts SET failures = ?, locked_until = ? WHERE attempt_key = ?')
+    .bind(nextFailures, lockedUntil, key)
+    .run();
+}
+
+export async function recordAuthFailure(db: D1Database, emailKey: string, ip: string | null, now: number): Promise<void> {
+  await recordSingleFailure(db, emailKey, EMAIL_MAX_FAILURES, now);
+  if (ip) {
+    await recordSingleFailure(db, `ip:${ip}`, IP_MAX_FAILURES, now);
+  }
+}
+
+export async function clearAuthFailures(db: D1Database, emailKey: string): Promise<void> {
+  await db.prepare('DELETE FROM login_attempts WHERE attempt_key = ?').bind(emailKey).run();
 }
 
 async function deriveAesKey(secret: string): Promise<CryptoKey> {
@@ -320,10 +379,12 @@ oauth.get('/authorize', async (c) => {
   const cookieVal = await encodeTxCookie(txPayload, getSecret(c.env));
   c.header('Set-Cookie', buildCookieString(TX_COOKIE_NAME, cookieVal, TX_COOKIE_TTL_SECONDS, c.req.url));
 
+  const mode = c.req.query('mode') === 'register' ? 'register' : 'login';
   const html = renderOAuthLoginPage({
     csrfToken: csrf,
-    mode: 'login',
+    mode,
     clientLabel: getClientDisplayName(clientId),
+    switchUrlBase: buildSwitchUrlBase(txPayload),
   });
   return c.html(html, 200);
 });
@@ -346,48 +407,90 @@ oauth.post('/authorize', async (c) => {
     return c.html(renderOAuthErrorPage('CSRF 驗證失敗', '請回到應用程式重新發起登入。'), 403);
   }
 
+  const mode = body.get('mode') === 'register' ? 'register' : 'login';
   const email = (body.get('email') || '').trim().toLowerCase();
   const password = body.get('password') || '';
+  const name = (body.get('name') || '').trim();
+  const switchUrlBase = buildSwitchUrlBase(tx);
 
-  const failLogin = (errorMsg: string) =>
+  const renderFormError = (errorMsg: string, status: 400 | 401 | 409 | 429) =>
     c.html(
       renderOAuthLoginPage({
         csrfToken: tx.csrf,
-        mode: 'login',
+        mode,
         email,
+        name,
         error: errorMsg,
         clientLabel: getClientDisplayName(tx.client_id),
+        switchUrlBase,
       }),
-      401
+      status
     );
 
-  if (!email || !password) {
-    return failLogin('請填寫 Email 和密碼');
-  }
+  let authenticatedUserId: string;
 
-  const user = await c.env.DB.prepare(
-    'SELECT id, email, name, password_hash, salt FROM users WHERE email = ?'
-  )
-    .bind(email)
-    .first<{ id: string; email: string; name: string; password_hash: string; salt: string }>();
-
-  if (!user) {
-    return failLogin('Email 或密碼錯誤');
-  }
-
-  const { valid, needsRehash } = await verifyPassword(password, user.password_hash, user.salt);
-  if (!valid) {
-    return failLogin('Email 或密碼錯誤');
-  }
-
-  if (needsRehash) {
-    const newSalt = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-    const newHash = await hashPasswordPBKDF2(password, newSalt);
-    await c.env.DB.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?')
-      .bind(newHash, newSalt, user.id)
+  if (mode === 'register') {
+    if (!email || !password || !name) {
+      return renderFormError('請填寫所有欄位', 400);
+    }
+    if (password.length < 6) {
+      return renderFormError('密碼至少 6 個字元', 400);
+    }
+    const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?')
+      .bind(email)
+      .first<{ id: string }>();
+    if (existing) {
+      return renderFormError('此 Email 已被使用', 409);
+    }
+    const id = generateId();
+    const salt = generateSalt();
+    const hash = await hashPasswordPBKDF2(password, salt);
+    await c.env.DB.prepare(
+      'INSERT INTO users (id, email, name, password_hash, salt) VALUES (?, ?, ?, ?, ?)'
+    )
+      .bind(id, email, name, hash, salt)
       .run();
+    authenticatedUserId = id;
+  } else {
+    if (!email || !password) {
+      return renderFormError('請填寫 Email 和密碼', 400);
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const ip = getClientIp(c);
+    const emailKey = `email:${email}`;
+    const limitKeys = ip ? [emailKey, `ip:${ip}`] : [emailKey];
+    if (await isRateLimited(c.env.DB, limitKeys, now)) {
+      return renderFormError('嘗試次數過多，請於 15 分鐘後再試', 429);
+    }
+
+    const user = await c.env.DB.prepare(
+      'SELECT id, email, name, password_hash, salt FROM users WHERE email = ?'
+    )
+      .bind(email)
+      .first<{ id: string; email: string; name: string; password_hash: string; salt: string }>();
+
+    if (!user) {
+      await recordAuthFailure(c.env.DB, emailKey, ip, now);
+      return renderFormError('Email 或密碼錯誤', 401);
+    }
+
+    const { valid, needsRehash } = await verifyPassword(password, user.password_hash, user.salt);
+    if (!valid) {
+      await recordAuthFailure(c.env.DB, emailKey, ip, now);
+      return renderFormError('Email 或密碼錯誤', 401);
+    }
+
+    await clearAuthFailures(c.env.DB, emailKey);
+
+    if (needsRehash) {
+      const newSalt = generateSalt();
+      const newHash = await hashPasswordPBKDF2(password, newSalt);
+      await c.env.DB.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?')
+        .bind(newHash, newSalt, user.id)
+        .run();
+    }
+    authenticatedUserId = user.id;
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -397,7 +500,7 @@ oauth.post('/authorize', async (c) => {
     `INSERT INTO oauth_codes (code_hash, user_id, client_id, redirect_uri, code_challenge, scope, expires_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(codeHash, user.id, tx.client_id, tx.redirect_uri, tx.code_challenge, tx.scope, now + AUTH_CODE_TTL_SECONDS)
+    .bind(codeHash, authenticatedUserId, tx.client_id, tx.redirect_uri, tx.code_challenge, tx.scope, now + AUTH_CODE_TTL_SECONDS)
     .run();
 
   c.header('Set-Cookie', buildCookieString(TX_COOKIE_NAME, '', 0, c.req.url));

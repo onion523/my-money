@@ -566,4 +566,228 @@ describe('Auth & OAuth 2.1 (#194)', () => {
       expect(sessionsLeft.results.length).toBe(0);
     });
   });
+
+  describe('#198 Registration in login page & rate limiting', () => {
+    const WEB_REDIRECT = 'http://localhost:5173/oauth/callback';
+
+    async function rawFetch(path: string, init: RequestInit = {}) {
+      return app.fetch(new Request(`http://localhost${path}`, init), h.env as any);
+    }
+
+    async function startAuthorize(mode: 'login' | 'register' = 'login', ip?: string) {
+      const verifier = 'reg-verifier-padding-12345678901234567890';
+      const challenge = await sha256Base64url(verifier);
+      const getRes = await rawFetch(
+        `/oauth/authorize?response_type=code&client_id=web&redirect_uri=${encodeURIComponent(WEB_REDIRECT)}&code_challenge=${challenge}&code_challenge_method=S256&state=s-reg&mode=${mode}`,
+        { headers: ip ? { 'CF-Connecting-IP': ip } : undefined }
+      );
+      expect(getRes.status).toBe(200);
+      const html = await getRes.text();
+      const csrf = extractCsrfToken(html);
+      const cookie = extractSetCookie(getRes.headers, 'mm_oauth_tx');
+      return { csrf, cookie, verifier, html };
+    }
+
+    it('registers a new user on /oauth/authorize and immediately issues an authorization code', async () => {
+      const { csrf, cookie, verifier, html } = await startAuthorize('register');
+      expect(html).toContain('建立帳號並繼續');
+
+      const postRes = await rawFetch('/oauth/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        body: new URLSearchParams({
+          mode: 'register',
+          name: 'RegOAuth',
+          email: 'regoauth@x.com',
+          password: 'password123',
+          csrf_token: csrf,
+        }).toString(),
+      });
+      expect(postRes.status).toBe(302);
+      const code = new URL(postRes.headers.get('location')!).searchParams.get('code')!;
+      expect(code).toBeTruthy();
+
+      const tokenRes = await rawFetch('/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: WEB_REDIRECT,
+          client_id: 'web',
+          code_verifier: verifier,
+        }).toString(),
+      });
+      expect(tokenRes.status).toBe(200);
+      const tok: any = await tokenRes.json();
+      expect(tok.access_token).toBeTruthy();
+    });
+
+    it('shows validation errors on registration form (duplicate email, short password, missing fields)', async () => {
+      const { csrf, cookie } = await startAuthorize('register');
+
+      // Short password
+      const shortRes = await rawFetch('/oauth/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        body: new URLSearchParams({
+          mode: 'register',
+          name: 'Short',
+          email: 'short@x.com',
+          password: '123',
+          csrf_token: csrf,
+        }).toString(),
+      });
+      expect(shortRes.status).toBe(400);
+      expect(await shortRes.text()).toContain('密碼至少 6 個字元');
+
+      // Duplicate email
+      const dupRes = await rawFetch('/oauth/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        body: new URLSearchParams({
+          mode: 'register',
+          name: 'Dup',
+          email: 'regoauth@x.com',
+          password: 'password123',
+          csrf_token: csrf,
+        }).toString(),
+      });
+      expect(dupRes.status).toBe(409);
+      expect(await dupRes.text()).toContain('此 Email 已被使用');
+    });
+
+    it('locks email after 5 consecutive failures for 15 minutes, resets on success, and does not leak account existence', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(FIXED_NOW);
+      try {
+        await h.request('/auth/register', {
+          method: 'POST',
+          body: { email: 'ratelimit@x.com', password: 'correct-password', name: 'RL' },
+        });
+        const { csrf, cookie } = await startAuthorize('login');
+
+        // 5 failed attempts with wrong password
+        let msgExisting = '';
+        for (let i = 0; i < 5; i++) {
+          const r = await rawFetch('/oauth/authorize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+            body: new URLSearchParams({
+              mode: 'login',
+              email: 'ratelimit@x.com',
+              password: 'wrong',
+              csrf_token: csrf,
+            }).toString(),
+          });
+          expect(r.status).toBe(401);
+          msgExisting = await r.text();
+        }
+
+        // Non-existent email returns identical error message
+        const nonExistRes = await rawFetch('/oauth/authorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+          body: new URLSearchParams({
+            mode: 'login',
+            email: 'no-such-user@x.com',
+            password: 'wrong',
+            csrf_token: csrf,
+          }).toString(),
+        });
+        expect(nonExistRes.status).toBe(401);
+        expect(msgExisting).toContain('Email 或密碼錯誤');
+        expect(await nonExistRes.text()).toContain('Email 或密碼錯誤');
+
+        // 6th attempt even with CORRECT password is locked
+        const lockedRes = await rawFetch('/oauth/authorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+          body: new URLSearchParams({
+            mode: 'login',
+            email: 'ratelimit@x.com',
+            password: 'correct-password',
+            csrf_token: csrf,
+          }).toString(),
+        });
+        expect(lockedRes.status).toBe(429);
+
+        // Advance 15m + 1s -> unlocked & success resets counter (start a fresh authorize session since tx cookie TTL is 10m)
+        vi.setSystemTime(new Date(FIXED_NOW.getTime() + 15 * 60 * 1000 + 1000));
+        const { csrf: csrf2, cookie: cookie2 } = await startAuthorize('login');
+        const okRes = await rawFetch('/oauth/authorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie2 },
+          body: new URLSearchParams({
+            mode: 'login',
+            email: 'ratelimit@x.com',
+            password: 'correct-password',
+            csrf_token: csrf2,
+          }).toString(),
+        });
+        expect(okRes.status).toBe(302);
+
+        // Verify counter was reset (1 failure does not lock)
+        const { csrf: csrf3, cookie: cookie3 } = await startAuthorize('login');
+        const oneFail = await rawFetch('/oauth/authorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie3 },
+          body: new URLSearchParams({
+            mode: 'login',
+            email: 'ratelimit@x.com',
+            password: 'wrong',
+            csrf_token: csrf3,
+          }).toString(),
+        });
+        expect(oneFail.status).toBe(401);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('blocks IP after 20 failed login attempts within 15 minutes', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(FIXED_NOW);
+      try {
+        const testIp = '203.0.113.42';
+        const { csrf, cookie } = await startAuthorize('login', testIp);
+        for (let i = 0; i < 20; i++) {
+          const r = await rawFetch('/oauth/authorize', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              Cookie: cookie,
+              'CF-Connecting-IP': testIp,
+            },
+            body: new URLSearchParams({
+              mode: 'login',
+              email: `ip-victim-${i}@x.com`,
+              password: 'wrong',
+              csrf_token: csrf,
+            }).toString(),
+          });
+          expect(r.status).toBe(401);
+        }
+
+        // 21st attempt from same IP is blocked with 429
+        const blocked = await rawFetch('/oauth/authorize', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Cookie: cookie,
+            'CF-Connecting-IP': testIp,
+          },
+          body: new URLSearchParams({
+            mode: 'login',
+            email: 'ip-victim-20@x.com',
+            password: 'wrong',
+            csrf_token: csrf,
+          }).toString(),
+        });
+        expect(blocked.status).toBe(429);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
