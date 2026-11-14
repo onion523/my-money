@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   salt TEXT NOT NULL,
+  legacy_token_valid_after INTEGER,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

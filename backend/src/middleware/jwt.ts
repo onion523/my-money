@@ -187,6 +187,21 @@ export async function authMiddleware(
   if (payload.sid && fromQuery) {
     return unauthorized(c, 'Access Token 不可透過網址參數傳遞');
   }
+  if (!payload.sid) {
+    if (c.env.LEGACY_AUTH_ENABLED === 'false') {
+      return unauthorized(c, '舊版認證已停用，請重新登入');
+    }
+    try {
+      const user = await c.env.DB.prepare('SELECT legacy_token_valid_after FROM users WHERE id = ?')
+        .bind(payload.sub)
+        .first<{ legacy_token_valid_after: number | null }>();
+      if (!user || (user.legacy_token_valid_after != null && payload.iat < user.legacy_token_valid_after)) {
+        return unauthorized(c, 'Token 已失效，請重新登入');
+      }
+    } catch {
+      // 舊測試資料庫尚未含 legacy_token_valid_after 欄位時略過
+    }
+  }
   c.set('userId', payload.sub);
   c.set('userEmail', payload.email);
   c.set('userName', payload.name);

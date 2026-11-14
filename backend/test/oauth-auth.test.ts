@@ -790,4 +790,237 @@ describe('Auth & OAuth 2.1 (#194)', () => {
       }
     });
   });
+
+  describe('#199 Device sessions, change password API & legacy compat toggle', () => {
+    const WEB_REDIRECT = 'http://localhost:5173/oauth/callback';
+
+    async function rawFetch(path: string, init: RequestInit = {}, envOverride?: Record<string, unknown>) {
+      return app.fetch(new Request(`http://localhost${path}`, init), { ...h.env, ...(envOverride || {}) } as any);
+    }
+
+    async function oauthLogin(email: string, password: string, ua: string) {
+      const verifier = `sess-ver-${Math.random().toString(36).slice(2)}-padding-1234567890`;
+      const challenge = await sha256Base64url(verifier);
+      const getRes = await rawFetch(
+        `/oauth/authorize?response_type=code&client_id=web&redirect_uri=${encodeURIComponent(WEB_REDIRECT)}&code_challenge=${challenge}&code_challenge_method=S256&state=s`,
+        { headers: { 'User-Agent': ua } }
+      );
+      const csrf = extractCsrfToken(await getRes.text());
+      const cookie = extractSetCookie(getRes.headers, 'mm_oauth_tx');
+      const postRes = await rawFetch('/oauth/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie, 'User-Agent': ua },
+        body: new URLSearchParams({ email, password, csrf_token: csrf }).toString(),
+      });
+      const code = new URL(postRes.headers.get('location')!).searchParams.get('code')!;
+      const tokenRes = await rawFetch('/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': ua },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: WEB_REDIRECT,
+          client_id: 'web',
+          code_verifier: verifier,
+        }).toString(),
+      });
+      return (await tokenRes.json()) as { access_token: string; refresh_token: string };
+    }
+
+    it('lists own active sessions marking current, revokes single or others, and rejects revoking another user session', async () => {
+      await h.request('/auth/register', {
+        method: 'POST',
+        body: { email: 'sess-owner@x.com', password: 'password123', name: 'SessOwner' },
+      });
+      await h.request('/auth/register', {
+        method: 'POST',
+        body: { email: 'sess-other@x.com', password: 'password123', name: 'SessOther' },
+      });
+
+      const dev1 = await oauthLogin('sess-owner@x.com', 'password123', 'Mozilla/5.0 (Windows NT 10.0) Chrome/130.0');
+      const dev2 = await oauthLogin('sess-owner@x.com', 'password123', 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1');
+      const dev3 = await oauthLogin('sess-owner@x.com', 'password123', 'Mozilla/5.0 (Linux; Android 14) Chrome/130.0');
+      const otherUser = await oauthLogin('sess-other@x.com', 'password123', 'Mozilla/5.0 (Windows NT 10.0) Firefox/130.0');
+
+      const otherListRes = await rawFetch('/auth/sessions', {
+        headers: { Authorization: `Bearer ${otherUser.access_token}` },
+      });
+      const otherSessionId = ((await otherListRes.json()) as any).data[0].id;
+
+      const listRes = await rawFetch('/auth/sessions', {
+        headers: { Authorization: `Bearer ${dev1.access_token}` },
+      });
+      expect(listRes.status).toBe(200);
+      const listJson: any = await listRes.json();
+      expect(listJson.data.length).toBe(3);
+      const currentRows = listJson.data.filter((s: any) => s.current === true);
+      expect(currentRows.length).toBe(1);
+      expect(currentRows[0].device_name).toContain('Chrome');
+
+      // Cannot delete another user's session
+      const crossDel = await rawFetch(`/auth/sessions/${otherSessionId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${dev1.access_token}` },
+      });
+      expect(crossDel.status).toBe(404);
+
+      // Delete dev2 specifically
+      const dev2Row = listJson.data.find((s: any) => s.device_name.includes('Safari'));
+      const del2 = await rawFetch(`/auth/sessions/${dev2Row.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${dev1.access_token}` },
+      });
+      expect(del2.status).toBe(200);
+
+      // dev2 refresh now fails
+      const r2 = await rawFetch('/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: dev2.refresh_token, client_id: 'web' }).toString(),
+      });
+      expect(r2.status).toBe(400);
+
+      // Delete all other sessions from dev1
+      const delOthers = await rawFetch('/auth/sessions?scope=others', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${dev1.access_token}` },
+      });
+      expect(delOthers.status).toBe(200);
+
+      // dev3 refresh fails, dev1 refresh still succeeds
+      const r3 = await rawFetch('/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: dev3.refresh_token, client_id: 'web' }).toString(),
+      });
+      expect(r3.status).toBe(400);
+
+      const r1 = await rawFetch('/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: dev1.refresh_token, client_id: 'web' }).toString(),
+      });
+      expect(r1.status).toBe(200);
+    });
+
+    it('changes password, enforces rate limit on wrong current_password, revokes other sessions & invalidates prior legacy tokens', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(FIXED_NOW);
+      try {
+        const regRes = await h.request('/auth/register', {
+          method: 'POST',
+          body: { email: 'pwchange@x.com', password: 'old-password', name: 'PwUser' },
+        });
+        const oldLegacyToken = regRes.json.data.token as string;
+
+        const dev1 = await oauthLogin('pwchange@x.com', 'old-password', 'Mozilla/5.0 (Windows NT 10.0) Chrome/130.0');
+        const dev2 = await oauthLogin('pwchange@x.com', 'old-password', 'Mozilla/5.0 (Macintosh) Safari/605.1');
+
+        // Advance 5 seconds so legacy_token_valid_after > oldLegacyToken.iat
+        vi.setSystemTime(new Date(FIXED_NOW.getTime() + 5000));
+
+        // 5 wrong current_password attempts trigger rate limit (429 on 6th)
+        for (let i = 0; i < 5; i++) {
+          const bad = await rawFetch('/auth/password', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${dev1.access_token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_password: 'wrong', new_password: 'new-password-123' }),
+          });
+          expect(bad.status).toBe(401);
+        }
+        const locked = await rawFetch('/auth/password', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${dev1.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_password: 'old-password', new_password: 'new-password-123' }),
+        });
+        expect(locked.status).toBe(429);
+
+        // Advance 15m + 1s -> unlocked, re-login dev1 to get fresh access token
+        vi.setSystemTime(new Date(FIXED_NOW.getTime() + 16 * 60 * 1000));
+        const dev1Fresh = await oauthLogin('pwchange@x.com', 'old-password', 'Mozilla/5.0 (Windows NT 10.0) Chrome/130.0');
+
+        const changeRes = await rawFetch('/auth/password', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${dev1Fresh.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_password: 'old-password', new_password: 'new-password-123' }),
+        });
+        expect(changeRes.status).toBe(200);
+
+        // Old legacy token is now rejected
+        const oldLegacyCall = await rawFetch('/accounts', {
+          headers: { Authorization: `Bearer ${oldLegacyToken}` },
+        });
+        expect(oldLegacyCall.status).toBe(401);
+
+        // New legacy token issued after password change works
+        const newLegacyLogin = await h.request('/auth/login', {
+          method: 'POST',
+          body: { email: 'pwchange@x.com', password: 'new-password-123' },
+        });
+        expect(newLegacyLogin.status).toBe(200);
+        const newLegacyCall = await rawFetch('/accounts', {
+          headers: { Authorization: `Bearer ${newLegacyLogin.json.data.token}` },
+        });
+        expect(newLegacyCall.status).toBe(200);
+
+        // dev2 refresh fails, dev1Fresh refresh succeeds
+        const r2 = await rawFetch('/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: dev2.refresh_token, client_id: 'web' }).toString(),
+        });
+        expect(r2.status).toBe(400);
+
+        const r1 = await rawFetch('/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: dev1Fresh.refresh_token, client_id: 'web' }).toString(),
+        });
+        expect(r1.status).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('disables legacy endpoints (410) and legacy tokens (401) when LEGACY_AUTH_ENABLED=false', async () => {
+      const legacyLogin = await h.request('/auth/login', {
+        method: 'POST',
+        body: { email: 'a@x.com', password: 'h' },
+      });
+      // Use existing harness legacy token for u1
+      const legacyToken = h.tokens.u1;
+      expect((await rawFetch('/accounts', { headers: { Authorization: `Bearer ${legacyToken}` } })).status).toBe(200);
+
+      const envDisabled = { LEGACY_AUTH_ENABLED: 'false' };
+      const disabledLogin = await rawFetch(
+        '/auth/login',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'a@x.com', password: 'h' }),
+        },
+        envDisabled
+      );
+      expect(disabledLogin.status).toBe(410);
+
+      const disabledReg = await rawFetch(
+        '/auth/register',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'x@x.com', password: 'password123', name: 'X' }),
+        },
+        envDisabled
+      );
+      expect(disabledReg.status).toBe(410);
+
+      const disabledToken = await rawFetch(
+        '/accounts',
+        { headers: { Authorization: `Bearer ${legacyToken}` } },
+        envDisabled
+      );
+      expect(disabledToken.status).toBe(401);
+      expect(legacyLogin.status).toBe(401); // u1 in seed has 'h' which is not hashed, just verifying it didn't crash
+    });
+  });
 });
