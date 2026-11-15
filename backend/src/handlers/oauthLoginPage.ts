@@ -54,7 +54,7 @@ body {
 }
 .card {
   width: 100%;
-  max-width: 400px;
+  max-width: 25rem;
   padding: 28px 24px;
   border-radius: 22px;
   background: var(--card);
@@ -70,18 +70,18 @@ body {
   margin-bottom: 6px;
 }
 .logo {
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: 12px;
   background: var(--primary);
   color: #fff;
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-size: 18px;
+  font-size: 1.125rem;
 }
-h1 { margin: 0; font-size: 20px; font-weight: 700; }
-.sub { margin: 0 0 20px; font-size: 13px; color: var(--muted); }
+h1 { margin: 0; font-size: 1.25rem; font-weight: 700; }
+.sub { margin: 0 0 20px; font-size: 0.8125rem; color: var(--muted); }
 .tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -98,7 +98,7 @@ h1 { margin: 0; font-size: 20px; font-weight: 700; }
   padding: 8px 10px;
   border-radius: 9px;
   text-decoration: none;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--muted);
 }
@@ -108,7 +108,7 @@ h1 { margin: 0; font-size: 20px; font-weight: 700; }
 }
 label {
   display: block;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   margin-bottom: 6px;
 }
@@ -121,7 +121,7 @@ input[type="text"] {
   border: 1px solid var(--border);
   background: var(--input-bg);
   color: var(--text);
-  font-size: 16px;
+  font-size: 1rem;
   margin-bottom: 14px;
   outline: none;
 }
@@ -133,7 +133,7 @@ button {
   border-radius: 12px;
   background: var(--primary);
   color: #fff;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 700;
   cursor: pointer;
   margin-top: 4px;
@@ -145,7 +145,7 @@ button:disabled { opacity: 0.7; cursor: wait; }
   border-radius: 10px;
   background: var(--error-bg);
   color: var(--error-text);
-  font-size: 13px;
+  font-size: 0.8125rem;
   margin-bottom: 14px;
 }
 .notice {
@@ -153,7 +153,7 @@ button:disabled { opacity: 0.7; cursor: wait; }
   border-radius: 10px;
   background: var(--notice-bg);
   color: var(--notice-text);
-  font-size: 13px;
+  font-size: 0.8125rem;
   margin-bottom: 14px;
 }
 .aux-links {
@@ -161,7 +161,7 @@ button:disabled { opacity: 0.7; cursor: wait; }
   justify-content: space-between;
   align-items: center;
   margin-top: 12px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .aux-links.end {
   justify-content: flex-end;
@@ -174,11 +174,68 @@ button:disabled { opacity: 0.7; cursor: wait; }
 .aux-link:hover { text-decoration: underline; }
 .hint {
   margin-top: 14px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--muted);
   text-align: center;
 }
+.or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.alt-btn {
+  display: block;
+  text-align: center;
+  padding: 13px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.alt-btn:hover { border-color: var(--primary); }
 `;
+
+/** iOS 在 `GET /oauth/authorize` 帶來的外觀參數(#215)。 */
+export type Biometry = 'faceid' | 'touchid' | 'opticid';
+
+export interface LoginDisplay {
+  /** 有值才顯示「用 Face ID 登入」;沒帶、`none` 或不認得都是 undefined。 */
+  biometry?: Biometry;
+  /** 整頁字級倍數,1～3.1。 */
+  fontScale: number;
+}
+
+const BIOMETRY_LABELS: Record<Biometry, string> = {
+  faceid: 'Face ID',
+  touchid: 'Touch ID',
+  opticid: 'Optic ID',
+};
+
+const MIN_FONT_SCALE = 1;
+const MAX_FONT_SCALE = 3.1;
+
+export function parseLoginDisplay(biometry: string | null | undefined, fontScale: string | null | undefined): LoginDisplay {
+  const scale = Number.parseFloat(fontScale ?? '');
+  return {
+    biometry: biometry && Object.prototype.hasOwnProperty.call(BIOMETRY_LABELS, biometry) ? (biometry as Biometry) : undefined,
+    fontScale: Number.isFinite(scale) ? Math.min(MAX_FONT_SCALE, Math.max(MIN_FONT_SCALE, scale)) : MIN_FONT_SCALE,
+  };
+}
+
+/** 切換模式的連結與表單要帶著的外觀參數。 */
+export function loginDisplayParams(display: LoginDisplay): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (display.biometry) params.biometry = display.biometry;
+  if (display.fontScale !== MIN_FONT_SCALE) params.font_scale = String(display.fontScale);
+  return params;
+}
 
 export type OAuthLoginMode = 'login' | 'register' | 'forgot' | 'reset';
 
@@ -206,7 +263,11 @@ export function renderOAuthLoginPage(opts: {
   clientLabel?: string;
   switchUrlBase?: string;
   scriptNonce?: string;
+  display?: LoginDisplay;
+  /** 按「用 Face ID 登入」導回 App 的網址(帶 `error=passkey_requested`)。 */
+  passkeyRedirectUrl?: string;
 }): string {
+  const display = opts.display ?? { fontScale: MIN_FONT_SCALE };
   const mode: OAuthLoginMode = opts.mode ?? 'login';
   const isRegister = mode === 'register';
   const isForgot = mode === 'forgot';
@@ -254,13 +315,25 @@ export function renderOAuthLoginPage(opts: {
 
   const btnText = MODE_BUTTONS[mode];
 
+  const displayInputs = Object.entries(loginDisplayParams(display))
+    .map(([k, v]) => `<input type="hidden" name="${k}" value="${escapeHtml(v)}">`)
+    .join('');
+
+  // 方案 A:登入鈕下方隔一條「或」,再放描邊的生物辨識按鈕。只導回 App,由 App 走系統的通行金鑰。
+  const passkeyHtml =
+    mode === 'login' && display.biometry && opts.passkeyRedirectUrl
+      ? `<div class="or">或</div>
+    <a class="alt-btn" href="${escapeHtml(opts.passkeyRedirectUrl)}">用 ${BIOMETRY_LABELS[display.biometry]} 登入</a>`
+      : '';
+
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${MODE_TITLES[mode]} — My Money</title>
-  <style>${SHARED_CSS}</style>
+  <style>${SHARED_CSS}
+html { font-size: ${Math.round(display.fontScale * 100)}%; }</style>
 </head>
 <body>
   <main class="card">
@@ -277,6 +350,7 @@ export function renderOAuthLoginPage(opts: {
     <form method="post" action="/oauth/authorize">
       <input type="hidden" name="csrf_token" value="${csrfVal}">
       <input type="hidden" name="mode" value="${mode}">
+      ${displayInputs}
       ${nameField}
       <label for="email">Email</label>
       <input id="email" name="email" type="email" autocomplete="username" required value="${emailVal}" placeholder="you@example.com">
@@ -285,6 +359,7 @@ export function renderOAuthLoginPage(opts: {
       <button type="submit">${btnText.idle}</button>
     </form>
     ${auxLinksHtml}
+    ${passkeyHtml}
     <p class="hint">安全驗證由 My Money 授權伺服器提供</p>
   </main>${
     opts.scriptNonce

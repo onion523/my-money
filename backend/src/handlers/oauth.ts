@@ -11,7 +11,7 @@ import {
   signHmac,
   verifyPassword,
 } from '../middleware/jwt';
-import { renderOAuthErrorPage, renderOAuthLoginPage, type OAuthLoginMode } from './oauthLoginPage';
+import { renderOAuthErrorPage, renderOAuthLoginPage, type OAuthLoginMode, loginDisplayParams, parseLoginDisplay, type LoginDisplay } from './oauthLoginPage';
 import { claimDpopJti, ensureDpopSchema, verifyDpopProof } from '../middleware/dpop';
 import { verifyPasskeyAssertion } from './passkey';
 import { requestPasswordResetOtp, verifyAndResetPassword } from './passwordReset';
@@ -346,7 +346,7 @@ function redirectWithError(c: Context, redirectUri: string, error: string, descr
   return c.redirect(url.toString(), 302);
 }
 
-function buildSwitchUrlBase(tx: Omit<TxCookiePayload, 'csrf' | 'exp'>): string {
+function buildSwitchUrlBase(tx: Omit<TxCookiePayload, 'csrf' | 'exp'>, display?: LoginDisplay): string {
   const p = new URLSearchParams({
     response_type: 'code',
     client_id: tx.client_id,
@@ -356,7 +356,17 @@ function buildSwitchUrlBase(tx: Omit<TxCookiePayload, 'csrf' | 'exp'>): string {
     scope: tx.scope,
   });
   if (tx.state) p.set('state', tx.state);
+  if (display) for (const [k, v] of Object.entries(loginDisplayParams(display))) p.set(k, v);
   return `/oauth/authorize?${p.toString()}`;
+}
+
+/** 登入頁「用 Face ID 登入」:導回 App,由 App 走系統的通行金鑰(#215)。 */
+function buildPasskeyRedirectUrl(redirectUri: string, state?: string): string {
+  const url = new URL(redirectUri);
+  url.searchParams.set('error', 'passkey_requested');
+  url.searchParams.set('error_description', '改用通行金鑰登入');
+  if (state) url.searchParams.set('state', state);
+  return url.toString();
 }
 
 function oauthError(c: Context, error: string, errorDescription: string, status: 400 | 401 = 400) {
@@ -413,18 +423,24 @@ oauth.get('/authorize', async (c) => {
   const rawMode = c.req.query('mode');
   const mode: OAuthLoginMode =
     rawMode === 'register' || rawMode === 'forgot' || rawMode === 'reset' ? rawMode : 'login';
+  const display = parseLoginDisplay(c.req.query('biometry'), c.req.query('font_scale'));
   const html = renderOAuthLoginPage({
     csrfToken: txToken,
     mode,
     clientLabel: getClientDisplayName(clientId),
-    switchUrlBase: buildSwitchUrlBase({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      code_challenge: codeChallenge,
-      state,
-      scope,
-    }),
+    switchUrlBase: buildSwitchUrlBase(
+      {
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        code_challenge: codeChallenge,
+        state,
+        scope,
+      },
+      display
+    ),
     scriptNonce,
+    display,
+    passkeyRedirectUrl: buildPasskeyRedirectUrl(redirectUri, state),
   });
   return c.html(html, 200);
 });
@@ -469,7 +485,8 @@ oauth.post('/authorize', async (c) => {
   const password = body.get('password') || '';
   const name = (body.get('name') || '').trim();
   const codeInput = (body.get('code') || '').trim();
-  const switchUrlBase = buildSwitchUrlBase(tx);
+  const display = parseLoginDisplay(body.get('biometry'), body.get('font_scale'));
+  const switchUrlBase = buildSwitchUrlBase(tx, display);
 
   const renderModeView = (
     targetMode: OAuthLoginMode,
@@ -488,6 +505,8 @@ oauth.post('/authorize', async (c) => {
         clientLabel: getClientDisplayName(tx.client_id),
         switchUrlBase,
         scriptNonce,
+        display,
+        passkeyRedirectUrl: buildPasskeyRedirectUrl(tx.redirect_uri, tx.state),
       }),
       viewOpts.status
     );
