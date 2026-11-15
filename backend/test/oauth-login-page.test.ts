@@ -48,6 +48,23 @@ describe('OAuth 登入頁：生物辨識入口與字級 (#215)', () => {
     expect(await openLogin('&biometry=opticid')).toContain('用 Optic ID 登入');
   });
 
+  it('按鈕文字前有對應的圖示:Face ID 與 Optic ID 用臉部框，Touch ID 用指紋，圖示 aria-hidden', async () => {
+    const FACE = 'M9 15.5c1.8 1.4 4.2 1.4 6 0';
+    const FINGERPRINT = 'M6.5 8.5a6.5 6.5 0 0 1 11 0';
+    for (const [biometry, label, icon, other] of [
+      ['faceid', 'Face ID', FACE, FINGERPRINT],
+      ['opticid', 'Optic ID', FACE, FINGERPRINT],
+      ['touchid', 'Touch ID', FINGERPRINT, FACE],
+    ]) {
+      const html = await openLogin(`&biometry=${biometry}`);
+      const button = html.match(/<a class="alt-btn"[^>]*>([\s\S]*?)<\/a>/)?.[1] ?? '';
+      expect(button).toMatch(/^<svg [^>]*aria-hidden="true"/);
+      expect(button).toContain(icon);
+      expect(button).not.toContain(other);
+      expect(button.indexOf('</svg>')).toBeLessThan(button.indexOf(`用 ${label} 登入`));
+    }
+  });
+
   it('沒帶、none 或不認得的 biometry:不顯示按鈕', async () => {
     for (const extra of ['', '&biometry=none', '&biometry=%3Cscript%3E', '&biometry=toString', '&biometry=constructor']) {
       expect(await openLogin(extra)).not.toContain('passkey_requested');

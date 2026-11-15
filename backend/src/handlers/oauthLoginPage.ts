@@ -188,8 +188,10 @@ button:disabled { opacity: 0.7; cursor: wait; }
 }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .alt-btn {
-  display: block;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 13px;
   border-radius: 12px;
   border: 1.5px solid var(--border);
@@ -200,6 +202,7 @@ button:disabled { opacity: 0.7; cursor: wait; }
   text-decoration: none;
 }
 .alt-btn:hover { border-color: var(--primary); }
+.alt-btn svg { width: 1.4em; height: 1.4em; flex: none; }
 `;
 
 /** iOS 在 `GET /oauth/authorize` 帶來的外觀參數(#215)。 */
@@ -216,6 +219,16 @@ const BIOMETRY_LABELS: Record<Biometry, string> = {
   faceid: 'Face ID',
   touchid: 'Touch ID',
   opticid: 'Optic ID',
+};
+
+// 設計稿的圖示;Optic ID 沿用 Face ID。CSP 沒開 img-src,只能 inline SVG。
+const SVG_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+const FACE_ID_ICON = `${SVG_OPEN}<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 9.5v1.2M15 9.5v1.2M12 9.5v3.2l-1 .8M9 15.5c1.8 1.4 4.2 1.4 6 0"/></svg>`;
+const TOUCH_ID_ICON = `${SVG_OPEN}<path d="M6.5 8.5a6.5 6.5 0 0 1 11 0M5 12.5a7 7 0 0 1 .3-2M9 20c-.6-1.2-1-2.4-1-4a4 4 0 0 1 8 0c0 2 .5 3.4 1.5 4.6M12 16c0 2 .4 3.4 1.2 4.6M19 13c.3 1.6.2 3.4-.4 5"/></svg>`;
+const BIOMETRY_ICONS: Record<Biometry, string> = {
+  faceid: FACE_ID_ICON,
+  touchid: TOUCH_ID_ICON,
+  opticid: FACE_ID_ICON,
 };
 
 const MIN_FONT_SCALE = 1;
@@ -323,7 +336,7 @@ export function renderOAuthLoginPage(opts: {
   const passkeyHtml =
     mode === 'login' && display.biometry && opts.passkeyRedirectUrl
       ? `<div class="or">或</div>
-    <a class="alt-btn" href="${escapeHtml(opts.passkeyRedirectUrl)}">用 ${BIOMETRY_LABELS[display.biometry]} 登入</a>`
+    <a class="alt-btn" href="${escapeHtml(opts.passkeyRedirectUrl)}">${BIOMETRY_ICONS[display.biometry]}用 ${BIOMETRY_LABELS[display.biometry]} 登入</a>`
       : '';
 
   return `<!doctype html>
