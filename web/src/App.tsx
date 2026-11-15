@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from './store/useStore'
 import { bootstrapAuth, clearAllAuth, hasRefreshToken, refreshAccessToken } from './auth/oauth'
+import { Loader2 } from 'lucide-react'
 import { Skeleton } from './components/Skeleton'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -63,10 +64,25 @@ export default function App() {
   if (!authReady) {
     return (
       <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <div className="card" style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Skeleton variant="text" width="45%" height={24} />
-          <Skeleton variant="rect" height={42} borderRadius={12} />
-          <Skeleton variant="rect" height={42} borderRadius={12} />
+        <div
+          className="card"
+          style={{
+            width: '100%',
+            maxWidth: 360,
+            padding: 28,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 12,
+            textAlign: 'center',
+          }}
+        >
+          <Loader2 size={28} style={{ color: 'var(--color-primary)', animation: 'spin 1s linear infinite' }} />
+          <div style={{ fontWeight: 600, fontSize: '1rem' }}>正在驗證登入狀態...</div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+            正在安全連線至帳本伺服器，請稍候
+          </div>
+          <Skeleton variant="rect" width="100%" height={8} borderRadius={999} style={{ marginTop: 4 }} />
         </div>
       </div>
     )

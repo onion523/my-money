@@ -50,15 +50,24 @@ export function adjustClockFromDpopError(res: Response): boolean {
   return noteServerDate(res);
 }
 
+const TOKEN_REQUEST_TIMEOUT_MS = 8000;
+
 async function postToken(form: Record<string, string>): Promise<{ res: Response; data: any }> {
   const url = `${AUTH_SERVER_BASE}/oauth/token`;
   const send = async () => {
     const proof = await createDpopProof({ method: 'POST', url });
-    return fetch(`${API_BASE}/oauth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(proof ? { DPoP: proof } : {}) },
-      body: new URLSearchParams(form).toString(),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TOKEN_REQUEST_TIMEOUT_MS);
+    try {
+      return await fetch(`${API_BASE}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(proof ? { DPoP: proof } : {}) },
+        body: new URLSearchParams(form).toString(),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
   };
   let res = await send();
   let data = await res.json().catch(() => ({}));

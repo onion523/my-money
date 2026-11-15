@@ -199,4 +199,29 @@ describe('Web Auth Transient Refresh Resilience', () => {
       expect(getMemoryAccessToken()).toBe(freshJwt);
     });
   });
+
+  it('attaches an AbortSignal to /oauth/token requests so stalled networks do not hang bootstrapAuth', async () => {
+    localStorage.setItem('mm_refresh_token', 'rt-timeout');
+    const freshJwt = makeJwt(900);
+    let capturedSignal: AbortSignal | undefined;
+
+    const fetchMock = vi.fn().mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedSignal = init?.signal ?? undefined;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            access_token: freshJwt,
+            refresh_token: 'rt-timeout-2',
+            token_type: 'Bearer',
+          }),
+          { status: 200 }
+        )
+      );
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await bootstrapAuth();
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    expect(capturedSignal?.aborted).toBe(false);
+  });
 });
