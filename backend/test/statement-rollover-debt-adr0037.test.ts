@@ -20,6 +20,51 @@ describe('ADR 0037: statement rollover debt breakdown isolation & status truth',
     await h.dispose();
   });
 
+  async function createCard(statementDay: number, paymentDueDay: number): Promise<string> {
+    const res = await h.request('/accounts', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        name: `測試卡-${statementDay}`,
+        type: 'credit_card',
+        balance: 0,
+        unbilled: 0,
+        credit_limit: 150000,
+        statement_day: statementDay,
+        payment_due_day: paymentDueDay,
+        payment_account_id: 'a_bank1',
+        is_joint: 0,
+      },
+    });
+    expect(res.status).toBe(201);
+    return res.json.data.id as string;
+  }
+
+  async function createCardExpense(
+    cardId: string,
+    amount: number,
+    date: string,
+    isShared: number,
+    note: string,
+    deferToNextStatement = 0
+  ): Promise<void> {
+    const res = await h.request('/transactions', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        account_id: cardId,
+        type: 'expense',
+        category: '餐飲',
+        amount,
+        note,
+        date,
+        is_shared: isShared,
+        defer_to_next_statement: deferToNextStatement,
+      },
+    });
+    expect(res.status).toBe(201);
+  }
+
   it('reproduces and fixes the $637 shared -> $375 shared / $262 personal bug after prior cycle full payment or reimbursement', async () => {
     // 1. 建立「國泰信用卡」(每月 7 號結帳、23 號繳款，個人私卡)
     vi.setSystemTime(new Date('2026-09-15T04:00:00Z'));
@@ -322,5 +367,60 @@ describe('ADR 0037: statement rollover debt breakdown isolation & status truth',
     expect(card.balance).toBe(0);
     expect(card.billed_shared_debt).toBe(0);
     expect(card.billed_personal_debt).toBe(0);
+  });
+
+  it('excludes non-deferred prior-cycle unbilled items from rollover-preview [上期延入] and settles them on rollover-statement', async () => {
+    // 結帳日 15 號，今日 2026-11-15：本期區間 2026-10-16 ~ 2026-11-15，prevStatementDate = 2026-10-15
+    vi.setSystemTime(new Date('2026-11-15T04:00:00Z'));
+    const cardId = await createCard(15, 25);
+
+    // 1. 9/12 歷史消費（早於 2026-10-15、未勾選延至下期 defer_to_next_statement = 0）
+    await createCardExpense(cardId, 500, '2026-09-12', 0, '9/12未延期歷史消費', 0);
+    // 2. 9/20 歷史消費（早於 2026-10-15、明確勾選延至下期 defer_to_next_statement = 1）
+    await createCardExpense(cardId, 300, '2026-09-20', 0, '9/20真正上期延入', 1);
+    // 3. 11/01 本期消費
+    await createCardExpense(cardId, 1000, '2026-11-01', 0, '11/01本期消費', 0);
+
+    // 開啟出帳預覽：不應出現 9/12（未延期），應僅出現 9/20（is_prior_deferred = true）與 11/01（本期）
+    const previewRes = await h.request(`/accounts/${cardId}/rollover-preview`, { user: USER1 });
+    expect(previewRes.status).toBe(200);
+    const previewTxs = previewRes.json.data.transactions as Array<any>;
+    expect(previewTxs.map(t => t.note)).toEqual(['11/01本期消費', '9/20真正上期延入']);
+    expect(previewTxs.find(t => t.note === '9/20真正上期延入')?.is_prior_deferred).toBe(true);
+    expect(previewRes.json.data.netRolledAmount).toBe(1300);
+    expect(previewRes.json.data.projectedUnbilled).toBe(0);
+
+    // 確認出帳：9/20 與 11/01 出帳（billed_statement_date = 2026-11-15），9/12 同步轉為 is_billed = 1（billed_statement_date = 2026-10-15）
+    const rollRes = await h.request(`/accounts/${cardId}/rollover-statement`, {
+      method: 'POST',
+      user: USER1,
+      body: { deferredTxIds: [] },
+    });
+    expect(rollRes.status).toBe(200);
+    expect(rollRes.json.data.balance).toBe(1800);
+    expect(rollRes.json.data.unbilled).toBe(0);
+
+    // 再次開啟出帳預覽：9/12 不可復活為 [上期延入]
+    const previewAfter = await h.request(`/accounts/${cardId}/rollover-preview`, { user: USER1 });
+    expect(previewAfter.status).toBe(200);
+    const afterNotes = (previewAfter.json.data.transactions as Array<any>).map(t => t.note);
+    expect(afterNotes).toEqual(['11/01本期消費', '9/20真正上期延入']);
+  });
+
+  it('POST /accounts/:id/reconcile marks non-deferred prior-cycle unbilled items as billed while preserving current cycle unbilled', async () => {
+    vi.setSystemTime(new Date('2026-11-15T04:00:00Z'));
+    const cardId = await createCard(15, 25);
+
+    // 9/12 未延期歷史消費 + 11/01 本期未出帳消費
+    await createCardExpense(cardId, 500, '2026-09-12', 0, '9/12未延期歷史消費', 0);
+    await createCardExpense(cardId, 1000, '2026-11-01', 0, '11/01本期消費', 0);
+
+    const recRes = await h.request(`/accounts/${cardId}/reconcile`, {
+      method: 'POST',
+      user: USER1,
+    });
+    expect(recRes.status).toBe(200);
+    expect(recRes.json.data.balance).toBe(500);
+    expect(recRes.json.data.unbilled).toBe(1000);
   });
 });

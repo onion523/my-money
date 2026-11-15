@@ -522,7 +522,19 @@ function findMatchingPriorCarryoverTxs<T extends { id: string; amount: number; t
   return [];
 }
 
-// GET /accounts/:id/rollover-preview — 取得結帳日出帳預覽數據與週期全量明細 (ADR-0024, ADR-0030)
+function prepareSettlePriorNonDeferredStatement(db: D1Database, cardId: string, prevStatementDate: string) {
+  return db.prepare(`
+    UPDATE transactions
+    SET is_billed = 1, billed_statement_date = ?
+    WHERE account_id = ?
+      AND date <= ?
+      AND is_billed = 0
+      AND defer_to_next_statement = 0
+      AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+  `).bind(prevStatementDate, cardId, prevStatementDate);
+}
+
+// GET /accounts/:id/rollover-preview — 取得結帳日出帳預覽數據與週期全量明細 (ADR-0024, ADR-0030, ADR-0043)
 accounts.get('/:id/rollover-preview', async (c) => {
   await ensureAccountsSchema(c.env.DB);
   const userId = c.get('userId');
@@ -549,7 +561,7 @@ accounts.get('/:id/rollover-preview', async (c) => {
   const cycleResult = getStatementCycleDates(card.statement_day, card.last_rollover_at);
   const { startDate, endDate, statementDate, prevStatementDate, isPreStatement, preStatementDate, displayText, statusLabel } = cycleResult;
 
-  // 撈取結帳週期全量明細（含已出帳與未出帳，以及早於起始日的歷史未結或本期已歸屬延入款項，ADR-0030）
+  // 撈取結帳週期全量明細（含當期交易，以及早於起始日且明確勾選延至下期或已歸屬本期出帳之原延入款項，ADR-0030）
   const txQuery = `
     SELECT id, amount, is_shared, type, category, note, date, defer_to_next_statement, is_billed, reimbursement_id, billed_statement_date
     FROM transactions
@@ -557,7 +569,7 @@ accounts.get('/:id/rollover-preview', async (c) => {
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
       AND (
         (date >= ? AND date <= ?)
-        OR (date <= ? AND (is_billed = 0 OR billed_statement_date = ?))
+        OR (date <= ? AND ((is_billed = 0 AND defer_to_next_statement = 1) OR billed_statement_date = ?))
       )
     ORDER BY date DESC, created_at DESC
   `;
@@ -578,7 +590,7 @@ accounts.get('/:id/rollover-preview', async (c) => {
     billed_statement_date?: string | null;
   }>;
 
-  // 基礎歷史數據（排除本期候選 txs，使用固定 5 參數條件避免超過 D1 100 綁定參數上限）
+  // 基礎歷史數據（排除本期候選 txs，使用固定參數條件避免超過 D1 100 綁定參數上限）
   const [baseBilledRes, repayRes, baseUnbilledRes] = await c.env.DB.batch([
     c.env.DB.prepare(`
       SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE -amount END), 0) as net_billed
@@ -587,7 +599,7 @@ accounts.get('/:id/rollover-preview', async (c) => {
         AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
         AND NOT (
           (date >= ? AND date <= ?)
-          OR (date <= ? AND (is_billed = 0 OR COALESCE(billed_statement_date, '') = ?))
+          OR (date <= ? AND ((is_billed = 0 AND defer_to_next_statement = 1) OR COALESCE(billed_statement_date, '') = ?))
         )
     `).bind(id, startDate, endDate, prevStatementDate, statementDate),
     c.env.DB.prepare(`
@@ -604,9 +616,10 @@ accounts.get('/:id/rollover-preview', async (c) => {
         AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
         AND NOT (
           (date >= ? AND date <= ?)
-          OR (date <= ? AND (is_billed = 0 OR COALESCE(billed_statement_date, '') = ?))
+          OR (date <= ? AND ((is_billed = 0 AND defer_to_next_statement = 1) OR COALESCE(billed_statement_date, '') = ?))
         )
-    `).bind(id, startDate, endDate, prevStatementDate, statementDate),
+        AND NOT (date <= ? AND is_billed = 0 AND defer_to_next_statement = 0)
+    `).bind(id, startDate, endDate, prevStatementDate, statementDate, prevStatementDate),
   ]);
 
   let baseNetBilled = Number((baseBilledRes.results?.[0] as any)?.net_billed || 0);
@@ -751,7 +764,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
 
   const { startDate, endDate, statementDate, prevStatementDate, displayText, statusLabel } = getStatementCycleDates(card.statement_day, card.last_rollover_at);
 
-  // 撈取結帳週期全量明細（含已出帳與未出帳，以及早於起始日的歷史未結或本期已歸屬延入款項，ADR-0030）
+  // 撈取結帳週期全量明細（含當期交易，以及早於起始日且明確勾選延至下期或已歸屬本期出帳之原延入款項，ADR-0030）
   const cycleQuery = `
     SELECT id, amount, is_shared, type, date, billed_statement_date
     FROM transactions
@@ -759,7 +772,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
       AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
       AND (
         (date >= ? AND date <= ?)
-        OR (date <= ? AND (is_billed = 0 OR billed_statement_date = ?))
+        OR (date <= ? AND ((is_billed = 0 AND defer_to_next_statement = 1) OR billed_statement_date = ?))
       )
   `;
   const cycleParams: (string | number)[] = [id, startDate, endDate, prevStatementDate, statementDate];
@@ -768,7 +781,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
   let cycleTxs = (cycleTxsResult.results || []) as Array<{ id: string; amount: number; is_shared: number; type: string; date: string; billed_statement_date?: string | null }>;
   const alreadyRolledThisStatement = cycleTxs.some(t => t.billed_statement_date === statementDate);
 
-  // 若直接呼叫 rollover-statement（未先經 preview）且存在尚未標記 billed_statement_date 的前期未結清差額，同步匹配歸入本期（固定 5 綁定參數避免 D1 100 參數上限）
+  // 若直接呼叫 rollover-statement（未先經 preview）且存在尚未標記 billed_statement_date 的前期未結清差額，同步匹配歸入本期（固定參數避免 D1 100 參數上限）
   const [baseBilledRes, repayRes] = await c.env.DB.batch([
     c.env.DB.prepare(`
       SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE -amount END), 0) as net_billed
@@ -777,7 +790,7 @@ accounts.post('/:id/rollover-statement', async (c) => {
         AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
         AND NOT (
           (date >= ? AND date <= ?)
-          OR (date <= ? AND (is_billed = 0 OR COALESCE(billed_statement_date, '') = ?))
+          OR (date <= ? AND ((is_billed = 0 AND defer_to_next_statement = 1) OR COALESCE(billed_statement_date, '') = ?))
         )
     `).bind(id, startDate, endDate, prevStatementDate, statementDate),
     c.env.DB.prepare(`
@@ -829,6 +842,11 @@ accounts.post('/:id/rollover-statement', async (c) => {
     batchStatements.push(
       c.env.DB.prepare('UPDATE transactions SET defer_to_next_statement = 0, is_billed = 1, billed_statement_date = ? WHERE id = ? AND account_id = ?').bind(statementDate, tx.id, id)
     );
+  }
+
+  // 2.5 將早於本期起始日且未勾選延至下期之歷史未結明細標記為已出帳，移出未出帳並歸入已出帳待繳款 (ADR-0043)
+  if (prevStatementDate) {
+    batchStatements.push(prepareSettlePriorNonDeferredStatement(c.env.DB, id, prevStatementDate));
   }
 
   // 3. 同步結算前期已沖抵的還款流水（首次執行本期出帳時，將出帳前已發生之前期帳單還款封存為 is_billed = 1；同週期重複執行出帳則保留出帳後新增之當期還款為 is_billed = 0）
@@ -1257,13 +1275,22 @@ accounts.post('/:id/reconcile', async (c) => {
 
   const card = await c.env.DB.prepare(
     `SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders}) AND type = 'credit_card'`
-  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; is_joint: number; user_id: string }>();
+  ).bind(id, ...memberUserIds).first<{ id: string; name: string; balance: number; unbilled: number; statement_day: number | null; last_rollover_at?: string | null; is_joint: number; user_id: string }>();
 
   if (!card) return c.json({ success: false, error: '信用卡不存在或無權限' }, 404);
 
   // 權限檢查：個人信用卡校準僅限持卡人本人操作
   if ((card.is_joint === 0 || card.is_joint === null) && card.user_id !== userId) {
     return c.json({ success: false, error: '權限不足：個人信用卡校準僅限持卡人本人操作' }, 403);
+  }
+
+  // 手動校準時，將早於本期起始日且未勾選延至下期之歷史未結明細轉為已出帳（移出未出帳）(ADR-0043)
+  if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
+    const { prevStatementDate } = getStatementCycleDates(card.statement_day, card.last_rollover_at);
+    if (prevStatementDate) {
+      await prepareSettlePriorNonDeferredStatement(c.env.DB, id, prevStatementDate).run();
+      await recalculateCardBalances(c.env.DB, id);
+    }
   }
 
   const reconciled = await reconcileCreditCardUnbilled(c.env.DB, id);
