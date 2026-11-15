@@ -2,7 +2,7 @@ import { DashboardSkeleton } from '../components/Skeleton'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
-import { accountsApi, txApi, goalsApi, budgetsApi, Account, Transaction } from '../api/client'
+import { accountsApi, txApi, goalsApi, budgetsApi, recurringApi, Account, Transaction, RecurringItem } from '../api/client'
 import { formatCurrency, formatDate, today, thisMonth, getGreeting, CATEGORIES, buildHistoryMemo, recommendCategory, compareTransactionsNewestFirst } from '../components/utils'
 import { GoalIcon } from '../components/icons'
 import ScopeTabBar from '../components/ScopeTabBar'
@@ -10,6 +10,8 @@ import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
 import TransactionRow from '../components/TransactionRow'
 import FormulaTooltip from '../components/FormulaTooltip'
+import RecurringPresetSelect from '../components/RecurringPresetSelect'
+import { mergeRecurringPresetIntoForm, resetPresetSelectionOnTypeChange } from '../components/recurringPreset'
 import {
   AlertCircle,
   Wallet,
@@ -36,6 +38,8 @@ export default function Dashboard() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [budgets, setBudgets] = useState<any[]>([])
   const [goalsList, setGoalsList] = useState<any[]>([])
+  const [recurringItems, setRecurringItems] = useState<RecurringItem[]>([])
+  const [selectedRecurringId, setSelectedRecurringId] = useState('')
   const [monthlyStats, setMonthlyStats] = useState<any[]>([])
   const [viewScope, setViewScope] = useState<'all' | 'household' | 'personal'>('all')
   const hasLoadedStaticRef = useRef(false)
@@ -75,13 +79,14 @@ export default function Dashboard() {
       const currentYear = thisMonth().slice(0, 4)
       const shouldFetchStatic = forceStatic || !hasLoadedStaticRef.current
 
-      const [bal, accs, txs, monthlyData, buds, g] = await Promise.all([
+      const [bal, accs, txs, monthlyData, buds, g, recs] = await Promise.all([
         accountsApi.balance(scope),
         accountsApi.list(scope),
         txApi.list({ limit: '10', scope }),
         txApi.monthly(currentYear, scope),
         shouldFetchStatic ? budgetsApi.list() : Promise.resolve(null),
         shouldFetchStatic ? goalsApi.list() : Promise.resolve(null),
+        shouldFetchStatic ? recurringApi.list('all').catch(() => []) : Promise.resolve(null),
       ])
 
       if (bal) setBalance(bal)
@@ -90,6 +95,7 @@ export default function Dashboard() {
       setMonthlyStats(monthlyData)
       if (buds !== null) setBudgets(buds)
       if (g !== null) setGoalsList(g)
+      if (recs !== null) setRecurringItems(recs)
       if (shouldFetchStatic) hasLoadedStaticRef.current = true
     } catch (e: any) {
       console.error('Failed to load dashboard data:', e)
@@ -128,6 +134,9 @@ export default function Dashboard() {
         is_shared: form.is_shared,
       })
       setShowAddModal(false)
+      setSelectedRecurringId('')
+      setIsCategoryManuallyChanged(false)
+      setRecommendationHint(null)
       setForm(p => ({ ...p, amount: '', note: '', date: today() }))
       loadData(viewScope, true)
     } catch (err: any) {
@@ -554,7 +563,7 @@ export default function Dashboard() {
 
       {/* 快速記帳彈窗 */}
       {showAddModal && (
-        <Modal title="快速記帳" onClose={() => { setShowAddModal(false); setIsCategoryManuallyChanged(false); setRecommendationHint(null); }}>
+        <Modal title="快速記帳" onClose={() => { setShowAddModal(false); setSelectedRecurringId(''); setIsCategoryManuallyChanged(false); setRecommendationHint(null); }}>
           {submitError && (
             <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, color: 'var(--color-danger)', fontSize: '0.85rem' }}>
               {submitError}
@@ -591,7 +600,7 @@ export default function Dashboard() {
               <button
                 type="button"
                 className={`btn btn-full ${form.type === 'expense' ? 'btn-danger' : 'btn-secondary'}`}
-                onClick={() => setForm(p => ({ ...p, type: 'expense', category: '餐飲' }))}
+                onClick={() => setForm(p => resetPresetSelectionOnTypeChange(p, 'expense', setSelectedRecurringId))}
               >
                 支出
               </button>
@@ -599,11 +608,28 @@ export default function Dashboard() {
                 type="button"
                 className={`btn btn-full ${form.type === 'income' ? 'btn-primary' : 'btn-secondary'}`}
                 style={form.type === 'income' ? { background: 'var(--color-success)' } : {}}
-                onClick={() => setForm(p => ({ ...p, type: 'income', category: '薪資' }))}
+                onClick={() => setForm(p => resetPresetSelectionOnTypeChange(p, 'income', setSelectedRecurringId))}
               >
                 收入
               </button>
             </div>
+
+            {/* 帶入週期項目預設值 */}
+            <RecurringPresetSelect
+              id="quick-recurring-preset"
+              items={recurringItems}
+              type={form.type}
+              selectedId={selectedRecurringId}
+              currentCategory={form.category}
+              isCategoryManuallyChanged={isCategoryManuallyChanged}
+              historyMemo={historyMemo}
+              onApply={(nextId, applied) => {
+                setSelectedRecurringId(nextId)
+                if (!applied) return
+                setForm(p => mergeRecurringPresetIntoForm(p, applied))
+                setRecommendationHint(applied.recommendationHint)
+              }}
+            />
 
             {/* 金額 */}
             <div className="input-group">

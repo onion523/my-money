@@ -1,12 +1,14 @@
 import { Skeleton, TransactionsSkeleton } from '../components/Skeleton'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { txApi, accountsApi, exportApi, householdApi, Transaction, Account, TransactionRangeSummary } from '../api/client'
+import { txApi, accountsApi, exportApi, householdApi, recurringApi, Transaction, Account, TransactionRangeSummary, RecurringItem } from '../api/client'
 import { useStore } from '../store/useStore'
 import { formatCurrency, formatDate, today, thisMonth, CATEGORIES, buildHistoryMemo, recommendCategory, compareTransactionsNewestFirst } from '../components/utils'
 import Modal from '../components/Modal'
 import ScopeTabBar from '../components/ScopeTabBar'
 import TransactionRow from '../components/TransactionRow'
 import FormulaTooltip from '../components/FormulaTooltip'
+import RecurringPresetSelect from '../components/RecurringPresetSelect'
+import { mergeRecurringPresetIntoForm, resetPresetSelectionOnTypeChange } from '../components/recurringPreset'
 import {
   Plus,
   Filter,
@@ -35,6 +37,8 @@ export default function Transactions() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [summary, setSummary] = useState<TransactionRangeSummary | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [recurringItems, setRecurringItems] = useState<RecurringItem[]>([])
+  const [selectedRecurringId, setSelectedRecurringId] = useState('')
   const [myRole, setMyRole] = useState<'admin' | 'member' | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -152,11 +156,12 @@ export default function Transactions() {
         return { rows, cursor }
       }
 
-      const [range, summaryData, accs, householdData] = await Promise.all([
+      const [range, summaryData, accs, householdData, recs] = await Promise.all([
         fetchRange(),
         txApi.summaryRange(filterParams),
         shouldFetchAccounts ? accountsApi.list() : Promise.resolve(null),
         isInitialMount ? householdApi.current().catch(() => null) : Promise.resolve(undefined),
+        isInitialMount ? recurringApi.list('all').catch(() => []) : Promise.resolve(undefined),
       ])
       if (requestId !== loadRequestRef.current) return
       setTransactions(range.rows)
@@ -165,6 +170,9 @@ export default function Transactions() {
       if (accs !== null) setAccounts(accs)
       if (householdData !== undefined) {
         setMyRole(householdData?.myRole || null)
+      }
+      if (recs !== undefined) {
+        setRecurringItems(recs)
       }
       if (isInitialMount) hasLoadedContextRef.current = true
     } catch (err) {
@@ -250,6 +258,7 @@ export default function Transactions() {
     })
     setIsCategoryManuallyChanged(false)
     setRecommendationHint(null)
+    setSelectedRecurringId('')
     setErrorMsg('')
     setShowModal(true)
   }
@@ -765,7 +774,7 @@ export default function Transactions() {
                   className={`btn btn-full ${form.type === 'expense' ? 'btn-danger' : 'btn-secondary'}`}
                   style={{ opacity: isEditingPaired ? 0.6 : 1, cursor: isEditingPaired ? 'not-allowed' : 'pointer' }}
                   disabled={isEditingPaired}
-                  onClick={() => !isEditingPaired && setForm(p => ({ ...p, type: 'expense', category: '餐飲' }))}
+                  onClick={() => { if (!isEditingPaired) setForm(p => resetPresetSelectionOnTypeChange(p, 'expense', setSelectedRecurringId)) }}
                 >
                   支出
                 </button>
@@ -774,11 +783,30 @@ export default function Transactions() {
                   className={`btn btn-full ${form.type === 'income' ? 'btn-primary' : 'btn-secondary'}`}
                   style={{ opacity: isEditingPaired ? 0.6 : 1, cursor: isEditingPaired ? 'not-allowed' : 'pointer', ...(form.type === 'income' ? { background: 'var(--color-success)' } : {}) }}
                   disabled={isEditingPaired}
-                  onClick={() => !isEditingPaired && setForm(p => ({ ...p, type: 'income', category: '薪資' }))}
+                  onClick={() => { if (!isEditingPaired) setForm(p => resetPresetSelectionOnTypeChange(p, 'income', setSelectedRecurringId)) }}
                 >
                   收入
                 </button>
               </div>
+
+              {/* 帶入週期項目預設值（僅新增模式顯示） */}
+              {!editingTx && (
+                <RecurringPresetSelect
+                  id="tx-recurring-preset"
+                  items={recurringItems}
+                  type={form.type}
+                  selectedId={selectedRecurringId}
+                  currentCategory={form.category}
+                  isCategoryManuallyChanged={isCategoryManuallyChanged}
+                  historyMemo={historyMemo}
+                  onApply={(nextId, applied) => {
+                    setSelectedRecurringId(nextId)
+                    if (!applied) return
+                    setForm(p => mergeRecurringPresetIntoForm(p, applied))
+                    setRecommendationHint(applied.recommendationHint)
+                  }}
+                />
+              )}
 
               {/* 金額 */}
               <div className="input-group">
