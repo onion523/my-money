@@ -482,7 +482,7 @@ _Avoid_: token（未加限定詞）、JWT
 _Avoid_: 長效 token (long-lived token)、記住我 (remember me)
 
 **Legacy Token (舊版權杖)**:
-相容期間由舊版 `/auth/login`、`/auth/register` 核發、效期 30 天、不屬於任何 Session 的權杖。不會出現在裝置清單，只有在修改密碼時會失效；相容模式結束後全面停用。
+相容期間由舊版 `/auth/login`、`/auth/register` 核發、效期 30 天、不屬於任何 Session 的權杖。不會出現在裝置清單，在修改密碼或重設密碼時會失效；相容模式結束後全面停用。
 _Avoid_: 舊 session (old session)、Access Token
 
 **Sign Out (登出)**:
@@ -508,6 +508,10 @@ _Avoid_: 跨網域 cookie、直接發放永久 token
 **Transient Refresh Resilience (暫時性續期容錯)**:
 Web 端在 Access Token 過期前應主動背景續期（並於分頁切回前景或網路恢復時檢查續期）；當向授權伺服器續期遭遇網路中斷或 5xx / 429 等暫時性錯誤時，嚴禁清除本機 `Refresh Token` 與 DPoP 金鑰或強制導向登入頁，僅在伺服器明確回傳 `400` / `401` 拒絕（如 `invalid_grant`、`invalid_client`）時才終止本機 Session。啟動時若仍持有 `Refresh Token` 但暫時離線，應顯示「重新連線」提示並於恢復連線後自動續期。
 _Avoid_: 斷線登出 (logout on offline)、無條件清憑證 (unconditional auth wipe)
+
+**Password Reset (忘記密碼／重設密碼)**:
+於授權伺服器登入頁提供之自助密碼重設流程，透過已綁定的 LINE／Telegram 記帳機器人發送 6 位數一次性驗證碼（OTP）作為身分證明，無須外部寄信服務。發送與驗證過程一律採中性提示以避免洩漏帳號存在與綁定狀態；重設成功後立即撤銷所有裝置之 Session 與 Legacy Token（保留 Passkey 憑證），並導回登入表單重新驗證登入。
+_Avoid_: Email 重設連結 (email reset link)、免驗證直接改密 (unverified password overwrite)、自動登入繞過 (auto-login bypass after reset)
 
 ---
 

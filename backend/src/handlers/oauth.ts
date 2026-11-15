@@ -11,9 +11,10 @@ import {
   signHmac,
   verifyPassword,
 } from '../middleware/jwt';
-import { renderOAuthErrorPage, renderOAuthLoginPage } from './oauthLoginPage';
+import { renderOAuthErrorPage, renderOAuthLoginPage, type OAuthLoginMode } from './oauthLoginPage';
 import { claimDpopJti, ensureDpopSchema, verifyDpopProof } from '../middleware/dpop';
 import { verifyPasskeyAssertion } from './passkey';
+import { requestPasswordResetOtp, verifyAndResetPassword } from './passwordReset';
 
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 分鐘
 export const SESSION_IDLE_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 天
@@ -77,6 +78,16 @@ export async function ensureOAuthSchema(db: D1Database): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_refresh_session ON refresh_tokens(session_id)`,
+    `CREATE TABLE IF NOT EXISTS password_reset_otps (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      used_at INTEGER,
+      created_at INTEGER NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_reset_otp_user ON password_reset_otps(user_id, created_at)`,
   ];
   for (const sql of stmts) {
     await db.prepare(sql).run();
@@ -399,7 +410,9 @@ oauth.get('/authorize', async (c) => {
 
   const scriptNonce = randomToken(16);
   applySecurityHeaders(c, scriptNonce);
-  const mode = c.req.query('mode') === 'register' ? 'register' : 'login';
+  const rawMode = c.req.query('mode');
+  const mode: OAuthLoginMode =
+    rawMode === 'register' || rawMode === 'forgot' || rawMode === 'reset' ? rawMode : 'login';
   const html = renderOAuthLoginPage({
     csrfToken: txToken,
     mode,
@@ -449,29 +462,67 @@ oauth.post('/authorize', async (c) => {
     return c.html(renderOAuthErrorPage('登入階段已逾時', '請回到應用程式重新發起登入。', backUrl), 403);
   }
 
-  const mode = body.get('mode') === 'register' ? 'register' : 'login';
+  const rawMode = body.get('mode');
+  const mode: OAuthLoginMode =
+    rawMode === 'register' || rawMode === 'forgot' || rawMode === 'reset' ? rawMode : 'login';
   const email = (body.get('email') || '').trim().toLowerCase();
   const password = body.get('password') || '';
   const name = (body.get('name') || '').trim();
+  const codeInput = (body.get('code') || '').trim();
   const switchUrlBase = buildSwitchUrlBase(tx);
 
-  const renderFormError = (errorMsg: string, status: 400 | 401 | 409 | 429) => {
+  const renderModeView = (
+    targetMode: OAuthLoginMode,
+    viewOpts: { error?: string; notice?: string; status: 200 | 400 | 401 | 409 | 429 }
+  ) => {
     const scriptNonce = randomToken(16);
     applySecurityHeaders(c, scriptNonce);
     return c.html(
       renderOAuthLoginPage({
         csrfToken: txToken,
-        mode,
+        mode: targetMode,
         email,
         name,
-        error: errorMsg,
+        error: viewOpts.error,
+        notice: viewOpts.notice,
         clientLabel: getClientDisplayName(tx.client_id),
         switchUrlBase,
         scriptNonce,
       }),
-      status
+      viewOpts.status
     );
   };
+
+  const renderFormError = (errorMsg: string, status: 400 | 401 | 409 | 429) =>
+    renderModeView(mode, { error: errorMsg, status });
+
+  if (mode === 'forgot') {
+    if (!email) {
+      return renderFormError('請填寫 Email', 400);
+    }
+    const result = await requestPasswordResetOtp(c.env.DB, c.env, email, getClientIp(c), now);
+    if (result.status === 'rate_limited') {
+      return renderFormError('請求過於頻繁，請稍後再試', 429);
+    }
+    return renderModeView('reset', {
+      notice: '若該 Email 已註冊且有綁定 LINE 或 Telegram 機器人，驗證碼已發送至您的機器人（10 分鐘內有效）',
+      status: 200,
+    });
+  }
+
+  if (mode === 'reset') {
+    if (!email || !codeInput || !password) {
+      return renderFormError('請填寫 Email、驗證碼與新密碼', 400);
+    }
+    const result = await verifyAndResetPassword(c.env.DB, email, codeInput, password, now);
+    if (!result.ok) {
+      return renderFormError(result.error, result.status);
+    }
+    return renderModeView('login', {
+      notice: '密碼已重設，請使用新密碼登入',
+      status: 200,
+    });
+  }
 
   let authenticatedUserId: string;
 

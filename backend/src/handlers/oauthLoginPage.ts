@@ -19,6 +19,8 @@ const SHARED_CSS = `
   --input-bg: rgba(255, 255, 255, 0.92);
   --error-bg: rgba(239, 68, 68, 0.1);
   --error-text: #c81e1e;
+  --notice-bg: rgba(16, 185, 129, 0.12);
+  --notice-text: #047857;
   --shadow: 0 20px 50px rgba(255, 138, 138, 0.16);
 }
 @media (prefers-color-scheme: dark) {
@@ -33,6 +35,8 @@ const SHARED_CSS = `
     --input-bg: rgba(18, 20, 27, 0.85);
     --error-bg: rgba(248, 113, 113, 0.14);
     --error-text: #fca5a5;
+    --notice-bg: rgba(52, 211, 153, 0.14);
+    --notice-text: #6ee7b7;
     --shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
   }
 }
@@ -144,6 +148,30 @@ button:disabled { opacity: 0.7; cursor: wait; }
   font-size: 13px;
   margin-bottom: 14px;
 }
+.notice {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--notice-bg);
+  color: var(--notice-text);
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+.aux-links {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.aux-links.end {
+  justify-content: flex-end;
+}
+.aux-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+.aux-link:hover { text-decoration: underline; }
 .hint {
   margin-top: 14px;
   font-size: 12px;
@@ -152,41 +180,86 @@ button:disabled { opacity: 0.7; cursor: wait; }
 }
 `;
 
+export type OAuthLoginMode = 'login' | 'register' | 'forgot' | 'reset';
+
+const MODE_TITLES: Record<OAuthLoginMode, string> = {
+  login: '登入',
+  register: '註冊帳號',
+  forgot: '忘記密碼',
+  reset: '重設密碼',
+};
+
+const MODE_BUTTONS: Record<OAuthLoginMode, { idle: string; busy: string }> = {
+  login: { idle: '登入', busy: '登入中...' },
+  register: { idle: '建立帳號並繼續', busy: '建立帳號中...' },
+  forgot: { idle: '發送驗證碼', busy: '發送中...' },
+  reset: { idle: '重設密碼', busy: '重設中...' },
+};
+
 export function renderOAuthLoginPage(opts: {
   csrfToken: string;
-  mode?: 'login' | 'register';
+  mode?: OAuthLoginMode;
   email?: string;
   name?: string;
   error?: string;
+  notice?: string;
   clientLabel?: string;
   switchUrlBase?: string;
   scriptNonce?: string;
 }): string {
-  const mode = opts.mode ?? 'login';
+  const mode: OAuthLoginMode = opts.mode ?? 'login';
   const isRegister = mode === 'register';
+  const isForgot = mode === 'forgot';
+  const isReset = mode === 'reset';
+  const isAuthTab = mode === 'login' || isRegister;
   const emailVal = escapeHtml(opts.email || '');
   const nameVal = escapeHtml(opts.name || '');
   const csrfVal = escapeHtml(opts.csrfToken);
   const clientText = opts.clientLabel ? `正在登入 ${escapeHtml(opts.clientLabel)}` : '個人與家庭雙帳本';
 
-  const tabsHtml = opts.switchUrlBase
-    ? `<div class="tabs">
+  const tabsHtml =
+    opts.switchUrlBase && isAuthTab
+      ? `<div class="tabs">
         <a class="tab${!isRegister ? ' active' : ''}" href="${escapeHtml(opts.switchUrlBase)}&mode=login">登入</a>
         <a class="tab${isRegister ? ' active' : ''}" href="${escapeHtml(opts.switchUrlBase)}&mode=register">註冊新帳號</a>
       </div>`
-    : '';
+      : '';
 
   const nameField = isRegister
     ? `<label for="name">顯示名稱</label>
        <input id="name" name="name" type="text" autocomplete="name" required value="${nameVal}" placeholder="例如：小華">`
     : '';
 
+  const otpField = isReset
+    ? `<label for="code">6 位數驗證碼</label>
+       <input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required placeholder="請輸入機器人收到的 6 位數驗證碼">`
+    : '';
+
+  const passwordField = !isForgot
+    ? `<label for="password">${isReset ? '新密碼' : '密碼'}</label>
+       <input id="password" name="password" type="password" autocomplete="${isRegister || isReset ? 'new-password' : 'current-password'}" ${isRegister || isReset ? 'minlength="6"' : ''} required placeholder="${isRegister || isReset ? '至少 6 個字元' : '請輸入密碼'}">`
+    : '';
+
+  let auxLinksHtml = '';
+  if (opts.switchUrlBase) {
+    const base = escapeHtml(opts.switchUrlBase);
+    if (mode === 'login') {
+      auxLinksHtml = `<div class="aux-links end"><a class="aux-link" href="${base}&mode=forgot">忘記密碼？</a></div>`;
+    } else if (isForgot) {
+      auxLinksHtml = `<div class="aux-links"><a class="aux-link" href="${base}&mode=login">← 返回登入</a><a class="aux-link" href="${base}&mode=reset">已有驗證碼？前往重設</a></div>`;
+    } else if (isReset) {
+      auxLinksHtml = `<div class="aux-links"><a class="aux-link" href="${base}&mode=login">← 返回登入</a><a class="aux-link" href="${base}&mode=forgot">重新發送驗證碼</a></div>`;
+    }
+  }
+
+  const btnText = MODE_BUTTONS[mode];
+
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${isRegister ? '註冊帳號' : '登入'} — My Money</title>
+  <title>${MODE_TITLES[mode]} — My Money</title>
   <style>${SHARED_CSS}</style>
 </head>
 <body>
@@ -199,6 +272,7 @@ export function renderOAuthLoginPage(opts: {
       </div>
     </div>
     ${tabsHtml}
+    ${opts.notice ? `<div class="notice" role="status">${escapeHtml(opts.notice)}</div>` : ''}
     ${opts.error ? `<div class="err" role="alert">${escapeHtml(opts.error)}</div>` : ''}
     <form method="post" action="/oauth/authorize">
       <input type="hidden" name="csrf_token" value="${csrfVal}">
@@ -206,10 +280,11 @@ export function renderOAuthLoginPage(opts: {
       ${nameField}
       <label for="email">Email</label>
       <input id="email" name="email" type="email" autocomplete="username" required value="${emailVal}" placeholder="you@example.com">
-      <label for="password">密碼</label>
-      <input id="password" name="password" type="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" ${isRegister ? 'minlength="6"' : ''} required placeholder="${isRegister ? '至少 6 個字元' : '請輸入密碼'}">
-      <button type="submit">${isRegister ? '建立帳號並繼續' : '登入'}</button>
+      ${otpField}
+      ${passwordField}
+      <button type="submit">${btnText.idle}</button>
     </form>
+    ${auxLinksHtml}
     <p class="hint">安全驗證由 My Money 授權伺服器提供</p>
   </main>${
     opts.scriptNonce
@@ -223,7 +298,7 @@ export function renderOAuthLoginPage(opts: {
         if (!b) return;
         if (b.disabled) { e.preventDefault(); return; }
         b.disabled = true;
-        b.textContent = ${isRegister ? "'建立帳號中...'" : "'登入中...'"};
+        b.textContent = '${btnText.busy}';
       });
     })();
   </script>`

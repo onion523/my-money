@@ -246,3 +246,15 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_session ON refresh_tokens(session_id);
 
+CREATE TABLE IF NOT EXISTS password_reset_otps (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  used_at INTEGER,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_reset_otp_user ON password_reset_otps(user_id, created_at);
+
