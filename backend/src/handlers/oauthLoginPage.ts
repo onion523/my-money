@@ -222,13 +222,16 @@ const BIOMETRY_LABELS: Record<Biometry, string> = {
 };
 
 // 設計稿的圖示;Optic ID 沿用 Face ID。CSP 沒開 img-src,只能 inline SVG。
-const SVG_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
-const FACE_ID_ICON = `${SVG_OPEN}<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 9.5v1.2M15 9.5v1.2M12 9.5v3.2l-1 .8M9 15.5c1.8 1.4 4.2 1.4 6 0"/></svg>`;
-const TOUCH_ID_ICON = `${SVG_OPEN}<path d="M6.5 8.5a6.5 6.5 0 0 1 11 0M5 12.5a7 7 0 0 1 .3-2M9 20c-.6-1.2-1-2.4-1-4a4 4 0 0 1 8 0c0 2 .5 3.4 1.5 4.6M12 16c0 2 .4 3.4 1.2 4.6M19 13c.3 1.6.2 3.4-.4 5"/></svg>`;
+// 圖示跟 web 前端同一套:lucide-static 0.460.0(ISC)的 scan-face、fingerprint、scan-eye,inline 是因為 CSP 沒有 img-src。
+const SVG_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+const SCAN_FRAME = '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>';
+const FACE_ID_ICON = `${SVG_OPEN}${SCAN_FRAME}<path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>`;
+const TOUCH_ID_ICON = `${SVG_OPEN}<path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></svg>`;
+const OPTIC_ID_ICON = `${SVG_OPEN}${SCAN_FRAME}<circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/></svg>`;
 const BIOMETRY_ICONS: Record<Biometry, string> = {
   faceid: FACE_ID_ICON,
   touchid: TOUCH_ID_ICON,
-  opticid: FACE_ID_ICON,
+  opticid: OPTIC_ID_ICON,
 };
 
 const MIN_FONT_SCALE = 1;

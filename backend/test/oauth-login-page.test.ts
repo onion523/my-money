@@ -48,20 +48,23 @@ describe('OAuth 登入頁：生物辨識入口與字級 (#215)', () => {
     expect(await openLogin('&biometry=opticid')).toContain('用 Optic ID 登入');
   });
 
-  it('按鈕文字前有對應的圖示:Face ID 與 Optic ID 用臉部框，Touch ID 用指紋，圖示 aria-hidden', async () => {
-    const FACE = 'M9 15.5c1.8 1.4 4.2 1.4 6 0';
-    const FINGERPRINT = 'M6.5 8.5a6.5 6.5 0 0 1 11 0';
-    for (const [biometry, label, icon, other] of [
-      ['faceid', 'Face ID', FACE, FINGERPRINT],
-      ['opticid', 'Optic ID', FACE, FINGERPRINT],
-      ['touchid', 'Touch ID', FINGERPRINT, FACE],
-    ]) {
+  it('按鈕文字前有各自的圖示(跟 web 同一套 lucide):Face ID 掃臉、Touch ID 指紋、Optic ID 掃眼，圖示 aria-hidden', async () => {
+    // lucide-static 0.460.0 的 scan-face、fingerprint、scan-eye 各取一段獨有的 path
+    const ICONS: Record<string, string> = {
+      faceid: 'M8 14s1.5 2 4 2 4-2 4-2',
+      touchid: 'M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4',
+      opticid: 'M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0',
+    };
+    const LABELS: Record<string, string> = { faceid: 'Face ID', touchid: 'Touch ID', opticid: 'Optic ID' };
+    for (const biometry of Object.keys(ICONS)) {
       const html = await openLogin(`&biometry=${biometry}`);
       const button = html.match(/<a class="alt-btn"[^>]*>([\s\S]*?)<\/a>/)?.[1] ?? '';
       expect(button).toMatch(/^<svg [^>]*aria-hidden="true"/);
-      expect(button).toContain(icon);
-      expect(button).not.toContain(other);
-      expect(button.indexOf('</svg>')).toBeLessThan(button.indexOf(`用 ${label} 登入`));
+      expect(button).toContain(ICONS[biometry]);
+      for (const other of Object.keys(ICONS).filter((b) => b !== biometry)) {
+        expect(button).not.toContain(ICONS[other]);
+      }
+      expect(button.indexOf('</svg>')).toBeLessThan(button.indexOf(`用 ${LABELS[biometry]} 登入`));
     }
   });
 
