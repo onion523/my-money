@@ -1,5 +1,5 @@
 // API ?澆撅??????fetch 隢??絞銝?亙
-import { adjustClockFromDpopError, buildAuthHeaders, clearAllAuth, getMemoryAccessToken, refreshAccessToken } from '../auth/oauth';
+import { adjustClockFromDpopError, buildAuthHeaders, clearAllAuth, getMemoryAccessToken, hasRefreshToken, refreshAccessToken } from '../auth/oauth';
 
 const BASE = (import.meta as any).env?.VITE_API_URL || '/api';
 
@@ -77,12 +77,14 @@ async function requestEnvelope<T>(path: string, options: RequestInit = {}): Prom
         cache: 'no-store',
         headers: await makeHeaders(newToken, false),
       });
-    } else {
+    } else if (!hasRefreshToken()) {
       clearAllAuth();
       apiCache.clear();
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
+    } else {
+      throw new Error('連線暫時中斷，無法更新登入狀態，請稍後重試');
     }
   }
 
@@ -368,12 +370,14 @@ async function downloadAuthorizedFile(path: string, fallbackFilename: string): P
     const newToken = await refreshAccessToken();
     if (newToken) {
       res = await send(newToken);
-    } else {
+    } else if (!hasRefreshToken()) {
       clearAllAuth();
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
       throw new Error('登入已過期，請重新登入');
+    } else {
+      throw new Error('連線暫時中斷，無法更新登入狀態，請稍後重試');
     }
   }
   if (!res.ok) {

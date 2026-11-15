@@ -505,6 +505,10 @@ _Avoid_: 生物辨識密碼 (biometric password)、Keychain 密碼
 因 Web 前端（`pages.dev`）與授權伺服器（`workers.dev`）分屬不同 Public Suffix 網域無法共用 RP ID，Web 端由前端登入頁發起 Passkey 驗證並將簽章 assertion 與 PKCE `code_challenge` 送至後端 `POST /oauth/passkey/authorize`，換取授權碼後再經既有 `/oauth/token`（含 DPoP 綁定）領取 Access Token 與 Refresh Token。
 _Avoid_: 跨網域 cookie、直接發放永久 token
 
+**Transient Refresh Resilience (暫時性續期容錯)**:
+Web 端在 Access Token 過期前應主動背景續期（並於分頁切回前景或網路恢復時檢查續期）；當向授權伺服器續期遭遇網路中斷或 5xx / 429 等暫時性錯誤時，嚴禁清除本機 `Refresh Token` 與 DPoP 金鑰或強制導向登入頁，僅在伺服器明確回傳 `400` / `401` 拒絕（如 `invalid_grant`、`invalid_client`）時才終止本機 Session。啟動時若仍持有 `Refresh Token` 但暫時離線，應顯示「重新連線」提示並於恢復連線後自動續期。
+_Avoid_: 斷線登出 (logout on offline)、無條件清憑證 (unconditional auth wipe)
+
 ---
 
 ### 前端視覺主題與載入體驗 (Frontend Theme & Loading UX)

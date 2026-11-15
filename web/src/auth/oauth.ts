@@ -14,6 +14,16 @@ const OAUTH_STATE_KEY = 'mm_oauth_state';
 let memoryAccessToken: string | null = null;
 let authScheme: 'Bearer' | 'DPoP' = 'Bearer';
 let inFlightRefresh: Promise<string | null> | null = null;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let listenersInitialized = false;
+
+export function hasRefreshToken(): boolean {
+  try {
+    return Boolean(localStorage.getItem(REFRESH_TOKEN_KEY));
+  } catch {
+    return false;
+  }
+}
 
 export function getMemoryAccessToken(): string | null {
   return memoryAccessToken;
@@ -77,7 +87,7 @@ async function computeCodeChallenge(verifier: string): Promise<string> {
   return base64url(new Uint8Array(digest));
 }
 
-export function parseUserFromJwt(token: string): { id: string; email: string; name: string } | null {
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
@@ -86,12 +96,46 @@ export function parseUserFromJwt(token: string): { id: string; email: string; na
     const bin = atob(b64);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const payload = JSON.parse(new TextDecoder().decode(bytes));
-    if (!payload.sub) return null;
-    return { id: payload.sub, email: payload.email || '', name: payload.name || '' };
+    return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
   } catch {
     return null;
   }
+}
+
+function isTokenExpiringSoon(token: string | null, bufferSec = 120): boolean {
+  if (!token) return true;
+  const payload = decodeJwtPayload(token);
+  const exp = typeof payload?.exp === 'number' ? payload.exp : null;
+  if (!exp) return false;
+  return Math.floor(Date.now() / 1000) >= exp - bufferSec;
+}
+
+function scheduleProactiveRefresh(accessToken: string): void {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+  const payload = decodeJwtPayload(accessToken);
+  const exp = typeof payload?.exp === 'number' ? payload.exp : null;
+  if (!exp) return;
+
+  const delayMs = Math.max(5000, (exp - 60) * 1000 - Date.now());
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+      void refreshAccessToken();
+    }
+  }, delayMs);
+}
+
+export function parseUserFromJwt(token: string): { id: string; email: string; name: string } | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.sub !== 'string' || !payload.sub) return null;
+  return {
+    id: payload.sub,
+    email: typeof payload.email === 'string' ? payload.email : '',
+    name: typeof payload.name === 'string' ? payload.name : '',
+  };
 }
 
 function getRedirectUri(): string {
@@ -141,6 +185,7 @@ function persistOAuthSession(
   memoryAccessToken = accessToken;
   localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
   useStore.getState().setAuth(user, accessToken);
+  scheduleProactiveRefresh(accessToken);
   return user;
 }
 
@@ -247,22 +292,36 @@ async function performRefresh(): Promise<string | null> {
   const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
   if (!refreshToken) return null;
 
-  try {
-    const { res, data } = await postToken({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: 'web',
-    });
-    if (!res.ok || !data.access_token || !data.refresh_token) {
-      clearAllAuth();
-      return null;
-    }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { res, data } = await postToken({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: 'web',
+      });
+      if (res.ok && data.access_token && data.refresh_token) {
+        persistOAuthSession(data.access_token, data.refresh_token, data.token_type);
+        return data.access_token as string;
+      }
 
-    persistOAuthSession(data.access_token, data.refresh_token, data.token_type);
-    return data.access_token as string;
-  } catch {
-    return null;
+      // 400/401 代表伺服器明確拒絕（如 Refresh Token 失效/被撤銷或金鑰不符），才清除本機登入狀態
+      if (res.status === 400 || res.status === 401) {
+        clearAllAuth();
+        return null;
+      }
+
+      // 5xx / 429 屬於暫時性錯誤，短暫重試一次，失敗時保留 refresh token 不強制登出
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    } catch {
+      // 網路中斷或裝置剛喚醒，短暫重試一次，失敗時保留 refresh token 不強制登出
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
   }
+  return null;
 }
 
 export async function refreshAccessToken(): Promise<string | null> {
@@ -282,6 +341,10 @@ export async function refreshAccessToken(): Promise<string | null> {
 }
 
 export function clearAllAuth(): void {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
   memoryAccessToken = null;
   authScheme = 'Bearer';
   void clearDpopKey();
@@ -311,7 +374,33 @@ export async function revokeAndLogout(): Promise<void> {
   }
 }
 
+function initAuthListeners(): void {
+  if (listenersInitialized || typeof window === 'undefined') return;
+  listenersInitialized = true;
+
+  const refreshIfNeeded = () => {
+    if (!hasRefreshToken()) return;
+    if (!memoryAccessToken || isTokenExpiringSoon(memoryAccessToken, 120)) {
+      void refreshAccessToken();
+    }
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      refreshIfNeeded();
+    }
+  });
+  window.addEventListener('online', refreshIfNeeded);
+  window.addEventListener('storage', (e) => {
+    if (e.key === REFRESH_TOKEN_KEY && e.newValue === null && memoryAccessToken) {
+      clearAllAuth();
+    }
+  });
+}
+
 export async function bootstrapAuth(): Promise<void> {
+  initAuthListeners();
+
   try {
     // 升級處理：發現舊版 mm_token 時一律清除並要求重新登入
     if (localStorage.getItem(LEGACY_TOKEN_KEY)) {

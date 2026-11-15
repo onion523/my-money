@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from './store/useStore'
-import { bootstrapAuth } from './auth/oauth'
+import { bootstrapAuth, clearAllAuth, hasRefreshToken, refreshAccessToken } from './auth/oauth'
 import { Skeleton } from './components/Skeleton'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -19,7 +19,37 @@ import Settings from './pages/Settings'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useStore(s => s.token)
-  if (!token) return <Navigate to="/login" replace />
+  const [retrying, setRetrying] = useState(false)
+
+  if (!token) {
+    if (hasRefreshToken()) {
+      const handleRetry = async () => {
+        setRetrying(true)
+        try {
+          await refreshAccessToken()
+        } finally {
+          setRetrying(false)
+        }
+      }
+      return (
+        <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="card" style={{ width: '100%', maxWidth: 380, textAlign: 'center', padding: 28, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <h2 style={{ fontSize: '1.1rem', margin: 0 }}>連線暫時中斷</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
+              無法連接伺服器驗證登入狀態，您的登入憑證仍安全保留。
+            </p>
+            <button type="button" className="btn btn-primary" disabled={retrying} onClick={handleRetry} style={{ justifyContent: 'center' }}>
+              {retrying ? '重新連線中...' : '重新連線'}
+            </button>
+            <button type="button" className="btn btn-ghost" disabled={retrying} onClick={() => clearAllAuth()} style={{ justifyContent: 'center' }}>
+              改用其他帳號登入
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return <Navigate to="/login" replace />
+  }
   return <>{children}</>
 }
 
