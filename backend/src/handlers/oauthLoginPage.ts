@@ -201,7 +201,7 @@ button:disabled { opacity: 0.7; cursor: wait; }
   font-weight: 700;
   text-decoration: none;
 }
-.alt-btn:hover { border-color: var(--primary); }
+.alt-btn:hover { border-color: var(--primary); background: var(--input-bg); }
 .alt-btn svg { width: 1.4em; height: 1.4em; flex: none; }
 `;
 
@@ -280,8 +280,6 @@ export function renderOAuthLoginPage(opts: {
   switchUrlBase?: string;
   scriptNonce?: string;
   display?: LoginDisplay;
-  /** 按「用 Face ID 登入」導回 App 的網址(帶 `error=passkey_requested`)。 */
-  passkeyRedirectUrl?: string;
 }): string {
   const display = opts.display ?? { fontScale: MIN_FONT_SCALE };
   const mode: OAuthLoginMode = opts.mode ?? 'login';
@@ -335,11 +333,11 @@ export function renderOAuthLoginPage(opts: {
     .map(([k, v]) => `<input type="hidden" name="${k}" value="${escapeHtml(v)}">`)
     .join('');
 
-  // 方案 A:登入鈕下方隔一條「或」,再放描邊的生物辨識按鈕。只導回 App,由 App 走系統的通行金鑰。
-  const passkeyHtml =
-    mode === 'login' && display.biometry && opts.passkeyRedirectUrl
+  // 登入鈕下方隔一條「或」,再放描邊的生物辨識送出鈕：一樣驗帳密，成功導回時多帶 biometric=1,由 App 綁定生物辨識(#354)。
+  const biometricHtml =
+    mode === 'login' && display.biometry
       ? `<div class="or">或</div>
-    <a class="alt-btn" href="${escapeHtml(opts.passkeyRedirectUrl)}">${BIOMETRY_ICONS[display.biometry]}用 ${BIOMETRY_LABELS[display.biometry]} 登入</a>`
+      <button type="submit" name="biometric" value="1" class="alt-btn">${BIOMETRY_ICONS[display.biometry]}用 ${BIOMETRY_LABELS[display.biometry]} 登入</button>`
       : '';
 
   return `<!doctype html>
@@ -373,9 +371,9 @@ html { font-size: ${Math.round(display.fontScale * 100)}%; }</style>
       ${otpField}
       ${passwordField}
       <button type="submit">${btnText.idle}</button>
+      ${biometricHtml}
     </form>
     ${auxLinksHtml}
-    ${passkeyHtml}
     <p class="hint">安全驗證由 My Money 授權伺服器提供</p>
   </main>${
     opts.scriptNonce
@@ -384,12 +382,16 @@ html { font-size: ${Math.round(display.fontScale * 100)}%; }</style>
     (function(){
       var f = document.querySelector('form');
       if (!f) return;
+      var sent = false;
       f.addEventListener('submit', function(e){
-        var b = f.querySelector('button[type="submit"]');
-        if (!b) return;
-        if (b.disabled) { e.preventDefault(); return; }
-        b.disabled = true;
-        b.textContent = '${btnText.busy}';
+        if (sent) { e.preventDefault(); return; }
+        sent = true;
+        var b = e.submitter;
+        if (b && !b.name) b.textContent = '${btnText.busy}';
+        // 延後才停用：同步停用會讓按下的鈕不進表單資料,biometric=1 就送不出去。
+        setTimeout(function(){
+          f.querySelectorAll('button').forEach(function(x){ x.disabled = true; });
+        });
       });
     })();
   </script>`
