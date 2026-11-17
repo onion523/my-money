@@ -1,4 +1,4 @@
-# ADR 0043: OAuth 登入頁生物辨識按鈕改為帳密送出並導回 `biometric=1`
+# ADR 0044: OAuth 登入頁生物辨識按鈕改為帳密送出並導回 `biometric=1`
 
 ## 狀態 (Status)
 已接受 (Accepted) — 2026-11-16（取代 ADR 0042 的決策 2「以 `error=passkey_requested` 導回 App 切換原生 Passkey」；ADR 0042 其餘決策不變）
