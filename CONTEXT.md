@@ -513,7 +513,7 @@ _Avoid_: 生物辨識密碼 (biometric password)、Keychain 密碼
 _Avoid_: 跨網域 cookie、直接發放永久 token
 
 **Biometric Login Submit (生物辨識登入送出／`biometric=1`)**:
-當 iOS Client 開啟授權伺服器登入頁（`GET /oauth/authorize`）並明確傳入 `biometry`（`faceid`、`touchid`、`opticid`）時，登入模式在主登入按鈕下方顯示對應名稱的描邊次要按鈕（「用 Face ID／Touch ID／Optic ID 登入」）。該按鈕是帳密表單的第二個送出鈕（`name="biometric" value="1"`），一樣驗證 Email 與密碼；成功時照常發授權碼導回 `redirect_uri`，並多帶 `biometric=1`，iOS Client 據此在登入後以裝置生物辨識保護 Refresh Token；失敗時與主登入鈕相同重新顯示表單。未傳入 `biometry`、傳入 `none` 或無法辨識的值、以及註冊／忘記密碼／重設密碼模式皆不顯示該按鈕。取代先前以 `error=passkey_requested` 導回的 Native Passkey Handoff（ADR 0043）。
+當 iOS Client 開啟授權伺服器登入頁（`GET /oauth/authorize`）並明確傳入 `biometry`（`faceid`、`touchid`、`opticid`）時，登入模式在主登入按鈕下方顯示對應名稱與 `lucide-static` inline SVG 圖示（`scan-face`、`fingerprint`、`scan-eye`，`aria-hidden="true"`、`1.4em` 隨 `font_scale` 縮放）的描邊次要按鈕（「用 Face ID／Touch ID／Optic ID 登入」）。該按鈕是帳密表單的第二個送出鈕（`name="biometric" value="1"`），一樣驗證 Email 與密碼；成功時照常發授權碼導回 `redirect_uri`，並多帶 `biometric=1`，iOS Client 據此在登入後以裝置生物辨識保護 Refresh Token；失敗時與主登入鈕相同重新顯示表單。未傳入 `biometry`、傳入 `none` 或無法辨識的值、以及註冊／忘記密碼／重設密碼模式皆不顯示該按鈕。取代先前以 `error=passkey_requested` 導回的 Native Passkey Handoff（ADR 0043）。
 _Avoid_: 在 Worker 頁面直接執行 WebAuthn (running WebAuthn on workers.dev)、未帶 biometry 時預設顯示按鈕 (showing biometric button when biometry is omitted)、Native Passkey Handoff／`passkey_requested`（已被取代）
 
 **OAuth Login Display Parameters (授權登入頁外觀參數：`biometry` 與 `font_scale`)**:

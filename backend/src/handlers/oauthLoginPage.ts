@@ -221,7 +221,7 @@ const BIOMETRY_LABELS: Record<Biometry, string> = {
   opticid: 'Optic ID',
 };
 
-// 設計稿的圖示;Optic ID 沿用 Face ID。CSP 沒開 img-src,只能 inline SVG。
+
 // 圖示跟 web 前端同一套:lucide-static 0.460.0(ISC)的 scan-face、fingerprint、scan-eye,inline 是因為 CSP 沒有 img-src。
 const SVG_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
 const SCAN_FRAME = '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>';
