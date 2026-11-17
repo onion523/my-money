@@ -360,15 +360,6 @@ function buildSwitchUrlBase(tx: Omit<TxCookiePayload, 'csrf' | 'exp'>, display?:
   return `/oauth/authorize?${p.toString()}`;
 }
 
-/** 登入頁「用 Face ID 登入」:導回 App,由 App 走系統的通行金鑰(#215)。 */
-function buildPasskeyRedirectUrl(redirectUri: string, state?: string): string {
-  const url = new URL(redirectUri);
-  url.searchParams.set('error', 'passkey_requested');
-  url.searchParams.set('error_description', '改用通行金鑰登入');
-  if (state) url.searchParams.set('state', state);
-  return url.toString();
-}
-
 function oauthError(c: Context, error: string, errorDescription: string, status: 400 | 401 = 400) {
   c.header('Cache-Control', 'no-store');
   c.header('Pragma', 'no-cache');
@@ -440,7 +431,6 @@ oauth.get('/authorize', async (c) => {
     ),
     scriptNonce,
     display,
-    passkeyRedirectUrl: buildPasskeyRedirectUrl(redirectUri, state),
   });
   return c.html(html, 200);
 });
@@ -506,7 +496,6 @@ oauth.post('/authorize', async (c) => {
         switchUrlBase,
         scriptNonce,
         display,
-        passkeyRedirectUrl: buildPasskeyRedirectUrl(tx.redirect_uri, tx.state),
       }),
       viewOpts.status
     );
@@ -625,6 +614,8 @@ oauth.post('/authorize', async (c) => {
   const redirectUrl = new URL(tx.redirect_uri);
   redirectUrl.searchParams.set('code', code);
   if (tx.state) redirectUrl.searchParams.set('state', tx.state);
+  // 按「用 Face ID 登入」送出的:App 據此在登入後綁定生物辨識(#354)。
+  if (mode === 'login' && body.get('biometric') === '1') redirectUrl.searchParams.set('biometric', '1');
   return c.redirect(redirectUrl.toString(), 302);
 });
 

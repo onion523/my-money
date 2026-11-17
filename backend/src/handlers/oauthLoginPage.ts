@@ -188,8 +188,10 @@ button:disabled { opacity: 0.7; cursor: wait; }
 }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .alt-btn {
-  display: block;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 13px;
   border-radius: 12px;
   border: 1.5px solid var(--border);
@@ -199,7 +201,8 @@ button:disabled { opacity: 0.7; cursor: wait; }
   font-weight: 700;
   text-decoration: none;
 }
-.alt-btn:hover { border-color: var(--primary); }
+.alt-btn:hover { border-color: var(--primary); background: var(--input-bg); }
+.alt-btn svg { width: 1.4em; height: 1.4em; flex: none; }
 `;
 
 /** iOS 在 `GET /oauth/authorize` 帶來的外觀參數(#215)。 */
@@ -216,6 +219,19 @@ const BIOMETRY_LABELS: Record<Biometry, string> = {
   faceid: 'Face ID',
   touchid: 'Touch ID',
   opticid: 'Optic ID',
+};
+
+// 設計稿的圖示;Optic ID 沿用 Face ID。CSP 沒開 img-src,只能 inline SVG。
+// 圖示跟 web 前端同一套:lucide-static 0.460.0(ISC)的 scan-face、fingerprint、scan-eye,inline 是因為 CSP 沒有 img-src。
+const SVG_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+const SCAN_FRAME = '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>';
+const FACE_ID_ICON = `${SVG_OPEN}${SCAN_FRAME}<path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>`;
+const TOUCH_ID_ICON = `${SVG_OPEN}<path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></svg>`;
+const OPTIC_ID_ICON = `${SVG_OPEN}${SCAN_FRAME}<circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/></svg>`;
+const BIOMETRY_ICONS: Record<Biometry, string> = {
+  faceid: FACE_ID_ICON,
+  touchid: TOUCH_ID_ICON,
+  opticid: OPTIC_ID_ICON,
 };
 
 const MIN_FONT_SCALE = 1;
@@ -264,8 +280,6 @@ export function renderOAuthLoginPage(opts: {
   switchUrlBase?: string;
   scriptNonce?: string;
   display?: LoginDisplay;
-  /** 按「用 Face ID 登入」導回 App 的網址(帶 `error=passkey_requested`)。 */
-  passkeyRedirectUrl?: string;
 }): string {
   const display = opts.display ?? { fontScale: MIN_FONT_SCALE };
   const mode: OAuthLoginMode = opts.mode ?? 'login';
@@ -319,11 +333,11 @@ export function renderOAuthLoginPage(opts: {
     .map(([k, v]) => `<input type="hidden" name="${k}" value="${escapeHtml(v)}">`)
     .join('');
 
-  // 方案 A:登入鈕下方隔一條「或」,再放描邊的生物辨識按鈕。只導回 App,由 App 走系統的通行金鑰。
-  const passkeyHtml =
-    mode === 'login' && display.biometry && opts.passkeyRedirectUrl
+  // 登入鈕下方隔一條「或」,再放描邊的生物辨識送出鈕：一樣驗帳密，成功導回時多帶 biometric=1,由 App 綁定生物辨識(#354)。
+  const biometricHtml =
+    mode === 'login' && display.biometry
       ? `<div class="or">或</div>
-    <a class="alt-btn" href="${escapeHtml(opts.passkeyRedirectUrl)}">用 ${BIOMETRY_LABELS[display.biometry]} 登入</a>`
+      <button type="submit" name="biometric" value="1" class="alt-btn">${BIOMETRY_ICONS[display.biometry]}用 ${BIOMETRY_LABELS[display.biometry]} 登入</button>`
       : '';
 
   return `<!doctype html>
@@ -357,9 +371,9 @@ html { font-size: ${Math.round(display.fontScale * 100)}%; }</style>
       ${otpField}
       ${passwordField}
       <button type="submit">${btnText.idle}</button>
+      ${biometricHtml}
     </form>
     ${auxLinksHtml}
-    ${passkeyHtml}
     <p class="hint">安全驗證由 My Money 授權伺服器提供</p>
   </main>${
     opts.scriptNonce
@@ -368,12 +382,16 @@ html { font-size: ${Math.round(display.fontScale * 100)}%; }</style>
     (function(){
       var f = document.querySelector('form');
       if (!f) return;
+      var sent = false;
       f.addEventListener('submit', function(e){
-        var b = f.querySelector('button[type="submit"]');
-        if (!b) return;
-        if (b.disabled) { e.preventDefault(); return; }
-        b.disabled = true;
-        b.textContent = '${btnText.busy}';
+        if (sent) { e.preventDefault(); return; }
+        sent = true;
+        var b = e.submitter;
+        if (b && !b.name) b.textContent = '${btnText.busy}';
+        // 延後才停用：同步停用會讓按下的鈕不進表單資料,biometric=1 就送不出去。
+        setTimeout(function(){
+          f.querySelectorAll('button').forEach(function(x){ x.disabled = true; });
+        });
       });
     })();
   </script>`

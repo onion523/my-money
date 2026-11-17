@@ -32,15 +32,12 @@ describe('OAuth 登入頁：生物辨識入口與字級 (#215)', () => {
     return html.replace(/&amp;/g, '&');
   }
 
-  it('帶 biometry=faceid:登入鈕下方有「用 Face ID 登入」,導回 App 並帶 passkey_requested 與原本的 state', async () => {
-    const html = decode(await openLogin('&biometry=faceid'));
-    expect(html).toContain('用 Face ID 登入');
-    const href = html.match(/href="(com\.raychiu\.mymoney:\/oauth\/callback\?[^"]+)"/)?.[1];
-    expect(href).toBeTruthy();
-    const params = new URL(href!).searchParams;
-    expect(params.get('error')).toBe('passkey_requested');
-    expect(params.get('state')).toBe('st-215');
-    expect(html.indexOf('用 Face ID 登入')).toBeGreaterThan(html.indexOf('type="submit"'));
+  it('帶 biometry=faceid:登入鈕下方有「用 Face ID 登入」,是帳密表單的第二個送出鈕(#354)', async () => {
+    const html = await openLogin('&biometry=faceid');
+    const form = html.match(/<form[\s\S]*?<\/form>/)?.[0] ?? '';
+    expect(form).toMatch(/<button type="submit" name="biometric" value="1" class="alt-btn">[\s\S]*用 Face ID 登入<\/button>/);
+    expect(form.indexOf('用 Face ID 登入')).toBeGreaterThan(form.indexOf('type="submit"'));
+    expect(html).not.toContain('passkey_requested');
   });
 
   it('按鈕名稱跟著 biometry', async () => {
@@ -48,14 +45,34 @@ describe('OAuth 登入頁：生物辨識入口與字級 (#215)', () => {
     expect(await openLogin('&biometry=opticid')).toContain('用 Optic ID 登入');
   });
 
+  it('按鈕文字前有各自的圖示(跟 web 同一套 lucide):Face ID 掃臉、Touch ID 指紋、Optic ID 掃眼，圖示 aria-hidden', async () => {
+    // lucide-static 0.460.0 的 scan-face、fingerprint、scan-eye 各取一段獨有的 path
+    const ICONS: Record<string, string> = {
+      faceid: 'M8 14s1.5 2 4 2 4-2 4-2',
+      touchid: 'M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4',
+      opticid: 'M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0',
+    };
+    const LABELS: Record<string, string> = { faceid: 'Face ID', touchid: 'Touch ID', opticid: 'Optic ID' };
+    for (const biometry of Object.keys(ICONS)) {
+      const html = await openLogin(`&biometry=${biometry}`);
+      const button = html.match(/<button [^>]*class="alt-btn"[^>]*>([\s\S]*?)<\/button>/)?.[1] ?? '';
+      expect(button).toMatch(/^<svg [^>]*aria-hidden="true"/);
+      expect(button).toContain(ICONS[biometry]);
+      for (const other of Object.keys(ICONS).filter((b) => b !== biometry)) {
+        expect(button).not.toContain(ICONS[other]);
+      }
+      expect(button.indexOf('</svg>')).toBeLessThan(button.indexOf(`用 ${LABELS[biometry]} 登入`));
+    }
+  });
+
   it('沒帶、none 或不認得的 biometry:不顯示按鈕', async () => {
     for (const extra of ['', '&biometry=none', '&biometry=%3Cscript%3E', '&biometry=toString', '&biometry=constructor']) {
-      expect(await openLogin(extra)).not.toContain('passkey_requested');
+      expect(await openLogin(extra)).not.toContain('alt-btn"');
     }
   });
 
   it('註冊頁不顯示生物辨識按鈕', async () => {
-    expect(await openLogin('&biometry=faceid&mode=register')).not.toContain('passkey_requested');
+    expect(await openLogin('&biometry=faceid&mode=register')).not.toContain('alt-btn"');
   });
 
   it('font_scale 放大整頁字級，範圍夾在 1～3.1,不合法當 1', async () => {
@@ -93,6 +110,56 @@ describe('OAuth 登入頁：生物辨識入口與字級 (#215)', () => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     });
+    expect(res.status).toBe(401);
+    const again = await res.text();
+    expect(again).toContain('用 Face ID 登入');
+    expect(again).toContain('html { font-size: 200%; }');
+  });
+
+  // 照瀏覽器送出表單的方式：帶上表單裡所有隱藏欄位，再加上按下的送出鈕。
+  async function submitLogin(extra: string, fields: Record<string, string>) {
+    const html = await openLogin(extra);
+    const body = new URLSearchParams(fields);
+    for (const m of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)) body.set(m[1], m[2]);
+    return rawFetch('/oauth/authorize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+  }
+
+  async function registerUser(email: string) {
+    await h.request('/auth/register', { method: 'POST', body: { email, password: 'password354', name: 'U354' } });
+  }
+
+  it('按生物辨識鈕、帳密正確：導回 redirect_uri 帶 code、state 與 biometric=1(#354)', async () => {
+    await registerUser('bio-354@x.com');
+    const res = await submitLogin('&biometry=faceid', { email: 'bio-354@x.com', password: 'password354', biometric: '1' });
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get('location')!);
+    expect(`${location.protocol}${location.pathname}`).toBe(IOS_REDIRECT);
+    expect(location.searchParams.get('code')).toBeTruthy();
+    expect(location.searchParams.get('state')).toBe('st-215');
+    expect(location.searchParams.get('biometric')).toBe('1');
+  });
+
+  it('按「登入」:導回不帶 biometric(#354)', async () => {
+    await registerUser('plain-354@x.com');
+    const res = await submitLogin('&biometry=faceid', { email: 'plain-354@x.com', password: 'password354' });
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get('location')!);
+    expect(location.searchParams.get('code')).toBeTruthy();
+    expect(location.searchParams.has('biometric')).toBe(false);
+  });
+
+  it('註冊送出時夾帶 biometric=1 也不帶回(只有登入模式有效)', async () => {
+    const res = await submitLogin('&biometry=faceid&mode=register', { email: 'reg-354@x.com', password: 'password354', name: 'R354', biometric: '1' });
+    expect(res.status).toBe(302);
+    expect(new URL(res.headers.get('location')!).searchParams.has('biometric')).toBe(false);
+  });
+
+  it('按生物辨識鈕、帳密錯誤:401 重新顯示，按鈕與字級還在(#354)', async () => {
+    const res = await submitLogin('&biometry=faceid&font_scale=2', { email: 'nobody-354@x.com', password: 'wrong', biometric: '1' });
     expect(res.status).toBe(401);
     const again = await res.text();
     expect(again).toContain('用 Face ID 登入');

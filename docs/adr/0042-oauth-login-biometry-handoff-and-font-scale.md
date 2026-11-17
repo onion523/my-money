@@ -1,7 +1,7 @@
 # ADR 0042: OAuth 登入頁原生通行金鑰切換（`passkey_requested`）與 iOS 字級縮放契約
 
 ## 狀態 (Status)
-已接受 (Accepted) — 2026-11-15（對應 Issue #215、PR #216，延伸 ADR 0038 與 ADR 0040）
+已接受 (Accepted) — 2026-11-15（對應 Issue #215、PR #216，延伸 ADR 0038 與 ADR 0040）；決策 2（`error=passkey_requested` 導回）已被 [ADR 0043](0043-oauth-login-biometric-submit.md) 取代
 
 ## 背景與問題 (Context & Problem)
 iOS Client 切換至 OAuth 2.1（ADR 0038）後，登入流程透過系統登入視窗開啟授權伺服器的 `GET /oauth/authorize` 頁面。該頁面原本存在兩個問題：
