@@ -544,11 +544,17 @@ transactions.put('/:id', async (c) => {
 
   await c.env.DB.batch([...accountStmts, updateTxStmt]);
 
-  // 若舊帳戶或新帳戶為信用卡，自動執行狀態自癒與未出帳金額重算
+  // 若舊帳戶或新帳戶為信用卡，自動執行狀態自癒、已出帳與未出帳金額重算 (ADR-0045)
   if (oldAcc && oldAcc.type === 'credit_card' && existing.account_id !== account_id) {
+    if (Number(existing.is_billed) === 1) {
+      await recalculateCardBalances(c.env.DB, existing.account_id as string);
+    }
     await reconcileCreditCardUnbilled(c.env.DB, existing.account_id as string);
   }
   if (newAcc.type === 'credit_card') {
+    if (Number(existing.is_billed) === 1 || nextIsBilled === 1) {
+      await recalculateCardBalances(c.env.DB, account_id);
+    }
     await reconcileCreditCardUnbilled(c.env.DB, account_id);
   }
 
@@ -661,6 +667,9 @@ transactions.delete('/:id', async (c) => {
 
   if (acc && acc.type === 'credit_card') {
     await deleteTxStmt.run();
+    if (Number(existing.is_billed) === 1) {
+      await recalculateCardBalances(c.env.DB, existing.account_id as string);
+    }
     await reconcileCreditCardUnbilled(c.env.DB, existing.account_id as string);
   } else {
     const revertStmts = await getSyncAccountStatements(c.env.DB, existing.account_id as string, existing.type as string, Number(existing.amount), true);

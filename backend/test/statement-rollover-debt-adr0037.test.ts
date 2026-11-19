@@ -423,4 +423,166 @@ describe('ADR 0037: statement rollover debt breakdown isolation & status truth',
     expect(recRes.json.data.balance).toBe(500);
     expect(recRes.json.data.unbilled).toBe(1000);
   });
+
+  it('ADR 0045: does not deduct $20 personal debt from current rollover when a prior settled statement had a deleted $20 billed tx or $20 repayment surplus, and synchronizes balance on edit/delete of billed txs', async () => {
+    // 1. 建立信用卡 (結帳日 15 號，繳款日 5 號)
+    vi.setSystemTime(new Date('2026-10-01T04:00:00Z'));
+    const cardId = await createCard(15, 5);
+
+    // 2. 前期帳單 (2026-09-16 ~ 2026-10-15)：消費 $500 + $20 = $520
+    const tx500Res = await h.request('/transactions', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        account_id: cardId,
+        type: 'expense',
+        category: '餐飲',
+        amount: 500,
+        note: '前期消費500',
+        date: '2026-10-05',
+        is_shared: 0,
+      },
+    });
+    expect(tx500Res.status).toBe(201);
+    const tx20Res = await h.request('/transactions', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        account_id: cardId,
+        type: 'expense',
+        category: '餐飲',
+        amount: 20,
+        note: '前期消費20',
+        date: '2026-10-06',
+        is_shared: 0,
+      },
+    });
+    expect(tx20Res.status).toBe(201);
+    const tx20Id = tx20Res.json.data.id as string;
+
+    // 2026-10-16 前期出帳 -> balance = 520
+    vi.setSystemTime(new Date('2026-10-16T04:00:00Z'));
+    const rollPrior = await h.request(`/accounts/${cardId}/rollover-statement`, {
+      method: 'POST',
+      user: USER1,
+      body: { deferredTxIds: [] },
+    });
+    expect(rollPrior.status).toBe(200);
+    expect(rollPrior.json.data.balance).toBe(520);
+
+    // 2026-10-25 繳清前期帳單 $520 -> balance = 0
+    vi.setSystemTime(new Date('2026-10-25T04:00:00Z'));
+    const payPrior = await h.request('/accounts/pay-credit-card', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        bank_account_id: 'a_bank1',
+        credit_card_id: cardId,
+        amount: 520,
+        date: '2026-10-25',
+        note: '繳清前期520',
+        is_shared: 0,
+      },
+    });
+    expect(payPrior.status).toBe(200);
+    expect(payPrior.json.data.card_balance).toBe(0);
+
+    // 使用者事後刪除了前期那筆 $20 的已出帳消費（導致歷史已出帳消費總和 500 < 歷史還款 520，產生 -20 差額）
+    const delPrior20 = await h.request(`/transactions/${tx20Id}`, {
+      method: 'DELETE',
+      user: USER1,
+    });
+    expect(delPrior20.status).toBe(200);
+
+    // 3. 本期帳單 (2026-10-16 ~ 2026-11-15)：公帳 $600 + 私帳 $400 = $1000
+    vi.setSystemTime(new Date('2026-11-10T04:00:00Z'));
+    await createCardExpense(cardId, 600, '2026-11-02', 1, '本期公帳600', 0);
+    const curPersonalRes = await h.request('/transactions', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        account_id: cardId,
+        type: 'expense',
+        category: '購物',
+        amount: 400,
+        note: '本期私帳400',
+        date: '2026-11-05',
+        is_shared: 0,
+      },
+    });
+    expect(curPersonalRes.status).toBe(201);
+    const curPersonalId = curPersonalRes.json.data.id as string;
+
+    // 4. 2026-11-19 開啟出帳預覽：確認出帳金額為 $1000（公 $600 · 私 $400），projectedBalance 亦為 $1000
+    vi.setSystemTime(new Date('2026-11-19T04:00:00Z'));
+    const preview = await h.request(`/accounts/${cardId}/rollover-preview`, { user: USER1 });
+    expect(preview.status).toBe(200);
+    expect(preview.json.data.netRolledAmount).toBe(1000);
+    expect(preview.json.data.sharedDebt).toBe(600);
+    expect(preview.json.data.personalDebt).toBe(400);
+    expect(preview.json.data.projectedBalance).toBe(1000);
+
+    // 5. 點擊「確認出帳」送出後：balance 必須為 $1000（絕不可少 20 元變成 $980），且私帳必須為 $400（絕不可少 20 元變成 $380）
+    const rollCurr = await h.request(`/accounts/${cardId}/rollover-statement`, {
+      method: 'POST',
+      user: USER1,
+      body: { deferredTxIds: [] },
+    });
+    expect(rollCurr.status).toBe(200);
+    expect(rollCurr.json.data.balance).toBe(1000);
+
+    let accsRes = await h.request('/accounts?scope=all', { user: USER1 });
+    let cardAfter = accsRes.json.data.find((a: any) => a.id === cardId);
+    expect(cardAfter.balance).toBe(1000);
+    expect(cardAfter.billed_shared_debt).toBe(600);
+    expect(cardAfter.billed_personal_debt).toBe(400);
+
+    // 6. 模擬資料庫先前已因舊版邏輯寫入錯誤的 balance = 980，點擊「校準」應自動自癒補回 $1000（公 $600 · 私 $400）
+    await h.db.prepare('UPDATE accounts SET balance = 980 WHERE id = ?').bind(cardId).run();
+    const recRes = await h.request(`/accounts/${cardId}/reconcile`, {
+      method: 'POST',
+      user: USER1,
+    });
+    expect(recRes.status).toBe(200);
+    expect(recRes.json.data.balance).toBe(1000);
+
+    accsRes = await h.request('/accounts?scope=all', { user: USER1 });
+    cardAfter = accsRes.json.data.find((a: any) => a.id === cardId);
+    expect(cardAfter.balance).toBe(1000);
+    expect(cardAfter.billed_shared_debt).toBe(600);
+    expect(cardAfter.billed_personal_debt).toBe(400);
+
+    // 7. 編輯已出帳（is_billed = 1）之本期私帳消費 $400 -> $450，balance 應即時同步為 $1050（公 $600 · 私 $450）
+    const editBilledRes = await h.request(`/transactions/${curPersonalId}`, {
+      method: 'PUT',
+      user: USER1,
+      body: {
+        account_id: cardId,
+        type: 'expense',
+        category: '購物',
+        amount: 450,
+        note: '本期私帳450',
+        date: '2026-11-05',
+        is_shared: 0,
+      },
+    });
+    expect(editBilledRes.status).toBe(200);
+    accsRes = await h.request('/accounts?scope=all', { user: USER1 });
+    cardAfter = accsRes.json.data.find((a: any) => a.id === cardId);
+    expect(cardAfter.balance).toBe(1050);
+    expect(cardAfter.billed_shared_debt).toBe(600);
+    expect(cardAfter.billed_personal_debt).toBe(450);
+
+    // 8. 刪除該筆已出帳私帳消費 $450，balance 應即時同步為 $600（公 $600 · 私 $0）
+    const delBilledRes = await h.request(`/transactions/${curPersonalId}`, {
+      method: 'DELETE',
+      user: USER1,
+    });
+    expect(delBilledRes.status).toBe(200);
+    accsRes = await h.request('/accounts?scope=all', { user: USER1 });
+    cardAfter = accsRes.json.data.find((a: any) => a.id === cardId);
+    expect(cardAfter.balance).toBe(600);
+    expect(cardAfter.billed_shared_debt).toBe(600);
+    expect(cardAfter.billed_personal_debt).toBe(0);
+  });
 });

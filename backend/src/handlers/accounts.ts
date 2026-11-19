@@ -414,45 +414,91 @@ accounts.post('/pay-credit-card', async (c) => {
 export { getStatementCycleDates, determineEnrichedTransactionStates, calculateRolloverDebtBreakdown };
 
 export async function recalculateCardBalances(db: D1Database, cardId: string): Promise<{ balance: number; unbilled: number }> {
-  const [billedExpRes, billedRefRes, repayRes, unbilledExpRes, unbilledRefRes] = await db.batch([
-    // 1. 歷史所有已出帳消費 (is_billed = 1, type = expense, 不含系統類別)
-    db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total FROM transactions
-      WHERE account_id = ? AND type = 'expense' AND is_billed = 1
-        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-    `).bind(cardId),
-    // 2. 歷史所有已出帳刷退 (is_billed = 1, type = income, 不含系統類別)
-    db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total FROM transactions
-      WHERE account_id = ? AND type = 'income' AND is_billed = 1
-        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-    `).bind(cardId),
-    // 3. 歷史所有償還已出帳之還款 (amount - unbilled_offset)
-    db.prepare(`
-      SELECT COALESCE(SUM(amount - COALESCE(unbilled_offset, 0)), 0) as total FROM transactions
-      WHERE account_id = ? AND type = 'income' AND category = '信用卡還款'
-    `).bind(cardId),
-    // 4. 當前所有未出帳消費 (is_billed = 0 或 defer_to_next_statement = 1, type = expense)
-    db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total FROM transactions
-      WHERE account_id = ? AND type = 'expense' AND (is_billed = 0 OR defer_to_next_statement = 1)
-        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-    `).bind(cardId),
-    // 5. 當前所有未出帳刷退 (is_billed = 0 或 defer_to_next_statement = 1, type = income)
-    db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total FROM transactions
-      WHERE account_id = ? AND type = 'income' AND (is_billed = 0 OR defer_to_next_statement = 1)
-        AND category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
-    `).bind(cardId),
-  ]);
+  const aggRow = await db.prepare(`
+    WITH m AS (
+      SELECT MAX(
+        CASE
+          WHEN is_billed = 1
+            AND defer_to_next_statement = 0
+            AND billed_statement_date IS NOT NULL
+            AND TRIM(billed_statement_date) <> ''
+          THEN TRIM(billed_statement_date)
+          ELSE NULL
+        END
+      ) AS latest_stmt
+      FROM transactions
+      WHERE account_id = ?
+    )
+    SELECT
+      m.latest_stmt AS latest_stmt,
+      COALESCE(SUM(CASE
+        WHEN x.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+          AND x.is_billed = 1 AND x.defer_to_next_statement = 0 AND x.type = 'expense'
+        THEN x.amount END), 0) AS billed_exp,
+      COALESCE(SUM(CASE
+        WHEN x.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+          AND x.is_billed = 1 AND x.defer_to_next_statement = 0 AND x.type = 'income'
+        THEN x.amount END), 0) AS billed_ref,
+      COALESCE(SUM(CASE
+        WHEN x.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+          AND x.is_billed = 1 AND x.defer_to_next_statement = 0
+          AND m.latest_stmt IS NOT NULL AND TRIM(COALESCE(x.billed_statement_date, '')) = m.latest_stmt
+          AND x.type = 'expense'
+        THEN x.amount END), 0) AS stmt_exp,
+      COALESCE(SUM(CASE
+        WHEN x.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+          AND x.is_billed = 1 AND x.defer_to_next_statement = 0
+          AND m.latest_stmt IS NOT NULL AND TRIM(COALESCE(x.billed_statement_date, '')) = m.latest_stmt
+          AND x.type = 'income'
+        THEN x.amount END), 0) AS stmt_ref,
+      COALESCE(SUM(CASE
+        WHEN x.category = '信用卡還款' AND x.type = 'income' AND x.is_billed = 1
+        THEN MAX(0, x.amount - MIN(x.amount, COALESCE(x.unbilled_offset, 0))) END), 0) AS sealed_repay,
+      COALESCE(SUM(CASE
+        WHEN x.category = '信用卡還款' AND x.type = 'income' AND x.is_billed = 0
+        THEN MAX(0, x.amount - MIN(x.amount, COALESCE(x.unbilled_offset, 0))) END), 0) AS active_repay,
+      COALESCE(SUM(CASE
+        WHEN x.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+          AND (x.is_billed = 0 OR x.defer_to_next_statement = 1) AND x.type = 'expense'
+        THEN x.amount END), 0) AS unbilled_exp,
+      COALESCE(SUM(CASE
+        WHEN x.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')
+          AND (x.is_billed = 0 OR x.defer_to_next_statement = 1) AND x.type = 'income'
+        THEN x.amount END), 0) AS unbilled_ref
+    FROM m
+    LEFT JOIN transactions x ON x.account_id = ?
+  `).bind(cardId, cardId).first<{
+    latest_stmt: string | null;
+    billed_exp: number;
+    billed_ref: number;
+    stmt_exp: number;
+    stmt_ref: number;
+    sealed_repay: number;
+    active_repay: number;
+    unbilled_exp: number;
+    unbilled_ref: number;
+  }>();
 
-  const billedExp = Number((billedExpRes.results?.[0] as any)?.total || 0);
-  const billedRef = Number((billedRefRes.results?.[0] as any)?.total || 0);
-  const billedRepay = Number((repayRes.results?.[0] as any)?.total || 0);
-  const unbilledExp = Number((unbilledExpRes.results?.[0] as any)?.total || 0);
-  const unbilledRef = Number((unbilledRefRes.results?.[0] as any)?.total || 0);
+  const billedExp = Number(aggRow?.billed_exp || 0);
+  const billedRef = Number(aggRow?.billed_ref || 0);
+  const stmtExp = Number(aggRow?.stmt_exp || 0);
+  const stmtRef = Number(aggRow?.stmt_ref || 0);
+  const sealedRepay = Number(aggRow?.sealed_repay || 0);
+  const activeRepay = Number(aggRow?.active_repay || 0);
+  const unbilledExp = Number(aggRow?.unbilled_exp || 0);
+  const unbilledRef = Number(aggRow?.unbilled_ref || 0);
 
-  const newBalance = Math.max(0, billedExp - billedRef - billedRepay);
+  let newBalance = 0;
+  if (aggRow?.latest_stmt) {
+    // ADR-0045：前期已結清帳單之歷史差額（例如曾刪除/修改前期已出帳消費或歷史溢繳差額）以 Math.max(0, ...) 夾零封存，
+    // 嚴禁跨期偷扣或折抵當期新出帳之 balance 與私帳待繳款。
+    const priorNetBilled = (billedExp - stmtExp) - (billedRef - stmtRef);
+    const priorUnpaid = Math.max(0, priorNetBilled - sealedRepay);
+    const stmtNetBilled = Math.max(0, stmtExp - stmtRef);
+    newBalance = Math.max(0, priorUnpaid + stmtNetBilled - activeRepay);
+  } else {
+    newBalance = Math.max(0, billedExp - billedRef - (sealedRepay + activeRepay));
+  }
   const newUnbilled = Math.max(0, unbilledExp - unbilledRef);
 
   await db.prepare('UPDATE accounts SET balance = ?, unbilled = ? WHERE id = ?')
@@ -603,7 +649,10 @@ accounts.get('/:id/rollover-preview', async (c) => {
         )
     `).bind(id, startDate, endDate, prevStatementDate, statementDate),
     c.env.DB.prepare(`
-      SELECT COALESCE(SUM(amount - COALESCE(unbilled_offset, 0)), 0) as total_repay
+      SELECT
+        COALESCE(SUM(amount - COALESCE(unbilled_offset, 0)), 0) as total_repay,
+        COALESCE(SUM(CASE WHEN is_billed = 1 THEN amount - COALESCE(unbilled_offset, 0) ELSE 0 END), 0) as sealed_repay,
+        COALESCE(SUM(CASE WHEN is_billed = 0 THEN amount - COALESCE(unbilled_offset, 0) ELSE 0 END), 0) as active_repay
       FROM transactions
       WHERE account_id = ? AND type = 'income' AND category = '信用卡還款'
     `).bind(id),
@@ -624,11 +673,15 @@ accounts.get('/:id/rollover-preview', async (c) => {
 
   let baseNetBilled = Number((baseBilledRes.results?.[0] as any)?.net_billed || 0);
   const totalRepay = Number((repayRes.results?.[0] as any)?.total_repay || 0);
+  const sealedRepay = Number((repayRes.results?.[0] as any)?.sealed_repay || 0);
+  const activeRepay = Number((repayRes.results?.[0] as any)?.active_repay || 0);
   const baseNetUnbilled = Number((baseUnbilledRes.results?.[0] as any)?.net_unbilled || 0);
   const baseUnbilledCount = Number((baseUnbilledRes.results?.[0] as any)?.unbilled_count || 0);
 
   // 若存在尚未標記 billed_statement_date 的前期未結清差額（如稍早測試出帳時已轉為 is_billed = 1 之上期延入款），自動匹配歸入本期上期延入
-  const unpaidPriorCarryover = Math.round(baseNetBilled - totalRepay);
+  const alreadyRolledThisStatement = rawTxs.some(t => t.billed_statement_date === statementDate);
+  const priorEffectiveRepay = alreadyRolledThisStatement ? sealedRepay : totalRepay;
+  const unpaidPriorCarryover = Math.round(baseNetBilled - priorEffectiveRepay);
   if (unpaidPriorCarryover > 0) {
     const priorCandidatesRes = await c.env.DB.prepare(`
       SELECT id, amount, is_shared, type, category, note, date, defer_to_next_statement, is_billed, reimbursement_id, billed_statement_date
@@ -682,7 +735,10 @@ accounts.get('/:id/rollover-preview', async (c) => {
   const deferredTxs = enrichedTxs.filter(t => t.is_initially_deferred);
   const deferredNet = deferredTxs.reduce((s, t) => s + (t.type === 'expense' ? Number(t.amount || 0) : -Number(t.amount || 0)), 0);
 
-  const projectedBalance = Math.max(0, baseNetBilled + netRolledAmount - totalRepay);
+  // ADR-0045：前期已結清帳單之負差額以 Math.max(0, ...) 夾零封存，不跨期偷扣本期新出帳之 projectedBalance
+  const priorUnpaidForPreview = Math.max(0, baseNetBilled - priorEffectiveRepay);
+  const inCycleActiveRepay = alreadyRolledThisStatement ? activeRepay : 0;
+  const projectedBalance = Math.max(0, priorUnpaidForPreview + netRolledAmount - inCycleActiveRepay);
   const projectedUnbilled = Math.max(0, baseNetUnbilled + deferredNet);
 
   const priorDeferredCount = enrichedTxs.filter(t => t.is_prior_deferred).length;
@@ -794,13 +850,18 @@ accounts.post('/:id/rollover-statement', async (c) => {
         )
     `).bind(id, startDate, endDate, prevStatementDate, statementDate),
     c.env.DB.prepare(`
-      SELECT COALESCE(SUM(amount - COALESCE(unbilled_offset, 0)), 0) as total_repay
+      SELECT
+        COALESCE(SUM(amount - COALESCE(unbilled_offset, 0)), 0) as total_repay,
+        COALESCE(SUM(CASE WHEN is_billed = 1 THEN amount - COALESCE(unbilled_offset, 0) ELSE 0 END), 0) as sealed_repay
       FROM transactions
       WHERE account_id = ? AND type = 'income' AND category = '信用卡還款'
     `).bind(id),
   ]);
+  const priorEffectiveRepay = alreadyRolledThisStatement
+    ? Number((repayRes.results?.[0] as any)?.sealed_repay || 0)
+    : Number((repayRes.results?.[0] as any)?.total_repay || 0);
   const unpaidPriorCarryover = Math.round(
-    Number((baseBilledRes.results?.[0] as any)?.net_billed || 0) - Number((repayRes.results?.[0] as any)?.total_repay || 0)
+    Number((baseBilledRes.results?.[0] as any)?.net_billed || 0) - priorEffectiveRepay
   );
   if (unpaidPriorCarryover > 0) {
     const priorCandidatesRes = await c.env.DB.prepare(`
@@ -1284,14 +1345,14 @@ accounts.post('/:id/reconcile', async (c) => {
     return c.json({ success: false, error: '權限不足：個人信用卡校準僅限持卡人本人操作' }, 403);
   }
 
-  // 手動校準時，將早於本期起始日且未勾選延至下期之歷史未結明細轉為已出帳（移出未出帳）(ADR-0043)
+  // 手動校準時，將早於本期起始日且未勾選延至下期之歷史未結明細轉為已出帳（移出未出帳）(ADR-0043)，並同步重算已出帳與未出帳餘額 (ADR-0045)
   if (card.statement_day && card.statement_day >= 1 && card.statement_day <= 31) {
     const { prevStatementDate } = getStatementCycleDates(card.statement_day, card.last_rollover_at);
     if (prevStatementDate) {
       await prepareSettlePriorNonDeferredStatement(c.env.DB, id, prevStatementDate).run();
-      await recalculateCardBalances(c.env.DB, id);
     }
   }
+  await recalculateCardBalances(c.env.DB, id);
 
   const reconciled = await reconcileCreditCardUnbilled(c.env.DB, id);
   if (!reconciled) {
