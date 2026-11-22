@@ -166,10 +166,18 @@ _Avoid_: 讀取帳戶列表或餘額時夾帶資料庫寫入與逐卡 N+1 迴圈
 _Avoid_: 混淆已出帳與未出帳導致公帳盲目全額溢繳 (mixing billed and unbilled causing premature joint fund payment)、他人私卡揭露個人私帳金額 (leaking personal debt details of other members' cards)、全歷史還款差額跨期污染新帳單公私拆解 (lifetime repayment deficit polluting current cycle shared/personal breakdown)、讀取端自行用日期切點推算未出帳導致與 `is_billed` 脫節 (divergent cutoff-date heuristic vs `is_billed` truth)
 
 **Credit Card Default Payment Account & Bank Auto-Debit Liability Projection (信用卡預設扣款帳戶與銀行待扣款負債預覽)**:
-在信用卡帳戶（`type = 'credit_card'`）上支援綁定「預設扣款銀行帳戶（`payment_account_id`）」，串聯信用卡繳費預設帶入與銀行存款卡片之待扣款負債預警：
-1. **信用卡預設扣款帳戶設定**：
+在信用卡帳戶（`type = 'credit_card'`）上支援綁定「預設扣款銀行帳戶（`payment_account_id`）」，串聯信用卡繳費預設帶入、信用卡端之扣款銀行餘額／充足度即時檢視，以及銀行存款卡片之待扣款負債預警：
+1. **信用卡預設扣款帳戶設定與卡片雙向顯示**：
    - 於新增或編輯信用卡彈窗中，提供「預設扣款銀行帳戶（選填）」下拉選單（可選擇銀行存款帳戶 `type = 'bank'` 或「不綁定」）。
-   - 於信用卡卡片之帳單週期資訊列同步顯示所綁定之扣款銀行名稱（例如 `扣款帳戶：台新活存`）。
+   - **已綁定扣款帳戶之獨立資訊列（含存款餘額與跨卡充足度狀態）**：
+     - 後端 `GET /accounts` 一併回傳綁定扣款銀行之名稱（`payment_account_name`）、即時存款餘額（`payment_account_balance`）、公私歸屬（`payment_account_is_joint`）以及該扣款銀行名下綁定之所有信用卡總數與合計已出帳待扣總額（`payment_account_bound_count`、`payment_account_bound_billed_total`），確保即使切換至「公帳」視角（私帳銀行不在當前視角帳戶清單中）或同一銀行綁定多張信用卡時，仍能呈現真實扣款水位。
+     - 於「帳戶管理 (`Accounts.tsx`)」之信用卡卡片帳單週期區下方，呈現獨立清晰之預設扣款帳戶資訊框：顯示扣款銀行名稱、目前存款餘額，以及存款充足度狀態徽章（以 `扣款銀行存款餘額 vs 該銀行綁定之所有信用卡已出帳待扣總額` 判定：當總已出帳待扣 `> 0` 且存款充足時顯示綠色「餘額充足」徽章；若存款不足扣繳已出帳總額則以醒目危險紅字 `var(--color-danger)` 警示「存款不足（差額 $X）」；若綁定超過 1 張卡則附註「共綁定 N 張卡」）。
+   - **未綁定扣款帳戶之明確狀態與快捷設定入口**：
+     - 當信用卡尚未綁定預設扣款銀行（且非他人脫敏私卡）時，不再完全隱藏該列，而是明確顯示「預設扣款帳戶：未設定」，並對有編輯權限之使用者提供「設定扣款帳戶」快捷按鈕（點擊直接開啟該信用卡之編輯彈窗）。
+   - **儀表板 (`Dashboard.tsx`) 信用卡摘要卡片同步精簡呈現**：
+     - 在總覽頁「帳戶一覽」之信用卡卡片中，同步顯示精簡版扣款帳戶資訊列（已綁定時顯示 `扣款：銀行名 · 餘額 $X` 與充足／不足狀態徽章；未綁定且非脫敏私卡時顯示灰色 `預設扣款帳戶：未設定`）。
+   - **公私帳隱私揭露邊界**：
+     - 若信用卡綁定之扣款銀行為「家庭共同基金銀行（`is_joint = 1`）」，全體家庭成員皆可見該扣款銀行名稱、餘額與扣繳充足狀態；若綁定的是「持卡人個人私帳銀行（`is_joint = 0`）」，則嚴格僅持卡人本人可見，其他家庭成員檢視該卡（無論為他人私卡或家庭共同卡）時，後端強制將 `payment_account_id`、`payment_account_name`、`payment_account_balance` 等欄位脫敏設為 `null`，絕不洩漏個人私帳銀行名稱與存款餘額。
 2. **結清還款彈窗預設帶入**：
    - 點擊信用卡之「繳家庭代墊」、「繳個人私帳」或「全額結清」開啟還款彈窗時，系統**一律優先自動帶入該信用卡所綁定之 `payment_account_id`**（只要該銀行帳戶在當前可用扣款銀行清單中）；僅當協助他人私卡繳納家庭代墊款（看不到對方私帳銀行）或未設定預設扣款帳戶時，才退回帶入家庭共同基金帳戶或請使用者選擇。
 3. **扣款銀行卡片待扣款金額與扣後餘額預覽**：
@@ -178,7 +186,7 @@ _Avoid_: 混淆已出帳與未出帳導致公帳盲目全額溢繳 (mixing bille
      - **含未出帳總待繳**：加總綁定信用卡之總負債（`billed + unbilled`）。
      - **扣款後預估餘額**：顯示 `存款餘額 － 已出帳待扣款`（及 `扣總待繳後預估餘額`），若存款餘額不足以支付已出帳待扣款（或總待繳）時，以醒目危險紅字（`var(--color-danger)`）警示餘額不足差額。
      - **綁定卡片明細**：列出綁定於此銀行帳戶之各張信用卡名稱與待繳金額。
-_Avoid_: 每次繳卡費都需手動重選固定扣款銀行 (forcing manual bank selection on every repayment when auto-debit bank is fixed)、銀行存款餘額看似充裕卻忽略即將自動扣繳之綁定卡費導致餘額不足違約 (ignoring bound credit card auto-debit liabilities on bank cards)
+_Avoid_: 每次繳卡費都需手動重選固定扣款銀行 (forcing manual bank selection on every repayment when auto-debit bank is fixed)、銀行存款餘額看似充裕卻忽略即將自動扣繳之綁定卡費導致餘額不足違約 (ignoring bound credit card auto-debit liabilities on bank cards)、未綁定扣款帳戶時完全隱藏欄位導致使用者不知可綁定 (hiding payment account info completely when unset)、信用卡端僅比對單卡已出帳卻忽略同銀行綁定多卡之合計待扣金額 (checking single-card billed debt against bank balance while ignoring other cards bound to the same bank)、向非持卡人洩漏綁定之個人私帳銀行名稱與存款餘額 (leaking personal payment bank name or balance to other household members)
 
 ---
 
@@ -310,6 +318,22 @@ _Avoid_: 家庭公帳 (household shared)、家庭公用 (共同基金/家庭卡)
 **Personal Scope (私帳)**:
 全站三態切換的第三個選項（value: `personal`，搭配 `Lock` 向量鎖頭圖示），嚴格僅呈現登入者本人名下之個人私密收支（`is_shared = 0`）、個人現金皮夾、活存銀行存款與個人信用卡（`is_joint = 0`），徹底隔離家庭公帳與他人帳務。
 _Avoid_: 個人私帳 (personal account verbose)、無圖示純文字私帳 (plain text without canonical SVG icon)
+
+**Account Category Filter Tabs (帳戶管理四態類別切換器)**:
+在「資產與帳戶管理 (`Accounts.tsx`)」頁面中，於四大核心資產統計卡片（現金錢包總額、銀行存款總額、信用卡總待繳、淨可用餘額）正下方、各類別帳戶清單正上方，配置四態帳戶類別切換頁籤：
+1. **四態選項與即時數量標示**：
+   - `全部類型 (N)`（value: `all`）
+   - `現金錢包 (N)`（value: `cash`，搭配 `Wallet` 向量圖示）
+   - `銀行存款帳戶 (N)`（value: `bank`，搭配 `Building` 向量圖示）
+   - `信用卡 (N)`（value: `credit_card`，搭配 `CreditCard` 向量圖示）
+   其中括號內數量 `N` 即時反映當前公私帳視角（全部 / 公帳 / 私帳）下各類別之實際帳戶筆數。
+2. **過濾範圍與統計卡片獨立性**：
+   - 切換帳戶類別頁籤時，**上方四大核心資產統計卡片始終固定顯示當前公私帳視角下的全類別完整總額與淨可用餘額**，不隨類別頁籤隱藏或變動；僅下方帳戶清單區塊依所選類別過濾顯示（選取「全部類型」時依序呈現現金錢包、銀行存款帳戶、信用卡三大專區；選取單一類別時僅呈現該類別專區）。
+   - 當使用者切換頂部「全部 / 公帳 / 私帳」公私帳視角時，維持當前所選之帳戶類別頁籤狀態不強制重置。
+   - 新增／編輯帳戶彈窗維持原有規則：僅「新增帳戶」時可選擇帳戶類型，「編輯帳戶」時鎖定帳戶類型不可變更。
+3. **行動端（`<= 640px`）2x2 等寬網格排版**：
+   - 在手機小螢幕下，四態帳戶類別切換器自動排列為 `2x2` 雙欄等寬網格（`grid-template-columns: repeat(2, minmax(0, 1fr))`），確保四個類別名稱與數量完整呈現且不產生橫向捲軸。
+_Avoid_: 切換帳戶類別時連動隱藏上方四大資產統計卡片導致失去全局淨可用餘額視野 (hiding top 4 summary stat cards when filtering by account category)、手機版四個長文字類別頁籤硬塞單列導致擠壓斷行或橫向捲軸 (cramming 4 category tabs with counts into a single overflowing row on mobile)、切換公私帳視角時強制重置使用者已選之帳戶類別篩選 (forcibly resetting selected account category tab on scope switch)
 
 **Modal Scope Toggle (記帳歸屬二態切換)**:
 在快速記帳、新增交易、信用卡還款、週期收支設定等表單彈窗（Modal）中，收支歸屬固定簡化正名為搭配 `Home` 圖示之「公帳」與搭配 `Lock` 圖示之「私帳」二元切換按鈕，移除多餘之「(公開)」、「(隱私)」等括號贅詞。
@@ -646,7 +670,7 @@ _Avoid_: 將全歷史信用卡交易撈入 Worker 記憶體逐筆累加 (loading
 _Avoid_: 分頁客戶端僅對已載入頁面局部加總導致總計與每日小計失真 (summing only loaded page rows on paginated clients)、新建收支時預填 `updated_at` (populating `updated_at` on creation)
 
 **Masked Card Payment Account Privacy, Household Ownership Succession & Forecast Card Deduction Transparency (私卡扣款帳戶遮蔽、家庭擁有者無縫繼承與預測預扣卡款透明化)**:
-1. **私卡預設扣款帳戶脫敏與寫入校驗（#156）**：`GET /accounts` 中他人私卡脫敏分支（`is_masked: true`）強制將 `payment_account_id` 與 `payment_account_name` 設為 `null`；`POST /accounts` 與 `PUT /accounts/:id` 僅允許 `type === 'credit_card'` 寫入 `payment_account_id`（非信用卡強制為 `null`），且綁定目標必須為當前使用者可見（本人擁有或 `is_joint = 1` 家庭共同帳戶）之 `bank` 類型帳戶。
+1. **私卡與私帳預設扣款帳戶脫敏與寫入校驗（#156）**：`GET /accounts` 中他人私卡脫敏分支（`is_masked: true`）或信用卡所綁定之扣款銀行為非當前登入者本人之個人私帳銀行（`payment_account_is_joint = 0 AND payment_account_user_id != userId`）時，強制將 `payment_account_id`、`payment_account_name`、`payment_account_balance`、`payment_account_is_joint`、`payment_account_bound_count`、`payment_account_bound_billed_total` 設為 `null`；若綁定之扣款銀行為家庭共同基金銀行（`is_joint = 1`），則對家庭全體成員公開該扣款銀行名稱、存款餘額與待扣充足狀態。`POST /accounts` 與 `PUT /accounts/:id` 僅允許 `type === 'credit_card'` 寫入 `payment_account_id`（非信用卡強制為 `null`），且綁定目標必須為當前使用者可見（本人擁有或 `is_joint = 1` 家庭共同帳戶）之 `bank` 類型帳戶。
 2. **家庭建立者刪帳／退群無縫繼承（#121）**：當使用者執行 `DELETE /auth/account` 或 `DELETE /households/leave` 且所屬家庭尚有其他成員時，系統自動將下一順位成員（優先其他 `admin`，其次最早加入之 `member`）升為 `admin` 並接手 `households.created_by`（及有效邀請碼之 `inviter_id`），防止 `ON DELETE CASCADE` 連帶毀滅整個家庭群組。
 3. **預測起始餘額預扣卡款欄位（#98）**：`GET /forecast` 回傳新增 `cardDeduction`（第 0 天預扣之信用卡待繳款），Web 端預測頁當 `cardDeduction > 0` 時於公式氣泡明確列出 `現金 + 存款 - 預扣卡款 = 起始餘額`。
 4. **跨端（Web / iOS）顯示詞彙對照備忘（#87）**：Web 端維持本文件標準術語（「銀行存款帳戶」、「現金錢包」、「收支明細」），iOS 端（`raychiutw/my-money.ios`）於部分介面呈現精簡詞彙（「活存帳戶」、「現金」、功能入口「記帳」），雙方共享完全一致之 API wire 欄位與系統分類名稱。

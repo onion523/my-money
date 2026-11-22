@@ -30,6 +30,8 @@ import {
   Home,
   Lock,
   User,
+  Landmark,
+  CheckCircle2,
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -455,8 +457,91 @@ export default function Dashboard() {
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
                             未出帳 {formatCurrency(acc.unbilled || 0)}
                             {acc.payment_due_day ? ` · 每月 ${acc.payment_due_day} 日繳款` : ''}
-                            {acc.payment_account_name ? ` · 扣款：${acc.payment_account_name}` : ''}
                           </div>
+                          {(() => {
+                            const isOtherCard = acc.is_joint === 0 && Boolean(user && acc.user_id !== user.id)
+                            const isMaskedCard = Boolean(acc.is_masked || isOtherCard)
+                            const localPayBank = acc.payment_account_id
+                              ? accounts.find(b => b.type === 'bank' && b.id === acc.payment_account_id)
+                              : undefined
+                            const payBankName = acc.payment_account_name || localPayBank?.name || null
+                            const payBankBalance =
+                              acc.payment_account_balance !== undefined && acc.payment_account_balance !== null
+                                ? Number(acc.payment_account_balance)
+                                : localPayBank
+                                  ? Number(localPayBank.balance)
+                                  : null
+                            const localBoundCards = acc.payment_account_id
+                              ? accounts.filter(c => c.type === 'credit_card' && c.payment_account_id === acc.payment_account_id)
+                              : []
+                            const boundBilledTotal =
+                              acc.payment_account_bound_billed_total !== undefined && acc.payment_account_bound_billed_total !== null
+                                ? Number(acc.payment_account_bound_billed_total)
+                                : localBoundCards.reduce((sum, c) => sum + (c.balance || 0), 0) || (acc.balance || 0)
+                            const isInsufficient =
+                              payBankBalance !== null && boundBilledTotal > 0 && payBankBalance < boundBilledTotal
+
+                            if (acc.payment_account_id && payBankName) {
+                              return (
+                                <div
+                                  style={{
+                                    marginTop: 5,
+                                    padding: '4px 7px',
+                                    borderRadius: 5,
+                                    background: isInsufficient ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-surface)',
+                                    border: `1px solid ${isInsufficient ? 'rgba(239, 68, 68, 0.38)' : 'var(--border-color)'}`,
+                                    fontSize: '0.72rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    flexWrap: 'wrap',
+                                    gap: 4,
+                                  }}
+                                >
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--color-blue-text)', fontWeight: 600 }}>
+                                    <Landmark size={11} style={{ flexShrink: 0 }} />
+                                    <span>
+                                      扣款：{payBankName}
+                                      {payBankBalance !== null ? ` · 餘額 ${formatCurrency(payBankBalance)}` : ''}
+                                    </span>
+                                  </span>
+                                  {payBankBalance !== null && boundBilledTotal > 0 && (
+                                    isInsufficient ? (
+                                      <span className="badge badge-danger" style={{ fontSize: '0.64rem', padding: '1px 5px', gap: 2 }}>
+                                        <AlertCircle size={10} />
+                                        <span>存款不足</span>
+                                      </span>
+                                    ) : (
+                                      <span className="badge badge-success" style={{ fontSize: '0.64rem', padding: '1px 5px', gap: 2 }}>
+                                        <CheckCircle2 size={10} />
+                                        <span>餘額充足</span>
+                                      </span>
+                                    )
+                                  )}
+                                </div>
+                              )
+                            }
+
+                            if (!isMaskedCard) {
+                              return (
+                                <div
+                                  style={{
+                                    marginTop: 4,
+                                    fontSize: '0.7rem',
+                                    color: 'var(--text-muted)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                  }}
+                                >
+                                  <Landmark size={11} style={{ flexShrink: 0 }} />
+                                  <span>預設扣款帳戶：未設定</span>
+                                </div>
+                              )
+                            }
+
+                            return null
+                          })()}
                         </div>
                       )}
 

@@ -120,7 +120,11 @@ accounts.get('/', async (c) => {
   }
 
   const rows = await c.env.DB.prepare(`
-    SELECT a.*, u.name as owner_name, pa.name as payment_account_name
+    SELECT a.*, u.name as owner_name,
+      pa.name as payment_account_name,
+      pa.balance as payment_account_balance,
+      pa.is_joint as payment_account_is_joint,
+      pa.user_id as payment_account_user_id
     FROM accounts a
     LEFT JOIN users u ON a.user_id = u.id
     LEFT JOIN accounts pa ON a.payment_account_id = pa.id
@@ -129,14 +133,81 @@ accounts.get('/', async (c) => {
   `).bind(...sqlParams).all();
 
   const accRows = (rows.results as any[]) || [];
-  const creditCards = accRows.filter(acc => acc.type === 'credit_card');
-  const metricsMap = await computeCreditCardsReadOnlyMetrics(c.env.DB, creditCards);
+  let creditCards = accRows.filter(acc => acc.type === 'credit_card');
+
+  // 找出當前信用卡所綁定的所有扣款銀行 ID，並將共用同一扣款銀行的其他信用卡一併納入指標計算，
+  // 確保跨視角（例如在公帳視角下，同一私帳銀行同時綁定純私帳卡與代墊卡）也能精準計算該銀行綁定之總張數與總已出帳待扣金額
+  const boundBankIds = Array.from(new Set(
+    creditCards
+      .map(acc => acc.payment_account_id)
+      .filter((id): id is string => Boolean(id))
+  ));
+
+  let allBoundCards = creditCards;
+  if (boundBankIds.length > 0) {
+    const bankPlaceholders = boundBankIds.map(() => '?').join(',');
+    const siblingRows = await c.env.DB.prepare(`
+      SELECT * FROM accounts
+      WHERE type = 'credit_card' AND payment_account_id IN (${bankPlaceholders})
+    `).bind(...boundBankIds).all();
+    const siblingList = (siblingRows.results as any[]) || [];
+    const seenIds = new Set(creditCards.map(c => c.id));
+    const extraCards = siblingList.filter(c => !seenIds.has(c.id));
+    if (extraCards.length > 0) {
+      allBoundCards = [...creditCards, ...extraCards];
+    }
+  }
+
+  const metricsMap = await computeCreditCardsReadOnlyMetrics(c.env.DB, allBoundCards);
+
+  // 聚合每個扣款銀行名下綁定的信用卡總張數與合計已出帳待扣總額
+  const bankBoundStatsMap = new Map<string, { count: number; billedTotal: number }>();
+  for (const card of allBoundCards) {
+    const payId = card.payment_account_id;
+    if (!payId) continue;
+    const m = metricsMap.get(card.id);
+    const cardBilled = m ? Number(m.balance || 0) : Number(card.balance || 0);
+    const prev = bankBoundStatsMap.get(payId) || { count: 0, billedTotal: 0 };
+    prev.count += 1;
+    prev.billedTotal += cardBilled;
+    bankBoundStatsMap.set(payId, prev);
+  }
 
   const results = accRows.map(acc => {
-    if (acc.type !== 'credit_card') return acc;
+    const { payment_account_user_id, ...restAcc } = acc;
+    if (acc.type !== 'credit_card') return restAcc;
+
+    // 隱私防線：若所綁定的扣款銀行為非本人之個人私帳銀行 (is_joint = 0 AND user_id != userId)，遮蔽該扣款銀行資訊
+    const isOtherPrivateBank =
+      Boolean(acc.payment_account_id) &&
+      (acc.payment_account_is_joint === 0 || acc.payment_account_is_joint === null) &&
+      Boolean(payment_account_user_id && payment_account_user_id !== userId);
+
+    const hasValidPaymentAcc = Boolean(acc.payment_account_id && acc.payment_account_name && !isOtherPrivateBank);
+    const boundStats = hasValidPaymentAcc ? bankBoundStatsMap.get(acc.payment_account_id) : undefined;
+
+    const paymentFields = hasValidPaymentAcc
+      ? {
+          payment_account_id: acc.payment_account_id,
+          payment_account_name: acc.payment_account_name,
+          payment_account_balance: Number(acc.payment_account_balance ?? 0),
+          payment_account_is_joint: Number(acc.payment_account_is_joint ?? 0),
+          payment_account_bound_count: boundStats ? boundStats.count : 1,
+          payment_account_bound_billed_total: boundStats ? boundStats.billedTotal : 0,
+        }
+      : {
+          payment_account_id: null,
+          payment_account_name: null,
+          payment_account_balance: null,
+          payment_account_is_joint: null,
+          payment_account_bound_count: null,
+          payment_account_bound_billed_total: null,
+        };
+
     const m = metricsMap.get(acc.id);
     if (!m) return {
-      ...acc,
+      ...restAcc,
+      ...paymentFields,
       billed_shared_debt: 0,
       billed_personal_debt: 0,
       unbilled_shared_debt: 0,
@@ -145,7 +216,8 @@ accounts.get('/', async (c) => {
       personal_debt: 0,
     };
     return {
-      ...acc,
+      ...restAcc,
+      ...paymentFields,
       balance: m.balance,
       unbilled: m.unbilled,
       billed_shared_debt: m.billed_shared_debt,
@@ -159,7 +231,8 @@ accounts.get('/', async (c) => {
 
   // 過濾與脫敏處理 (ADR 0015 & ADR 0025)：
   // 在公帳視角下，若為個人私卡 (is_joint = 0)，必須滿足 shared_debt > 0 才納入展示；
-  // 若為他人私卡，執行隱私脫敏（揭示已出帳公帳待繳與未出帳公帳累計，全面遮蔽個人額度與個人私密消費）。
+  // 若為他人私卡，執行隱私脫敏（揭示已出帳公帳待繳與未出帳公帳累計，全面遮蔽個人額度與個人私密消費；
+  // 但若該卡綁定的是家庭共同基金銀行 is_joint = 1，則保留公開之共同基金扣款帳戶資訊）。
   const finalResults = results
     .filter(acc => {
       if (scope === 'household' && acc.is_joint === 0) {
@@ -169,11 +242,16 @@ accounts.get('/', async (c) => {
     })
     .map(acc => {
       if (acc.is_joint === 0 && acc.user_id !== userId) {
+        const keepJointPaymentBank = acc.payment_account_is_joint === 1;
         return {
           ...acc,
           credit_limit: null,
-          payment_account_id: null,
-          payment_account_name: null,
+          payment_account_id: keepJointPaymentBank ? acc.payment_account_id : null,
+          payment_account_name: keepJointPaymentBank ? acc.payment_account_name : null,
+          payment_account_balance: keepJointPaymentBank ? acc.payment_account_balance : null,
+          payment_account_is_joint: keepJointPaymentBank ? 1 : null,
+          payment_account_bound_count: keepJointPaymentBank ? acc.payment_account_bound_count : null,
+          payment_account_bound_billed_total: keepJointPaymentBank ? acc.payment_account_bound_billed_total : null,
           balance: acc.billed_shared_debt || 0,
           unbilled: acc.unbilled_shared_debt || 0,
           billed_shared_debt: acc.billed_shared_debt || 0,

@@ -2270,3 +2270,65 @@ a { text-decoration: none; color: inherit; }
   font-size: 0.72rem;
   color: var(--text-muted);
 }
+
+
+/* ---- 帳戶管理四態類別切換器與信用卡預設扣款帳戶資訊框 (Account Category Filter Tabs & CC Payment Account Info - #229) ---- */
+.account-category-tab-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  margin-bottom: var(--space-lg);
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+.account-category-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  font-size: 0.85rem;
+}
+.cc-payment-account-box {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+}
+.cc-payment-account-box.insufficient {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.06);
+}
+.cc-payment-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .account-category-tab-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+  .account-category-tab-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 8px 6px;
+    font-size: 0.82rem;
+  }
+}

@@ -160,19 +160,65 @@ describe('ADR 0035: Open Issues (#184, #163, #156, #121, #98)', () => {
     });
     expect(sharedTxRes.status).toBe(201);
 
-    // USER1 sees own card with payment_account_id & payment_account_name
+    // USER1 sees own card with payment_account_id, payment_account_name, payment_account_balance, and bound stats
     const u1Accs = await h.request('/accounts?scope=all', { user: USER1 });
     const u1Card = u1Accs.json.data.find((a: any) => a.id === 'a_card1');
     expect(u1Card.payment_account_id).toBe('a_bank1');
     expect(u1Card.payment_account_name).toBe('薪轉戶');
+    expect(typeof u1Card.payment_account_balance).toBe('number');
+    expect(u1Card.payment_account_is_joint).toBe(0);
+    expect(u1Card.payment_account_bound_count).toBe(1);
+    expect(typeof u1Card.payment_account_bound_billed_total).toBe('number');
 
-    // USER2 in household scope sees a_card1 masked with payment_account_id = null and payment_account_name = null
+    // USER1 in household scope still sees payment_account_balance even though a_bank1 (private bank) is not in household bank list
+    const u1HouseholdAccs = await h.request('/accounts?scope=household', { user: USER1 });
+    const u1HouseholdCard = u1HouseholdAccs.json.data.find((a: any) => a.id === 'a_card1');
+    expect(u1HouseholdCard).toBeDefined();
+    expect(u1HouseholdCard.payment_account_id).toBe('a_bank1');
+    expect(u1HouseholdCard.payment_account_name).toBe('薪轉戶');
+    expect(typeof u1HouseholdCard.payment_account_balance).toBe('number');
+
+    // USER2 in household scope sees a_card1 masked with payment_account_* = null because a_bank1 is USER1's private bank
     const u2Accs = await h.request('/accounts?scope=household', { user: USER2 });
     const u2MaskedCard = u2Accs.json.data.find((a: any) => a.id === 'a_card1');
     expect(u2MaskedCard).toBeDefined();
     expect(u2MaskedCard.is_masked).toBe(true);
     expect(u2MaskedCard.payment_account_id).toBeNull();
     expect(u2MaskedCard.payment_account_name).toBeNull();
+    expect(u2MaskedCard.payment_account_balance).toBeNull();
+    expect(u2MaskedCard.payment_account_bound_count).toBeNull();
+    expect(u2MaskedCard.payment_account_bound_billed_total).toBeNull();
+
+    // If a_card1 is bound to a joint bank (a_bankj), USER2 in household scope CAN see the joint payment account info
+    await h.request('/accounts/a_card1', {
+      method: 'PUT',
+      user: USER1,
+      body: { payment_account_id: 'a_bankj' },
+    });
+    const u2AccsJointBank = await h.request('/accounts?scope=household', { user: USER2 });
+    const u2CardWithJointBank = u2AccsJointBank.json.data.find((a: any) => a.id === 'a_card1');
+    expect(u2CardWithJointBank.is_masked).toBe(true);
+    expect(u2CardWithJointBank.payment_account_id).toBe('a_bankj');
+    expect(typeof u2CardWithJointBank.payment_account_balance).toBe('number');
+    expect(u2CardWithJointBank.payment_account_is_joint).toBe(1);
+
+    // Multi-card bound count & billed total: bind a_cardj (joint card) also to a_bankj
+    await h.request('/accounts/a_cardj', {
+      method: 'PUT',
+      user: USER1,
+      body: { payment_account_id: 'a_bankj' },
+    });
+    const multiBoundRes = await h.request('/accounts?scope=all', { user: USER1 });
+    const c1Multi = multiBoundRes.json.data.find((a: any) => a.id === 'a_card1');
+    const cjMulti = multiBoundRes.json.data.find((a: any) => a.id === 'a_cardj');
+    expect(c1Multi.payment_account_bound_count).toBe(2);
+    expect(cjMulti.payment_account_bound_count).toBe(2);
+    const expectedTotalBilled = Number(c1Multi.balance || 0) + Number(cjMulti.balance || 0);
+    expect(c1Multi.payment_account_bound_billed_total).toBe(expectedTotalBilled);
+    expect(cjMulti.payment_account_bound_billed_total).toBe(expectedTotalBilled);
+
+    // Clean up
+    await h.request('/accounts/a_cardj', { method: 'PUT', user: USER1, body: { payment_account_id: null } });
 
     // Clean up
     await h.request(`/transactions/${sharedTxRes.json.data.id}`, { method: 'DELETE', user: USER1 });

@@ -46,6 +46,7 @@ export default function Accounts() {
   const [totalPendingAdvances, setTotalPendingAdvances] = useState(0)
   const [loading, setLoading] = useState(true)
   const [scope, setScope] = useState<'all' | 'household' | 'personal'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'cash' | 'bank' | 'credit_card'>('all')
   const hasLoadedRoleRef = useRef(false)
 
   // 新增 / 編輯帳戶 Modal
@@ -676,7 +677,47 @@ export default function Accounts() {
         </div>
       </div>
 
+      {/* 帳戶類別四態切換器 (Account Category Filter Tabs - #229) */}
+      <div className="account-category-tab-bar" role="tablist" aria-label="帳戶類別切換">
+        <button
+          type="button"
+          id="acc-cat-tab-all"
+          className={`btn btn-sm account-category-tab-btn ${categoryFilter === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setCategoryFilter('all')}
+        >
+          <span>全部類型 ({accounts.length})</span>
+        </button>
+        <button
+          type="button"
+          id="acc-cat-tab-cash"
+          className={`btn btn-sm account-category-tab-btn ${categoryFilter === 'cash' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setCategoryFilter('cash')}
+        >
+          <Wallet size={15} style={{ flexShrink: 0 }} />
+          <span>現金錢包 ({cashAccounts.length})</span>
+        </button>
+        <button
+          type="button"
+          id="acc-cat-tab-bank"
+          className={`btn btn-sm account-category-tab-btn ${categoryFilter === 'bank' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setCategoryFilter('bank')}
+        >
+          <Building size={15} style={{ flexShrink: 0 }} />
+          <span>銀行存款帳戶 ({bankAccounts.length})</span>
+        </button>
+        <button
+          type="button"
+          id="acc-cat-tab-cc"
+          className={`btn btn-sm account-category-tab-btn ${categoryFilter === 'credit_card' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setCategoryFilter('credit_card')}
+        >
+          <CreditCard size={15} style={{ flexShrink: 0 }} />
+          <span>信用卡 ({creditCards.length})</span>
+        </button>
+      </div>
+
       {/* 專區一：現金錢包 */}
+      {(categoryFilter === 'all' || categoryFilter === 'cash') && (
       <div style={{ marginBottom: 32 }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
           <h2 className="text-xl flex items-center gap-xs">
@@ -758,8 +799,10 @@ export default function Accounts() {
           </div>
         )}
       </div>
+      )}
 
       {/* 專區二：銀行帳戶 */}
+      {(categoryFilter === 'all' || categoryFilter === 'bank') && (
       <div style={{ marginBottom: 32 }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
           <h2 className="text-xl flex items-center gap-xs">
@@ -943,8 +986,10 @@ export default function Accounts() {
           </div>
         )}
       </div>
+      )}
 
       {/* 專區三：信用卡專區 */}
+      {(categoryFilter === 'all' || categoryFilter === 'credit_card') && (
       <div style={{ marginBottom: 32 }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
           <h2 className="text-xl flex items-center gap-xs">
@@ -1144,7 +1189,7 @@ export default function Accounts() {
                     )}
                   </div>
 
-                  {/* 帳單週期資訊 */}
+                  {/* 帳單週期資訊與預設扣款帳戶資訊框 (#229) */}
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
                     <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: 4 }}>
                       <span>每月 {card.statement_day || '--'} 日結帳 · {card.payment_due_day || '--'} 日繳款</span>
@@ -1154,14 +1199,100 @@ export default function Accounts() {
                         <span>剩餘額度：--</span>
                       )}
                     </div>
-                    {!isMasked && card.payment_account_id && (
-                      <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 5, color: 'var(--color-blue-text)', fontWeight: 600 }}>
-                        <Landmark size={13} />
-                        <span>
-                          預設扣款帳戶：{card.payment_account_name || bankAccounts.find(b => b.id === card.payment_account_id)?.name || '已綁定銀行帳戶'}
-                        </span>
-                      </div>
-                    )}
+                    {(() => {
+                      const localPayBank = card.payment_account_id
+                        ? bankAccounts.find(b => b.id === card.payment_account_id)
+                        : undefined
+                      const payBankName = card.payment_account_name || localPayBank?.name || null
+                      const payBankBalance =
+                        card.payment_account_balance !== undefined && card.payment_account_balance !== null
+                          ? Number(card.payment_account_balance)
+                          : localPayBank
+                            ? Number(localPayBank.balance)
+                            : null
+                      const localBoundCards = card.payment_account_id
+                        ? creditCards.filter(c => c.payment_account_id === card.payment_account_id)
+                        : []
+                      const boundCount =
+                        card.payment_account_bound_count !== undefined && card.payment_account_bound_count !== null
+                          ? Number(card.payment_account_bound_count)
+                          : localBoundCards.length || 1
+                      const boundBilledTotal =
+                        card.payment_account_bound_billed_total !== undefined && card.payment_account_bound_billed_total !== null
+                          ? Number(card.payment_account_bound_billed_total)
+                          : localBoundCards.reduce((sum, c) => sum + (c.balance || 0), 0) || billed
+                      const isInsufficient =
+                        payBankBalance !== null && boundBilledTotal > 0 && payBankBalance < boundBilledTotal
+                      const shortfall = isInsufficient && payBankBalance !== null ? boundBilledTotal - payBankBalance : 0
+
+                      if (card.payment_account_id && payBankName) {
+                        return (
+                          <div className={`cc-payment-account-box ${isInsufficient ? 'insufficient' : ''}`}>
+                            <div className="cc-payment-account-row">
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--color-blue-text)', fontWeight: 700 }}>
+                                <Landmark size={13} style={{ flexShrink: 0 }} />
+                                <span>扣款帳戶：{payBankName}</span>
+                              </span>
+                              {payBankBalance !== null && (
+                                <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                                  存款餘額：<strong style={{ color: isInsufficient ? 'var(--color-danger)' : 'var(--text-primary)' }}>{formatCurrency(payBankBalance)}</strong>
+                                </span>
+                              )}
+                            </div>
+                            {payBankBalance !== null && (
+                              <div className="cc-payment-account-row" style={{ fontSize: '0.75rem' }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>
+                                  {boundCount > 1
+                                    ? `共綁定 ${boundCount} 張卡 · 合計已出帳 ${formatCurrency(boundBilledTotal)}`
+                                    : `本期已出帳待扣 ${formatCurrency(boundBilledTotal)}`}
+                                </span>
+                                {boundBilledTotal > 0 ? (
+                                  isInsufficient ? (
+                                    <span className="badge badge-danger" style={{ fontSize: '0.68rem', padding: '1px 6px', gap: 3 }}>
+                                      <AlertCircle size={11} />
+                                      <span>存款不足（差額 {formatCurrency(shortfall)}）</span>
+                                    </span>
+                                  ) : (
+                                    <span className="badge badge-success" style={{ fontSize: '0.68rem', padding: '1px 6px', gap: 3 }}>
+                                      <CheckCircle2 size={11} />
+                                      <span>餘額充足</span>
+                                    </span>
+                                  )
+                                ) : (
+                                  <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
+                                    目前無已出帳待扣款
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      if (!isMasked) {
+                        return (
+                          <div className="cc-payment-account-box">
+                            <div className="cc-payment-account-row">
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text-muted)' }}>
+                                <Landmark size={13} style={{ flexShrink: 0 }} />
+                                <span>預設扣款帳戶：未設定</span>
+                              </span>
+                              {canModifyAccount(card) && (
+                                <button
+                                  type="button"
+                                  className="btn btn-xs btn-secondary"
+                                  onClick={() => handleOpenEdit(card)}
+                                >
+                                  設定扣款帳戶
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      }
+
+                      return null
+                    })()}
                   </div>
 
                   {/* 還款操作按鈕組 */}
@@ -1229,6 +1360,7 @@ export default function Accounts() {
           </div>
         )}
       </div>
+      )}
 
       {/* 新增 / 編輯帳戶 Modal */}
       {showModal && (

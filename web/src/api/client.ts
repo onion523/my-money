@@ -454,6 +454,10 @@ export interface Account {
   payment_due_day?: number | null;
   payment_account_id?: string | null;
   payment_account_name?: string | null;
+  payment_account_balance?: number | null;
+  payment_account_is_joint?: number | null;
+  payment_account_bound_count?: number | null;
+  payment_account_bound_billed_total?: number | null;
   unbilled: number;
   color: string;
   is_joint?: number;

@@ -213,15 +213,23 @@ export function AccountsSkeleton() {
       {/* 公私帳切換列骨架 */}
       <ScopeTabBarSkeleton />
 
-      {/* 三大資產統計卡片骨架 */}
-      <div className="grid grid-3" style={{ marginBottom: 24 }}>
-        {[1, 2, 3].map(i => (
+      {/* 四大資產統計卡片骨架 */}
+      <div className="grid grid-4" style={{ marginBottom: 24 }}>
+        {[1, 2, 3, 4].map(i => (
           <div key={i} className="stat-card" style={{ minWidth: 0 }}>
             <Skeleton variant="text" width="45%" height={14} style={{ marginBottom: 8 }} />
             <Skeleton variant="text" width="70%" height={26} style={{ marginBottom: 6 }} />
             <Skeleton variant="text" width="55%" height={12} />
           </div>
         ))}
+      </div>
+
+      {/* 帳戶類別四態切換列骨架 */}
+      <div className="account-category-tab-bar" style={{ pointerEvents: 'none' }}>
+        <Skeleton variant="rect" className="account-category-tab-btn" width={104} height={32} borderRadius={8} />
+        <Skeleton variant="rect" className="account-category-tab-btn" width={104} height={32} borderRadius={8} />
+        <Skeleton variant="rect" className="account-category-tab-btn" width={128} height={32} borderRadius={8} />
+        <Skeleton variant="rect" className="account-category-tab-btn" width={96} height={32} borderRadius={8} />
       </div>
 
       {/* 帳戶卡片網格骨架 */}
