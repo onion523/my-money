@@ -63,7 +63,7 @@ export interface RecurringItem {
   name: string;
   type: 'income' | 'expense';
   amount: number;
-  cycle: 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual';
+  cycle: 'weekly' | 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual';
   day_of_cycle: number;
   month_of_cycle?: number;
   is_shared?: number;

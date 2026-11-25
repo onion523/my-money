@@ -1549,7 +1549,7 @@ accounts.get('/balance', async (c) => {
 
   const available = cashTotal + bankTotal - ccBilled - ccUnbilled;
 
-  const cycleMonths: Record<string, number> = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
+  const cycleMonths: Record<string, number> = { weekly: 0.25, monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
   const monthlyFixed = recurringRows.reduce((s, r) => s + r.amount / (cycleMonths[r.cycle] || 1), 0);
 
   const monthlyGoals = scope !== 'household'

@@ -7,7 +7,7 @@ type Vars = { userId: string; userEmail: string; userName: string };
 const recurring = new Hono<{ Bindings: Env; Variables: Vars }>();
 recurring.use('*', authMiddleware);
 
-const CYCLE_MONTHS: Record<string, number> = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
+const CYCLE_MONTHS: Record<string, number> = { weekly: 0.25, monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
 
 let recurringMigrated = false;
 let recurringMigratePromise: Promise<void> | null = null;
@@ -27,6 +27,33 @@ export async function ensureRecurringSchema(db: any) {
           WHERE account_id IN (SELECT id FROM accounts WHERE is_joint = 1)
         `).run();
       } catch (_) {}
+      try {
+        const tableInfo = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='recurring_items'").first();
+        if (tableInfo && tableInfo.sql && !tableInfo.sql.includes("'weekly'")) {
+          await db.prepare("PRAGMA foreign_keys = OFF").run();
+          await db.prepare(`CREATE TABLE IF NOT EXISTS recurring_items_new (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
+            amount REAL NOT NULL,
+            cycle TEXT NOT NULL CHECK(cycle IN ('weekly', 'monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual')),
+            day_of_cycle INTEGER NOT NULL DEFAULT 1,
+            month_of_cycle INTEGER NOT NULL DEFAULT 1,
+            is_shared INTEGER NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )`).run();
+          await db.prepare(`INSERT OR IGNORE INTO recurring_items_new (id, user_id, account_id, name, type, amount, cycle, day_of_cycle, month_of_cycle, is_shared, created_at)
+            SELECT id, user_id, account_id, name, type, amount, cycle, COALESCE(day_of_cycle, 1), COALESCE(month_of_cycle, 1), COALESCE(is_shared, 0), created_at FROM recurring_items`).run();
+          await db.prepare(`DROP TABLE recurring_items`).run();
+          await db.prepare(`ALTER TABLE recurring_items_new RENAME TO recurring_items`).run();
+          await db.prepare(`CREATE INDEX IF NOT EXISTS idx_recurring_user ON recurring_items(user_id)`).run();
+          await db.prepare("PRAGMA foreign_keys = ON").run();
+        }
+      } catch (err) {
+        console.error('Migration recurring_items check constraint error:', err);
+      }
       recurringMigrated = true;
     })().finally(() => {
       recurringMigratePromise = null;
@@ -73,9 +100,12 @@ recurring.post('/', async (c) => {
   if (!name || !type || !amount || !cycle) return c.json({ success: false, error: '請填寫所有必填欄位' }, 400);
   const id = generateId();
   const sharedFlag = Number(is_shared) ? 1 : 0;
+  const rawDay = Number(day_of_cycle) || 1;
+  const normalizedDay = cycle === 'weekly' ? (rawDay >= 1 && rawDay <= 7 ? rawDay : 1) : Math.min(31, Math.max(1, rawDay));
+  const normalizedMonth = cycle === 'weekly' || cycle === 'monthly' ? 1 : (Number(month_of_cycle) || 1);
   await c.env.DB.prepare(
     'INSERT INTO recurring_items (id, user_id, account_id, name, type, amount, cycle, day_of_cycle, month_of_cycle, is_shared) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, userId, account_id ?? null, name, type, amount, cycle, day_of_cycle, month_of_cycle ?? 1, sharedFlag).run();
+  ).bind(id, userId, account_id ?? null, name, type, amount, cycle, normalizedDay, normalizedMonth, sharedFlag).run();
 
   const row = await c.env.DB.prepare(`
     SELECT r.*, a.name as account_name, a.is_joint as account_is_joint, u.name as user_name
@@ -113,9 +143,12 @@ recurring.put('/:id', async (c) => {
 
   const { name, type, amount, cycle, day_of_cycle, month_of_cycle = 1, account_id, is_shared } = await c.req.json();
   const sharedFlag = is_shared !== undefined ? (Number(is_shared) ? 1 : 0) : existing.is_shared;
+  const rawDay = Number(day_of_cycle) || 1;
+  const normalizedDay = cycle === 'weekly' ? (rawDay >= 1 && rawDay <= 7 ? rawDay : 1) : Math.min(31, Math.max(1, rawDay));
+  const normalizedMonth = cycle === 'weekly' || cycle === 'monthly' ? 1 : (Number(month_of_cycle) || 1);
 
   await c.env.DB.prepare('UPDATE recurring_items SET name=?, type=?, amount=?, cycle=?, day_of_cycle=?, month_of_cycle=?, account_id=?, is_shared=? WHERE id=?')
-    .bind(name, type, amount, cycle, day_of_cycle, month_of_cycle ?? 1, account_id ?? null, sharedFlag, id).run();
+    .bind(name, type, amount, cycle, normalizedDay, normalizedMonth, account_id ?? null, sharedFlag, id).run();
 
   const row = await c.env.DB.prepare(`
     SELECT r.*, a.name as account_name, a.is_joint as account_is_joint, u.name as user_name

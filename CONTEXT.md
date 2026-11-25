@@ -402,7 +402,7 @@ _Avoid_: 強迫覆蓋 (forced overwrite)、生硬彈窗 (intrusive popup)、無�
 ### 規劃與預測 (Planning & Forecasting)
 
 **Recurring Item (週期收支)**:
-按規律頻率（月、雙月、季、半年、年）固定重複發生的週期性收入或支出。
+按規律頻率（週、月、雙月、季、半年、年）固定重複發生的週期性收入或支出。
 _Avoid_: 訂閱 (subscription)、固定支出 (fixed expense)、週期契約 (contract)
 
 **Recurring Ledger Attribution (週期收支公私帳歸屬)**:
@@ -410,12 +410,26 @@ _Avoid_: 訂閱 (subscription)、固定支出 (fixed expense)、週期契約 (co
 _Avoid_: 純依賴帳戶歸屬 (account-only inference)、無公私帳區分之固定收支 (unscoped recurring item)
 
 **Exact Recurring Schedule (確切週期繳費排程)**:
-週期收支必須精確綁定執行月份與日期，包含月繳（每月天）、雙月繳（單數月/雙數月）、季繳（起算月 1/2/3 每季循環）、半年繳（起算月 1~6 每半年循環）與年繳（指定 1~12 月份）。在現金流預測中，遇大小月或二月天數不足時，一律自動平貼（clamp）至該月份最後一日完成扣款與模擬，嚴禁粗暴以月份倍數模除或跨月推遲。
-_Avoid_: 模除猜測 (modulo guessing)、固定雙數月 (hardcoded even months)、跨月遞延 (month overflow drift)
+週期收支必須精確綁定執行頻率與對應時點：
+- **週繳 (`weekly`)**：以 `day_of_cycle` 記錄星期幾（`1` = 週一、`2` = 週二、`3` = 週三、`4` = 週四、`5` = 週五、`6` = 週六、`7` = 週日），`month_of_cycle` 固定為 `1`。表單由其他週期切換至「每週」時，若原 `day_of_cycle > 7` 或 `< 1`，自動夾限重置為 `1`（週一）；卡片顯示為 `每週一扣款`（或 `每週一入帳`），右側頻率標示為 `每週繳` / `每週收`。
+- **月繳 (`monthly`)**：每月指定日期（1~31 號）。
+- **雙月繳 (`bimonthly`)**：單數月 (`month_of_cycle = 1`) 或雙數月 (`month_of_cycle = 2`) 之指定日期。
+- **季繳 (`quarterly`)**：起算月 1/2/3 每季循環之指定日期。
+- **半年繳 (`semiannual`)**：起算月 1~6 每半年循環之指定日期。
+- **年繳 (`annual`)**：指定 1~12 月份與日期。
+在現金流預測中，月／雙月／季／半年／年繳遇大小月或二月天數不足時，一律自動平貼（clamp）至該月份最後一日完成扣款與模擬；週繳項目則於未來 365 天內精確對應每一個符合該星期幾（`day_of_cycle` 1~7）之日期觸發排程，嚴禁粗暴以月份倍數模除或跨月推遲。
+_Avoid_: 模除猜測 (modulo guessing)、固定雙數月 (hardcoded even months)、跨月遞延 (month overflow drift)、週繳未指定星期幾或直接顯示「每週 1 號」(ambiguous weekly schedule or raw number label for weekday)
 
 **Amortization (週期支出每月平均)**:
-將年繳、季繳等長週期大額支出平攤轉化為每月標準額度資金負擔之試算過程，並隨當前選擇的三態視角（全部 / 公帳 / 私帳）動態過濾對應之週期收支項目進行分攤加總。
-_Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑化 (smoothing)、攤提 (proration)
+將不同週期之收支轉化為每月標準額度資金負擔（或預估收入）之試算過程，並隨當前選擇的三態視角（全部 / 公帳 / 私帳）動態過濾對應之週期收支項目進行分攤加總。各週期換算為每月金額之週期月數除數（`CYCLE_MONTHS` / `CYCLE_DIVISORS`）統一為：
+- **每週 (`weekly`)**：除數 `0.25`（即 `每週金額 × 4`，以每月 4 週直觀估算）
+- **每月 (`monthly`)**：除數 `1`
+- **每雙月 (`bimonthly`)**：除數 `2`
+- **每季 (`quarterly`)**：除數 `3`
+- **每半年 (`semiannual`)**：除數 `6`
+- **每年 (`annual`)**：除數 `12`
+凡非「每月 (`cycle !== 'monthly'`)」之週期項目（包含每週、雙月、季、半年、年），於週期收支卡片副標題皆顯示 `換算每月平均：$X / 月`。
+_Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑化 (smoothing)、攤提 (proration)、每週項目直接除以 1 當成月繳或產生非整數倍碎數 (treating weekly as monthly divisor 1 or awkward fractional multipliers)
 
 **Scoped Cash Flow Forecast (三態現金流預測)**:
 支援切換「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」之未來 12 個月（365 天）逐日資金流模擬引擎（含雙月、季、半年、年繳等長週期項目完整排程模擬）。各視角之第 0 天起始基準餘額為該視角下之「現金錢包總額 ＋ 銀行存款總額」實際正資產餘額（未設定繳款日之信用卡欠款除外），並將信用卡欠款依結帳週期拆分為「已出帳待繳款（排入最近一次繳款日）」與「未出帳款（排入下一次結帳日出帳後之繳款日）」分別排入 12 個月時間軸扣減（避免於第 0 天重複預扣或跨期混同），依視角過濾未來 12 個月預定發生之週期收支與繳卡費排程事件，於時間軸卡片標示 `Home` 公帳 / `Lock` 私帳向量徽章、扣款帳戶，以及**該筆事件執行後之逐筆累計結餘（`running_balance`，同日多筆事件依收入優先於支出之順序逐筆加減反映水位變化；若結餘 `< $0` 則以醒目珊瑚紅標示透支）**。
@@ -456,8 +470,8 @@ _Avoid_: 僅顯示全期單一最低點而掩蓋多段分佈之透支時期 (sho
 _Avoid_: 自動繳卡 (auto repayment)、漏計未出帳金額 (omitting unbilled debt in schedule)、已過扣款日未扣款卻順延至下個月造成當月可用資金虛高 (deferring overdue billed debt to next month inflating current available cash)、因已出帳逾期或未按出帳作業而將未出帳連帶往後多推遲一個月 (cascading 1-month delay on unbilled due date)、已出帳與未出帳強行合併同日扣繳 (forcing billed and unbilled onto the same due date)、已於家庭協同報銷沖帳之卡費仍在公帳現金流重複扣款 (double-deducting reimbursed card advances in household forecast)
 
 **Credit Card Recurring Cash Flow Shift (信用卡週期收支繳款日平移)**:
-在未來 12 個月（365 天）現金流預測中，凡設定由信用卡扣款之週期收支項目，其真實現金資產流出日不再發生於刷卡記帳日（day_of_cycle），而是依據該信用卡之結帳日與繳款日精準平移至對應之「信用卡繳款日（Payment Due Day）」，時間軸保留週期項目獨立卡片並標記卡片與繳款日扣款，真實反映流動性到期責任並支援「已繳」單筆豁免。
-_Avoid_: 刷卡日直接扣款 (immediate swipe cash deduction)、粗暴合併繳卡費 (opaque card merge)
+在未來 12 個月（365 天）現金流預測中，凡設定由信用卡扣款之週期收支項目，其真實現金資產流出日不再發生於刷卡記帳日（day_of_cycle），而是依據該信用卡之結帳日與繳款日精準平移至對應之「信用卡繳款日（Payment Due Day）」，時間軸保留週期項目獨立卡片並標記卡片與繳款日扣款，真實反映流動性到期責任並支援「已繳」單筆豁免。針對「每週 (`weekly`)」且綁定信用卡之週期項目，因同一結帳週期內的 4~5 次每週刷卡皆會平移至同一個信用卡繳款日，為避免 `event_key` 碰撞覆蓋並維持逐筆獨立勾選「已繳」，其 `event_key` 附加原刷卡日區隔（格式：`recurring:${item.id}:${due.dateStr}:${chargeDateStr}`），且事件名稱標註原刷卡日期（格式：`${item.name} (${MM/DD} 刷 · ${account_name} 信用卡繳款日扣款)`）。
+_Avoid_: 刷卡日直接扣款 (immediate swipe cash deduction)、粗暴合併繳卡費 (opaque card merge)、同一帳期內多筆每週信用卡項目因相同繳款日導致 event_key 碰撞無法獨立勾選已繳 (event_key collision for multiple weekly credit card charges landing on the same due date)
 
 **Settled Forecast Event (已繳預測事件)**:
 未來 12 個月（365 天）現金流預測排程中，已被使用者勾選標記為「已繳」（搭配 `CheckCircle2` / `Circle` 向量圖示）之單次排程事件（涵蓋週期支出、週期收入與已出帳／未出帳繳卡費，以 `項目 ID + 預計日期 YYYY-MM-DD` 唯一識別）。當一筆事件已經實際刷卡入帳（進入信用卡未出帳）或已提前消費扣款時，勾選「已繳」即可將該次事件從 12 個月現金流折線圖與購買力試算中豁免（不列入計算，防止重複扣款），並在排程清單中保留顯示為半透明刪除線狀態，同時標示當下維持不變之預估結餘（`running_balance`），支援隨時取消勾選恢復計算。

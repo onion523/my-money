@@ -34,12 +34,14 @@ describe('recurringPreset helpers', () => {
     expect(filterRecurringByType(items, 'income').map(i => i.id)).toEqual(['i1']);
   });
 
-  it('formats option label with [公帳] or [私帳] prefix and formatted amount', () => {
+  it('formats option label with [公帳] or [私帳] prefix and formatted amount (including weekly cycle items)', () => {
     const sharedItem = makeRecurring({ name: '房租', amount: 20000, is_shared: 1 });
     const personalItem = makeRecurring({ name: 'Netflix', amount: 390, is_shared: 0 });
+    const weeklyItem = makeRecurring({ name: '每週教練課', amount: 500, cycle: 'weekly', day_of_cycle: 3, is_shared: 0 });
 
     expect(formatRecurringOptionLabel(sharedItem)).toBe('[公帳] 房租 ($20,000)');
     expect(formatRecurringOptionLabel(personalItem)).toBe('[私帳] Netflix ($390)');
+    expect(formatRecurringOptionLabel(weeklyItem)).toBe('[私帳] 每週教練課 ($500)');
   });
 
   it('returns null when no recurring item is selected (empty option)', () => {

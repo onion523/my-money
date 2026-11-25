@@ -69,6 +69,7 @@ export const CATEGORIES = {
 
 
 export const CYCLE_LABELS: Record<string, string> = {
+  weekly: '每週',
   monthly: '每月',
   bimonthly: '每雙月',
   quarterly: '每季',

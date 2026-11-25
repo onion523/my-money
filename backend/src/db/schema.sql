@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS recurring_items (
   name TEXT NOT NULL,
   type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
   amount REAL NOT NULL,
-  cycle TEXT NOT NULL CHECK(cycle IN ('monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual')),
+  cycle TEXT NOT NULL CHECK(cycle IN ('weekly', 'monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual')),
   day_of_cycle INTEGER NOT NULL DEFAULT 1,
   month_of_cycle INTEGER NOT NULL DEFAULT 1,
   is_shared INTEGER NOT NULL DEFAULT 0,

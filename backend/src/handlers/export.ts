@@ -36,7 +36,13 @@ exportRouter.get('/csv', async (c) => {
   });
 });
 
+const WEEKDAY_NAMES = ['一', '二', '三', '四', '五', '六', '日'];
+
 function formatSchedule(cycle: string, day: number, month = 1): string {
+  if (cycle === 'weekly') {
+    const wd = WEEKDAY_NAMES[(day >= 1 && day <= 7 ? day : 1) - 1] || '一';
+    return `每週${wd}`;
+  }
   if (cycle === 'monthly') return `每月 ${day} 號`;
   if (cycle === 'bimonthly') return `${month === 1 ? '單數月' : '雙數月'} ${day} 號`;
   if (cycle === 'quarterly') {
@@ -59,7 +65,7 @@ exportRouter.get('/recurring', async (c) => {
   const items = rows.results as Array<{ name: string; type: string; amount: number; cycle: string; day_of_cycle: number; month_of_cycle?: number; account: string }>;
   
   const cycleMap: Record<string, string> = {
-    monthly: '每月', bimonthly: '每雙月', quarterly: '每季', semiannual: '每半年', annual: '每年'
+    weekly: '每週', monthly: '每月', bimonthly: '每雙月', quarterly: '每季', semiannual: '每半年', annual: '每年'
   };
 
   const BOM = '\uFEFF';

@@ -10,7 +10,7 @@ type Vars = { userId: string; userEmail: string; userName: string };
 const forecast = new Hono<{ Bindings: Env; Variables: Vars }>();
 forecast.use('*', authMiddleware);
 
-const CYCLE_MONTHS: Record<string, number> = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
+const CYCLE_MONTHS: Record<string, number> = { weekly: 0.25, monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
 
 let forecastSchemaMigrated = false;
 let forecastMigratePromise: Promise<void> | null = null;
@@ -267,10 +267,52 @@ function getDaysInForecast(
   // 2. 針對各週期項目直接進行投影 (Event Direct Projection)
   // 將複雜度由 O(days * items) 降為 O(months * items)，消除 95%+ 迴圈開銷
   for (const item of items) {
-    const cycleM = CYCLE_MONTHS[item.cycle] || 1;
-    const anchorM = item.month_of_cycle || 1;
     const isShared = item.is_shared ?? 0;
     const canSettle = isShared === 0 ? item.user_id === userId : (item.user_id === userId || myRole === 'admin');
+
+    if (item.cycle === 'weekly') {
+      const targetWeekday = item.day_of_cycle >= 1 && item.day_of_cycle <= 7 ? item.day_of_cycle : 1;
+      for (const d of forecastDays) {
+        if (d.weekday !== targetWeekday) continue;
+
+        if (item.account_type === 'credit_card' && item.payment_due_day) {
+          // 信用卡扣款之每週週期收支：平移至對應之信用卡繳款日，並在 event_key 與名稱附加原刷卡日以避免同一帳期多筆碰撞
+          const due = calculateCreditCardDueDate(d.year, d.month, d.day, item.statement_day ?? null, item.payment_due_day);
+          if (due.dateStr >= minDateStr && due.dateStr <= maxDateStr) {
+            const eventKey = `recurring:${item.id}:${due.dateStr}:${d.dateStr}`;
+            const chargeMmDd = d.dateStr.slice(5).replace('-', '/');
+            events.push({
+              event_key: eventKey,
+              date: due.dateStr,
+              name: `${item.name} (${chargeMmDd} 刷 · ${item.account_name || '信用卡'} 信用卡繳款日扣款)`,
+              type: item.type,
+              amount: item.amount,
+              is_shared: isShared,
+              account_name: item.account_name || undefined,
+              is_settled: settledKeys.has(eventKey),
+              can_settle: canSettle,
+            });
+          }
+        } else {
+          const eventKey = `recurring:${item.id}:${d.dateStr}`;
+          events.push({
+            event_key: eventKey,
+            date: d.dateStr,
+            name: item.name,
+            type: item.type,
+            amount: item.amount,
+            is_shared: isShared,
+            account_name: item.account_name || undefined,
+            is_settled: settledKeys.has(eventKey),
+            can_settle: canSettle,
+          });
+        }
+      }
+      continue;
+    }
+
+    const cycleM = CYCLE_MONTHS[item.cycle] || 1;
+    const anchorM = item.month_of_cycle || 1;
 
     for (const m of months) {
       const monthDiff = m.month - anchorM;

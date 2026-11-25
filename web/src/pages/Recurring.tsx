@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 
 const CYCLE_DIVISORS: Record<string, number> = {
+  weekly: 0.25,
   monthly: 1,
   bimonthly: 2,
   quarterly: 3,
@@ -31,9 +32,23 @@ const CYCLE_DIVISORS: Record<string, number> = {
   annual: 12,
 }
 
+const WEEKDAY_LABELS: Record<number, string> = {
+  1: '週一',
+  2: '週二',
+  3: '週三',
+  4: '週四',
+  5: '週五',
+  6: '週六',
+  7: '週日',
+}
+
 function formatScheduleLabel(item: RecurringItem, actionText: '扣款' | '入帳'): string {
   const day = item.day_of_cycle;
   const month = item.month_of_cycle || 1;
+  if (item.cycle === 'weekly') {
+    const wd = WEEKDAY_LABELS[day] || '週一';
+    return `每${wd}${actionText}`;
+  }
   if (item.cycle === 'monthly') return `每月 ${day} 號${actionText}`;
   if (item.cycle === 'bimonthly') {
     return `${month === 1 ? '單數月' : '雙數月'} ${day} 號${actionText}`;
@@ -68,7 +83,7 @@ export default function Recurring() {
     name: '',
     type: 'expense' as 'expense' | 'income',
     amount: '',
-    cycle: 'monthly' as 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual',
+    cycle: 'monthly' as 'weekly' | 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual',
     day_of_cycle: '1',
     month_of_cycle: '1',
     account_id: '',
@@ -129,8 +144,15 @@ export default function Recurring() {
   const handleCycleChange = (newCycle: typeof form.cycle) => {
     setForm(prev => {
       let newMonth = prev.month_of_cycle
+      let newDay = prev.day_of_cycle
       const mNum = parseInt(newMonth) || 1
-      if (newCycle === 'monthly') {
+      const dNum = parseInt(newDay) || 1
+      if (newCycle === 'weekly') {
+        newMonth = '1'
+        if (dNum < 1 || dNum > 7) {
+          newDay = '1'
+        }
+      } else if (newCycle === 'monthly') {
         newMonth = '1'
       } else if (newCycle === 'bimonthly' && mNum > 2) {
         newMonth = '1'
@@ -141,7 +163,7 @@ export default function Recurring() {
       } else if (newCycle === 'annual' && (mNum < 1 || mNum > 12)) {
         newMonth = '1'
       }
-      return { ...prev, cycle: newCycle, month_of_cycle: newMonth }
+      return { ...prev, cycle: newCycle, day_of_cycle: newDay, month_of_cycle: newMonth }
     })
   }
 
@@ -193,7 +215,7 @@ export default function Recurring() {
       return
     }
     const day = parseInt(form.day_of_cycle) || 1
-    const month = form.cycle === 'monthly' ? 1 : (parseInt(form.month_of_cycle) || 1)
+    const month = form.cycle === 'weekly' || form.cycle === 'monthly' ? 1 : (parseInt(form.month_of_cycle) || 1)
 
     try {
       setSubmitting(true)
@@ -338,7 +360,7 @@ export default function Recurring() {
             <span>週期支出每月平均</span>
             <FormulaTooltip
               label="檢視週期支出每月平均計算公式"
-              formula="∑（各筆週期支出金額 ÷ 週期月數：月繳÷1、雙月÷2、季繳÷3、半年÷6、年繳÷12）"
+              formula="∑（各筆週期支出金額 ÷ 週期月數：週繳×4(÷0.25)、月繳÷1、雙月÷2、季繳÷3、半年÷6、年繳÷12）"
               calculation={
                 expenseItems.length > 0
                   ? `共 ${expenseItems.length} 筆週期支出平攤合計 = ${formatCurrency(amortize?.monthly_expense ?? 0)} / 月`
@@ -349,7 +371,7 @@ export default function Recurring() {
           <div className="stat-value" style={{ color: 'var(--color-danger)' }}>
             {formatCurrency(amortize?.monthly_expense ?? 0)}
           </div>
-          <div className="stat-sub">將年繳、季繳換算為每月預留負擔</div>
+          <div className="stat-sub">將每週、年繳、季繳換算為每月預留負擔</div>
         </div>
 
         <div className="stat-card">
@@ -357,7 +379,7 @@ export default function Recurring() {
             <span>週期收入每月預估</span>
             <FormulaTooltip
               label="檢視週期收入每月預估計算公式"
-              formula="∑（各筆週期收入金額 ÷ 週期月數：月領÷1、雙月÷2、季領÷3、半年÷6、年領÷12）"
+              formula="∑（各筆週期收入金額 ÷ 週期月數：週領×4(÷0.25)、月領÷1、雙月÷2、季領÷3、半年÷6、年領÷12）"
               calculation={
                 incomeItems.length > 0
                   ? `共 ${incomeItems.length} 筆週期收入平攤合計 = ${formatCurrency(amortize?.monthly_income ?? 0)} / 月`
@@ -503,6 +525,7 @@ export default function Recurring() {
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {incomeItems.map((item) => {
+                const monthlyShare = item.amount / (CYCLE_DIVISORS[item.cycle] || 1)
                 const isConfirming = confirmingDeleteId === item.id
                 return (
                   <div
@@ -532,6 +555,7 @@ export default function Recurring() {
                       </div>
                       <div className="recurring-card-meta">
                         {item.account_name ? `入帳帳戶：${item.account_name}` : '未指定關聯帳戶'}
+                        {item.cycle !== 'monthly' && ` · 換算每月平均：${formatCurrency(monthlyShare)} / 月`}
                       </div>
                     </div>
 
@@ -645,7 +669,7 @@ export default function Recurring() {
             </div>
 
             {/* 週期與月份選擇 */}
-            {form.cycle === 'monthly' ? (
+            {form.cycle === 'weekly' || form.cycle === 'monthly' ? (
               <div className="grid grid-2" style={{ gap: 10 }}>
                 <div className="input-group">
                   <label className="input-label">付款 / 入帳週期</label>
@@ -655,6 +679,7 @@ export default function Recurring() {
                     value={form.cycle}
                     onChange={e => handleCycleChange(e.target.value as any)}
                   >
+                    <option value="weekly">每週</option>
                     <option value="monthly">每月</option>
                     <option value="bimonthly">每雙月 (2個月)</option>
                     <option value="quarterly">每季 (3個月)</option>
@@ -663,19 +688,39 @@ export default function Recurring() {
                   </select>
                 </div>
 
-                <div className="input-group">
-                  <label className="input-label">{form.type === 'income' ? '入帳日' : '扣款日'} (每月 1~31 號)</label>
-                  <input
-                    id="rec-day"
-                    className="input"
-                    type="number"
-                    min="1"
-                    max="31"
-                    required
-                    value={form.day_of_cycle}
-                    onChange={e => setForm(p => ({ ...p, day_of_cycle: e.target.value }))}
-                  />
-                </div>
+                {form.cycle === 'weekly' ? (
+                  <div className="input-group">
+                    <label className="input-label">{form.type === 'income' ? '入帳星期' : '扣款星期'}</label>
+                    <select
+                      id="rec-day"
+                      className="input"
+                      value={form.day_of_cycle}
+                      onChange={e => setForm(p => ({ ...p, day_of_cycle: e.target.value }))}
+                    >
+                      <option value="1">每週一</option>
+                      <option value="2">每週二</option>
+                      <option value="3">每週三</option>
+                      <option value="4">每週四</option>
+                      <option value="5">每週五</option>
+                      <option value="6">每週六</option>
+                      <option value="7">每週日</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="input-group">
+                    <label className="input-label">{form.type === 'income' ? '入帳日' : '扣款日'} (每月 1~31 號)</label>
+                    <input
+                      id="rec-day"
+                      className="input"
+                      type="number"
+                      min="1"
+                      max="31"
+                      required
+                      value={form.day_of_cycle}
+                      onChange={e => setForm(p => ({ ...p, day_of_cycle: e.target.value }))}
+                    />
+                  </div>
+                )}
               </div>
             ) : (
               <>
@@ -687,6 +732,7 @@ export default function Recurring() {
                     value={form.cycle}
                     onChange={e => handleCycleChange(e.target.value as any)}
                   >
+                    <option value="weekly">每週</option>
                     <option value="monthly">每月</option>
                     <option value="bimonthly">每雙月 (2個月)</option>
                     <option value="quarterly">每季 (3個月)</option>

@@ -30,11 +30,12 @@ export function getTaipeiDate(date: Date = new Date()): { year: number; month: n
 
 /**
  * 取得從台北今天開始往後推 N 天之台北時區日期物件清單
+ * weekday: 1 (週一) ~ 7 (週日)
  */
-type ForecastDay = { dateStr: string; year: number; month: number; day: number };
+export type ForecastDay = { dateStr: string; year: number; month: number; day: number; weekday: number };
 let forecastDaysCache: { key: string; value: ForecastDay[] } | null = null;
 
-export function getTaipeiForecastDays(days = 30): Array<{ dateStr: string; year: number; month: number; day: number }> {
+export function getTaipeiForecastDays(days = 30): ForecastDay[] {
   const now = new Date();
   const taipeiDateStr = getTaipeiDateString(now);
   const cacheKey = `${taipeiDateStr}:${days}`;
@@ -53,11 +54,14 @@ export function getTaipeiForecastDays(days = 30): Array<{ dateStr: string; year:
     const year = taipei.getUTCFullYear();
     const month = taipei.getUTCMonth() + 1;
     const day = taipei.getUTCDate();
+    const utcDay = taipei.getUTCDay(); // 0=週日, 1=週一 ... 6=週六
+    const weekday = utcDay === 0 ? 7 : utcDay; // 1=週一 ... 7=週日
     result.push({
       dateStr: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
       year,
       month,
-      day
+      day,
+      weekday,
     });
   }
   forecastDaysCache = { key: cacheKey, value: result };
