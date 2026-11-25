@@ -20,7 +20,8 @@ import {
   BookHeart,
   Menu,
   X,
-  Plus
+  Plus,
+  Sliders,
 } from 'lucide-react'
 
 const navItems = [
@@ -28,6 +29,7 @@ const navItems = [
   { to: '/transactions', icon: ArrowLeftRight, label: '收支明細' },
   { to: '/accounts', icon: CreditCard, label: '帳戶管理' },
   { to: '/recurring', icon: RefreshCw, label: '週期收支' },
+  { to: '/budgets', icon: Sliders, label: '預算管理' },
   { to: '/goals', icon: Target, label: '儲蓄目標' },
   { to: '/analytics', icon: BarChart2, label: '統計圖表' },
   { to: '/forecast', icon: TrendingUp, label: '現金流預測' },

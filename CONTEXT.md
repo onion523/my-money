@@ -304,7 +304,7 @@ _Avoid_: 自由提款 (unrestricted withdrawal)、代領 (proxy reimbursement)
 _Avoid_: 系統字型 Emoji (system font emoji)、跨平台不一致繪文字 (platform-dependent pictographs)
 
 **Unified Ledger Scope (統一帳本範疇體系)**:
-全站各頁面（Dashboard 總覽、Transactions 收支明細、Accounts 帳戶資產、Recurring 週期收支、Analytics 財務分析、Forecast 現金流預測）在提供資料範圍過濾或切換檢視時，一律採用「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」三態結構，並固定搭配高對比 Lucide 向量 SVG 圖示：`Globe` 全部、`Home` 公帳、`Lock` 私帳。切換器為純選項群組，不附「檢視範圍」等標題文字；彈窗內之公帳／私帳歸屬二態按鈕沿用同一 SVG 圖示與用語。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語及任何 Emoji 符號。
+全站各頁面（Dashboard 總覽、Transactions 收支明細、Accounts 帳戶資產、Recurring 週期收支、Budgets 預算管理、Analytics 財務分析、Forecast 現金流預測）在提供資料範圍過濾或切換檢視時，一律採用「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」三態結構，並固定搭配高對比 Lucide 向量 SVG 圖示：`Globe` 全部、`Home` 公帳、`Lock` 私帳。切換器為純選項群組，不附「檢視範圍」等標題文字；彈窗內之公帳／私帳歸屬二態按鈕沿用同一 SVG 圖示與用語。全站徹底消除「全貌合併」、「家庭公用 (共同基金/家庭卡)」、「合併」等不一致用語及任何 Emoji 符號。
 _Avoid_: 全貌合併 (full merge)、檢視合併 (combined view)、家庭公用 (household common)、Emoji 視角符號 (emoji scope pictographs)
 
 **All Scope (全部)**:
@@ -499,9 +499,17 @@ _Avoid_: 存錢筒 (piggy bank)、夢想基金 (fund target)、願望 (wish)、�
    - 當前視角之**每月有效總預算（`effectiveTotalBudget`）**自動取 `max(手動設定之總預算, ∑ 已設定之各分類預算總和)`，確保即使使用者僅設定個別分類預算、或分類預算加總超過原先手動設定之總預算時，總預算把關額度依然合理自洽。
    - **日常消費統計邊界**：計算分類預算與每月總預算之「已花費金額 (`spent`)」時，嚴格排除 4 項系統內部移轉類別（`信用卡還款`、`內部轉帳`、`ATM提款`、`公帳代墊報銷`），與統計分析消費分類圓餅圖 100% 對齊。
    - **三段式進度狀態與警示**：已花費佔比 `< 80%` 為安全翠綠（`safe`）、`80% ~ 100%` 為接近上限琥珀黃警戒（`warning` / `80%+`）、`> 100%` 為超支危險珊瑚紅（`over`，醒目標示超支金額）。
-4. **總覽頁 (`Dashboard.tsx`) 與統計頁 (`Analytics.tsx`) 雙端預算把關卡片**：
-   - 在「統計與分析 (`Analytics.tsx`)」之預算限額把關區塊頂部，新增醒目的「每月總預算進度總覽卡」（顯示當前視角之有效總預算、當月累計已花費、剩餘可花費額度或超支金額、使用率進度條，以及「設定總預算」與「設定分類預算」按鈕）。
-   - 在「總覽頁 (`Dashboard.tsx`)」右側資訊欄新增「本月預算把關」摘要卡片（呈現當前視角之每月總預算進度與前 3~4 項重點分類預算進度，並提供快速跳轉或設定入口），且頂部超支警示橫幅隨當前公私帳視角動態連動。
+4. **「預算管理 (`Budgets.tsx` / `/budgets`)」獨立頁面與總覽頁 (`Dashboard.tsx`) 雙端把關架構**：
+   - **職責完全抽離（Separation of Concerns）**：將預算設定與把關由「統計與分析 (`Analytics.tsx` / `/analytics`)」完全抽離為獨立一級頁面「預算管理 (`/budgets`，搭配 `Sliders` 圖示，於左側主選單排列於「週期收支」與「儲蓄目標」之間）」；「統計與分析」頁專注於家庭公帳墊付分攤統計、支出分類圓餅圖與年度收支趨勢長條圖。
+   - **「預算管理 (`Budgets.tsx`)」完整預算中心版面**：
+     1. **頂部標題與操作列**：支援月份切換（`input[type="month"]`）、「設定每月總預算」按鈕、「設定分類預算」主按鈕，以及下方 `ScopeTabBar` 三態視角切換器（全部 / 公帳 / 私帳）與 1:1 對齊之 `BudgetsSkeleton` 骨架屏。
+     2. **三大核心預算統計卡片（`.stat-card` + `FormulaTooltip`）**：
+        - **每月有效總預算**：顯示 `effectiveTotalBudget`（標註依手動總預算上限或依分類預算加總）。
+        - **當月日常消費已花**：顯示 `totalSpent` 及佔有效總預算之使用率百分比。
+        - **本月剩餘可花費（或已超支金額）**：顯示 `remainingBudget`（當超支時以珊瑚紅顯示超支差額，未超支時註明已預留於真實可支配現金）。
+     3. **每月總預算進度總覽大卡**：呈現醒目的三段式總進度條（`< 80%` 安全翠綠、`80% ~ 100%` 警戒琥珀黃、`> 100%` 超支珊瑚紅）、公私帳總預算拆解與快捷調整入口。
+     4. **四態分類預算篩選頁籤（Category Budget Filter Tabs）**：提供 `全部分類 (16)`、`已設預算 (N)`、`超支 / 警戒 (N)`（已設預算且 `spent / amount >= 0.8`）、`未設預算 (N)` 四顆篩選頁籤（行動端 `<= 640px` 自動轉為 `2x2` 雙欄等寬網格），搭配下方分類預算進度卡片清單與常駐預算設定／清除彈窗。
+   - **總覽頁 (`Dashboard.tsx`) 摘要卡片連動**：右側資訊欄之「本月預算把關」摘要卡片呈現當前視角之每月有效總預算進度與前 3~4 項重點分類預算進度，其「設定」與「前往設定每月預算」連結全面指向 `/budgets`。
 5. **真實可支配現金預留與現金流預測「納入預算預扣」開關（Disposable Cash Reserve & Forecast Budget Toggle）**：
    - **真實可支配現金 (`Disposable Cash`)**：`GET /accounts/balance` 回傳當前視角之 `monthlyBudget`（每月有效總預算）、`monthSpent`（當月已花費日常消費）與 `remainingBudget`（`max(0, monthlyBudget - monthSpent)`，當月剩餘未用預算預留），並將 `disposable` 更新為 `available - monthlyFixed - monthlyGoals - remainingBudget`（因 `monthSpent` 已實質反映於帳戶餘額減少或信用卡欠款增加，僅預扣尚未花掉之 `remainingBudget` 以防重複雙扣）。
    - **現金流預測 (`Forecast`) 可選預扣開關**：`GET /forecast` 與 `POST /forecast/purchase-check` 支援查詢參數／欄位 `include_budget = 1`（前端預測頁提供「納入預算預扣」切換開關，預設關閉以避免未預期的全年透支警報）。當開啟時：

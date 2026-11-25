@@ -639,8 +639,8 @@ export default function Dashboard() {
                 <Sliders size={20} color="var(--color-primary)" style={{ flexShrink: 0 }} />
                 <span>本月預算把關 ({viewScope === 'household' ? '公帳' : viewScope === 'personal' ? '私帳' : '全部'})</span>
               </h2>
-              <Link to="/analytics" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>
-                設定 <ChevronRight size={16} />
+              <Link to="/budgets" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>
+                管理 <ChevronRight size={16} />
               </Link>
             </div>
 
@@ -655,7 +655,7 @@ export default function Dashboard() {
                 return (
                   <div className="text-sm text-muted" style={{ textAlign: 'center', padding: '14px 0' }}>
                     <p style={{ marginBottom: 10 }}>尚未設定{viewScope === 'household' ? '家庭公帳' : viewScope === 'personal' ? '個人私帳' : ''}常駐每月預算</p>
-                    <Link to="/analytics" className="btn btn-secondary btn-sm">前往設定每月預算</Link>
+                    <Link to="/budgets" className="btn btn-secondary btn-sm">前往設定每月預算</Link>
                   </div>
                 )
               }

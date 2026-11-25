@@ -286,15 +286,68 @@ export function AnalyticsSkeleton() {
           <Skeleton variant="rect" height={240} borderRadius={12} />
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* 預算清單骨架 */}
+// ----------------------------------------------------
+// 4b. Budgets Skeleton
+// ----------------------------------------------------
+export function BudgetsSkeleton() {
+  return (
+    <div className="fade-in">
+      {/* 標題與月份選擇器＋操作鈕骨架 */}
+      <div className="page-header-row">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <Skeleton variant="text" width="min(160px, 60%)" height={28} />
+          <Skeleton variant="text" width="min(280px, 90%)" height={16} style={{ marginTop: 6 }} />
+        </div>
+        <div className="header-actions">
+          <Skeleton variant="rect" width={136} height={38} borderRadius={8} />
+          <Skeleton variant="rect" width={120} height={38} borderRadius={8} />
+          <Skeleton variant="rect" width={120} height={38} borderRadius={8} />
+        </div>
+      </div>
+
+      {/* 公私帳切換列骨架 */}
+      <ScopeTabBarSkeleton />
+
+      {/* 三大預算統計卡片骨架 */}
+      <div className="grid grid-3" style={{ marginBottom: 24 }}>
+        {[1, 2, 3].map(i => (
+          <div key={i} className="stat-card" style={{ minWidth: 0 }}>
+            <Skeleton variant="text" width="55%" height={14} style={{ marginBottom: 8 }} />
+            <Skeleton variant="text" width="75%" height={26} style={{ marginBottom: 6 }} />
+            <Skeleton variant="text" width="60%" height={12} />
+          </div>
+        ))}
+      </div>
+
+      {/* 每月總預算進度總覽大卡骨架 */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="flex items-center justify-between gap-2" style={{ marginBottom: 12 }}>
+          <Skeleton variant="text" width="min(220px, 65%)" height={20} />
+          <Skeleton variant="rect" width={96} height={30} borderRadius={8} />
+        </div>
+        <Skeleton variant="rect" height={10} borderRadius={999} style={{ marginBottom: 10 }} />
+        <Skeleton variant="text" width="min(260px, 80%)" height={14} />
+      </div>
+
+      {/* 四態分類篩選列骨架 */}
+      <div className="account-category-tab-bar" style={{ pointerEvents: 'none', marginBottom: 16 }}>
+        <Skeleton variant="rect" className="account-category-tab-btn" width={104} height={32} borderRadius={8} />
+        <Skeleton variant="rect" className="account-category-tab-btn" width={104} height={32} borderRadius={8} />
+        <Skeleton variant="rect" className="account-category-tab-btn" width={116} height={32} borderRadius={8} />
+        <Skeleton variant="rect" className="account-category-tab-btn" width={104} height={32} borderRadius={8} />
+      </div>
+
+      {/* 分類預算清單骨架 */}
       <div className="card">
-        <Skeleton variant="text" width={120} height={20} style={{ marginBottom: 16 }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {[1, 2, 3].map(i => (
-            <div key={i}>
-              <div className="flex justify-between gap-2" style={{ marginBottom: 6 }}>
-                <Skeleton variant="text" width="35%" height={16} />
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} style={{ padding: 14, borderRadius: 12, background: 'var(--bg-surface-2)', border: '1px solid var(--border-color)' }}>
+              <div className="flex justify-between gap-2" style={{ marginBottom: 8 }}>
+                <Skeleton variant="text" width="35%" height={18} />
                 <Skeleton variant="text" width="40%" height={16} />
               </div>
               <Skeleton variant="rect" height={8} borderRadius={4} />

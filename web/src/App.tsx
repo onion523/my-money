@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
 import Accounts from './pages/Accounts'
 import Recurring from './pages/Recurring'
+import Budgets from './pages/Budgets'
 import Goals from './pages/Goals'
 import Analytics from './pages/Analytics'
 import Forecast from './pages/Forecast'
@@ -98,6 +99,7 @@ export default function App() {
         <Route path="transactions" element={<Transactions />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="recurring" element={<Recurring />} />
+        <Route path="budgets" element={<Budgets />} />
         <Route path="goals" element={<Goals />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="forecast" element={<Forecast />} />
