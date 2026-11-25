@@ -83,14 +83,15 @@ CREATE TABLE IF NOT EXISTS goals (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 月度預算
+-- 月度預算 (ADR-0046：支援 is_shared 公私帳歸屬與 month = 'default' 常駐預設)
 CREATE TABLE IF NOT EXISTS budgets (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   category TEXT NOT NULL,
   amount REAL NOT NULL,
-  month TEXT NOT NULL,
-  UNIQUE(user_id, category, month)
+  month TEXT NOT NULL DEFAULT 'default',
+  is_shared INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(user_id, is_shared, category, month)
 );
 
 -- 索引

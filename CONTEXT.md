@@ -56,8 +56,8 @@ _Avoid_: 負債帳戶 (debt account)、卡片 (card)
 _Avoid_: 淨值 (net worth)、可用額度 (credit limit)、總餘額 (total balance)
 
 **Disposable Cash (真實可支配現金)**:
-淨可用餘額進一步扣除當期週期收支每月平均預留與進行中儲蓄目標款項後的安全自由花費餘額。
-_Avoid_: 零用錢 (pocket money)、空閒餘額 (free cash)、閒置資金 (idle cash)
+淨可用餘額進一步扣除當期週期收支每月平均預留、進行中儲蓄目標每月預留款，以及當月剩餘未用預算預留額（`remainingBudgetReserve = max(0, 當月有效總預算 - 當月日常消費已花費)`）後的安全自由花費餘額。由於當月已經花掉的消費已實質扣減現金／銀行存款或增加信用卡欠款，僅預扣「尚未花掉的當月剩餘預算」即可精準反映本月底前扣除預計預算花費後真正可自由動用的現金，絕不重複雙扣已發生之消費。
+_Avoid_: 零用錢 (pocket money)、空閒餘額 (free cash)、閒置資金 (idle cash)、將完整每月總預算與當月已發生消費重複雙扣 (double-deducting full monthly budget on top of already spent transactions)
 
 **Explicit Account Selection (顯式帳戶選取原則)**:
 在新增交易記帳、帳戶互轉、信用卡還款與公帳報銷等表單中，系統嚴格禁止擅自預選任何帳戶或信用卡（無自動預設值），強制使用者主動檢視並選取會計主體；未選取時表單透過原生 required 與介面警示進行防呆攔截。必填欄位之佔位項目設為 disabled 禁止反選回空；非必填之週期收支則提供「無特定帳戶」並允許選取與切換。
@@ -481,9 +481,33 @@ _Avoid_: 刪除排程 (delete schedule)、永久停用 (permanent disable)
 使用者設定具有目標總額與預計達成日的專項資產目標，其每月提撥額實質鎖定可支配現金。目標圖示採用 12 款預設 Lucide 向量 SVG 圖示選擇器（將圖示代號存入 `emoji` 欄位，並對既有資料庫中舊有 Emoji 字串自動向後相容轉譯為對應 SVG 圖示）。
 _Avoid_: 存錢筒 (piggy bank)、夢想基金 (fund target)、願望 (wish)、直接渲染生文字 Emoji (raw emoji rendering)
 
-**Budget (預算額度)**:
-針對特定月份與特定消費類別所設定之支出上限，並具備即時預警監控。
-_Avoid_: 額度 (spending limit)、花費上限 (cap)、配額 (allowance)
+**Budget & Scoped Persistent Budget System (預算額度與三態常駐預算體系，ADR-0046)**:
+針對日常消費類別（16 項標準支出分類）及全月總支出（`category = '__TOTAL__'`）所設定之月度支出上限與即時預警把關機制，具備以下五大核心特性：
+1. **每月常駐預設與單月特定覆寫（Persistent Default & Month-Specific Override）**：
+   - 預算預設儲存為「每月常駐預設（`month = 'default'`）」，設定一次即自動跨月沿用至所有月份，免除每個月初重新設定的繁瑣操作。
+   - 同時相容單月特定覆寫（`month = 'YYYY-MM'`）：查詢指定月份之預算時，針對同一分類與公私帳歸屬，優先取用該月份（`YYYY-MM`）之設定，若無則自動回退套用常駐預設（`default`）。
+   - 支援隨時刪除／清除已設定之預算（`DELETE /budgets/:id` 或於預算設定彈窗點擊「清除此項預算」）。
+2. **公私帳兩層分離與三態視角聚合（Household / Personal Two-Layer Attribution & All-Scope Aggregation）**：
+   - 預算區分為「家庭公帳預算（`is_shared = 1`）」與「個人私帳預算（`is_shared = 0`）」兩層獨立儲存。
+   - **權限邊界**：個人私帳預算（`is_shared = 0`）僅限本人檢視、設定與刪除；家庭公帳預算（`is_shared = 1`）由家庭全體成員共享檢視並協作共管（任一家庭成員皆可新增、調整或清除家庭公帳預算）。
+   - **三態視角（`all` / `household` / `personal`）對應規則**：
+     - 在「公帳 (`household`)」視角下：僅檢視與比對家庭公帳預算（`is_shared = 1`）及家庭公帳日常消費支出。
+     - 在「私帳 (`personal`)」視角下：僅檢視與比對本人之個人私帳預算（`is_shared = 0`）及個人私帳日常消費支出。
+     - 在「全部 (`all`)」視角下：將同一分類之「家庭公帳預算 ＋ 個人私帳預算」自動相加作為該分類之總預算額度，並與「公帳＋本人私帳」之該分類總消費比對；點擊設定預算時，彈窗內提供「私帳 / 公帳」二態歸屬切換器供明確指定要設定哪一層預算。
+3. **智慧每月總預算上限（Smart Monthly Total Budget）**：
+   - 支援透過虛擬分類 `category = '__TOTAL__'` 獨立設定「每月總預算（手動總預算，`manualTotalBudget`）」。
+   - 當前視角之**每月有效總預算（`effectiveTotalBudget`）**自動取 `max(手動設定之總預算, ∑ 已設定之各分類預算總和)`，確保即使使用者僅設定個別分類預算、或分類預算加總超過原先手動設定之總預算時，總預算把關額度依然合理自洽。
+   - **日常消費統計邊界**：計算分類預算與每月總預算之「已花費金額 (`spent`)」時，嚴格排除 4 項系統內部移轉類別（`信用卡還款`、`內部轉帳`、`ATM提款`、`公帳代墊報銷`），與統計分析消費分類圓餅圖 100% 對齊。
+   - **三段式進度狀態與警示**：已花費佔比 `< 80%` 為安全翠綠（`safe`）、`80% ~ 100%` 為接近上限琥珀黃警戒（`warning` / `80%+`）、`> 100%` 為超支危險珊瑚紅（`over`，醒目標示超支金額）。
+4. **總覽頁 (`Dashboard.tsx`) 與統計頁 (`Analytics.tsx`) 雙端預算把關卡片**：
+   - 在「統計與分析 (`Analytics.tsx`)」之預算限額把關區塊頂部，新增醒目的「每月總預算進度總覽卡」（顯示當前視角之有效總預算、當月累計已花費、剩餘可花費額度或超支金額、使用率進度條，以及「設定總預算」與「設定分類預算」按鈕）。
+   - 在「總覽頁 (`Dashboard.tsx`)」右側資訊欄新增「本月預算把關」摘要卡片（呈現當前視角之每月總預算進度與前 3~4 項重點分類預算進度，並提供快速跳轉或設定入口），且頂部超支警示橫幅隨當前公私帳視角動態連動。
+5. **真實可支配現金預留與現金流預測「納入預算預扣」開關（Disposable Cash Reserve & Forecast Budget Toggle）**：
+   - **真實可支配現金 (`Disposable Cash`)**：`GET /accounts/balance` 回傳當前視角之 `monthlyBudget`（每月有效總預算）、`monthSpent`（當月已花費日常消費）與 `remainingBudget`（`max(0, monthlyBudget - monthSpent)`，當月剩餘未用預算預留），並將 `disposable` 更新為 `available - monthlyFixed - monthlyGoals - remainingBudget`（因 `monthSpent` 已實質反映於帳戶餘額減少或信用卡欠款增加，僅預扣尚未花掉之 `remainingBudget` 以防重複雙扣）。
+   - **現金流預測 (`Forecast`) 可選預扣開關**：`GET /forecast` 與 `POST /forecast/purchase-check` 支援查詢參數／欄位 `include_budget = 1`（前端預測頁提供「納入預算預扣」切換開關，預設關閉以避免未預期的全年透支警報）。當開啟時：
+     - **當月月底（或若今日即月底則為今日）**：若當月剩餘未用預算 `remainingBudget > 0`，排入一筆 `每月預算剩餘預留（YYYY-MM）` 支出事件（金額 `= remainingBudget`）。
+     - **未來各月月底（預測期內後續各月份之最後一日）**：依據常駐預設（及該未來月份若有之特定覆寫）計算該月有效總預算 `futureEffectiveTotalBudget`，若 `> 0` 則於該月最後一日排入一筆 `每月預算預留（YYYY-MM）` 支出事件，讓使用者一鍵模擬「若每個月都把預算花滿」時未來 12 個月的資金水位與購買力安全性。
+_Avoid_: 額度 (spending limit)、花費上限 (cap)、配額 (allowance)、每個月初被迫重新手動輸入相同預算 (forcing manual re-entry of recurring monthly budgets every month)、預算不分公私帳導致切換公帳或私帳視角時預算與支出兜不攏 (unscoped budgets mismatching scoped expense views)、設定後無法刪除或歸零預算 (inability to delete or clear a configured budget)、將信用卡還款或內部轉帳計入預算已花費 (counting credit card repayments or internal transfers toward budget spending)、將完整月總預算與當月已發生消費重複雙扣 (double-counting full monthly budget on top of already-spent transactions)
 
 **Affordability Check (購買力試算)**:
 使用者面臨大額消費前，隨當前所選視角（全部 / 公帳 / 私帳）即時試算扣除該筆開銷並模擬未來 12 個月（365 天）該視角週期收支與各期繳卡費後，是否會發生透支或擠壓儲蓄目標預留款的安全檢查。在「公帳」視角下，專注檢核共同基金是否透支，嚴格隔離成員個人私密儲蓄目標。

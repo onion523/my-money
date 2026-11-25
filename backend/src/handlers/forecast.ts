@@ -5,6 +5,7 @@ import { getTaipeiDateString, getTaipeiForecastDays } from '../utils/date';
 import { getUserHousehold } from './households';
 import { ensureRecurringSchema } from './recurring';
 import { computeCreditCardsReadOnlyMetrics, ensureAccountsSchema } from './accounts';
+import { BudgetRow, calculateEffectiveTotalBudgetForMonth, computeScopedBudgets, ensureBudgetsSchema } from './budgets';
 
 type Vars = { userId: string; userEmail: string; userName: string };
 const forecast = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -548,10 +549,86 @@ async function getSettledKeysSet(db: any, memberUserIds: string[]): Promise<Set<
   return new Set(list.map(r => r.event_key));
 }
 
-// GET /forecast (支援 scope = all | household | personal)
+async function getBudgetForecastEvents(
+  db: any,
+  userId: string,
+  memberUserIds: string[],
+  scope: string,
+  days = FORECAST_DAYS,
+  settledKeys: Set<string> = new Set()
+): Promise<ForecastEvent[]> {
+  await ensureBudgetsSchema(db);
+  const forecastDays = getTaipeiForecastDays(days);
+  if (forecastDays.length === 0) return [];
+
+  const currentMonth = forecastDays[0].dateStr.slice(0, 7);
+  const placeholders = memberUserIds.map(() => '?').join(',');
+
+  const [currentMonthBudget, allBudgetRowsRes] = await Promise.all([
+    computeScopedBudgets(db, userId, memberUserIds, currentMonth, scope),
+    db.prepare(`
+      SELECT id, user_id, category, amount, month, COALESCE(is_shared, 0) as is_shared
+      FROM budgets
+      WHERE user_id = ? OR (user_id IN (${placeholders}) AND COALESCE(is_shared, 0) = 1)
+    `).bind(userId, ...memberUserIds).all(),
+  ]);
+
+  const rawBudgets = ((allBudgetRowsRes.results || []) as BudgetRow[]).filter(r => Number(r.amount) > 0);
+  if (rawBudgets.length === 0 && currentMonthBudget.effective_total_budget <= 0) return [];
+
+  // 蒐集預測區間內各個 YYYY-MM 在預測時間軸上的最後一天
+  const monthLastDateMap = new Map<string, string>();
+  for (const d of forecastDays) {
+    const ym = d.dateStr.slice(0, 7);
+    monthLastDateMap.set(ym, d.dateStr);
+  }
+
+  const budgetEvents: ForecastEvent[] = [];
+  const isSharedFlag = scope === 'household' ? 1 : 0;
+
+  for (const [ym, lastDateStr] of monthLastDateMap.entries()) {
+    if (ym === currentMonth) {
+      const rem = Math.round(currentMonthBudget.remaining_budget * 100) / 100;
+      if (rem > 0) {
+        const eventKey = `budget:${scope}:${ym}`;
+        budgetEvents.push({
+          event_key: eventKey,
+          date: lastDateStr,
+          name: `每月預算剩餘預留（${ym}）`,
+          type: 'expense',
+          amount: rem,
+          is_shared: isSharedFlag,
+          is_settled: settledKeys.has(eventKey),
+          can_settle: true,
+        });
+      }
+    } else {
+      const { effectiveTotal } = calculateEffectiveTotalBudgetForMonth(rawBudgets, ym, scope, userId);
+      const eff = Math.round(effectiveTotal * 100) / 100;
+      if (eff > 0) {
+        const eventKey = `budget:${scope}:${ym}`;
+        budgetEvents.push({
+          event_key: eventKey,
+          date: lastDateStr,
+          name: `每月預算預留（${ym}）`,
+          type: 'expense',
+          amount: eff,
+          is_shared: isSharedFlag,
+          is_settled: settledKeys.has(eventKey),
+          can_settle: true,
+        });
+      }
+    }
+  }
+
+  return budgetEvents;
+}
+
+// GET /forecast (支援 scope = all | household | personal & include_budget = 1 | 0)
 forecast.get('/', async (c) => {
   const userId = c.get('userId');
   const scope = c.req.query('scope') || 'all';
+  const includeBudget = c.req.query('include_budget') === '1' || c.req.query('include_budget') === 'true';
   const [, { memberUserIds, myRole }] = await Promise.all([
     ensureRecurringSchema(c.env.DB),
     getUserHousehold(c.env.DB, userId),
@@ -569,7 +646,7 @@ forecast.get('/', async (c) => {
   }
 
   const settledPromise = getSettledKeysSet(c.env.DB, memberUserIds);
-  const [startingBalance, recRows] = await Promise.all([
+  const [startingBalance, recRows, budgetEvents] = await Promise.all([
     settledPromise.then((sk) => getForecastStartingBalance(
       c.env.DB, userId, scope, memberUserIds, FORECAST_DAYS, sk, myRole
     )),
@@ -580,13 +657,16 @@ forecast.get('/', async (c) => {
       WHERE ${recCondition}
       ORDER BY r.created_at ASC
     `).bind(...recParams).all(),
+    includeBudget
+      ? settledPromise.then((sk) => getBudgetForecastEvents(c.env.DB, userId, memberUserIds, scope, FORECAST_DAYS, sk))
+      : Promise.resolve([] as ForecastEvent[]),
   ]);
   const settledKeys = await settledPromise;
   const { available, cashTotal, bankTotal, immediateCardDeduct, cardEvents } = startingBalance;
   let balance = available;
 
   const items = recRows.results as unknown as ForecastRecurringItem[];
-  const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => {
+  const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents, ...budgetEvents].sort((x, y) => {
     const dateDiff = x.date.localeCompare(y.date);
     if (dateDiff !== 0) return dateDiff;
     if (x.type !== y.type) return x.type === 'income' ? -1 : 1;
@@ -635,11 +715,12 @@ forecast.get('/', async (c) => {
   });
 });
 
-// POST /forecast/purchase-check (支援 scope = all | household | personal)
+// POST /forecast/purchase-check (支援 scope = all | household | personal & include_budget)
 forecast.post('/purchase-check', async (c) => {
   const userId = c.get('userId');
-  const { amount, scope = 'all' } = await c.req.json();
+  const { amount, scope = 'all', include_budget = false } = await c.req.json();
   if (!amount || amount <= 0) return c.json({ success: false, error: '請輸入有效金額' }, 400);
+  const includeBudget = Boolean(include_budget);
 
   const [, { memberUserIds, myRole }] = await Promise.all([
     ensureRecurringSchema(c.env.DB),
@@ -659,7 +740,7 @@ forecast.post('/purchase-check', async (c) => {
   }
 
   const settledPromise = getSettledKeysSet(c.env.DB, memberUserIds);
-  const [startingBalance, goalsRes, recRows] = await Promise.all([
+  const [startingBalance, goalsRes, recRows, budgetEvents] = await Promise.all([
     settledPromise.then((sk) => getForecastStartingBalance(
       c.env.DB, userId, scope, memberUserIds, FORECAST_DAYS, sk, myRole
     )),
@@ -673,6 +754,9 @@ forecast.post('/purchase-check', async (c) => {
       WHERE ${recCondition}
       ORDER BY r.created_at ASC
     `).bind(...recParams).all(),
+    includeBudget
+      ? settledPromise.then((sk) => getBudgetForecastEvents(c.env.DB, userId, memberUserIds, scope, FORECAST_DAYS, sk))
+      : Promise.resolve([] as ForecastEvent[]),
   ]);
   const settledKeys = await settledPromise;
   const { available, cardEvents } = startingBalance;
@@ -690,7 +774,7 @@ forecast.post('/purchase-check', async (c) => {
   }
 
   const items = recRows.results as unknown as ForecastRecurringItem[];
-  const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents].sort((x, y) => {
+  const events = [...getDaysInForecast(items, FORECAST_DAYS, settledKeys, userId, myRole), ...cardEvents, ...budgetEvents].sort((x, y) => {
     const dateDiff = x.date.localeCompare(y.date);
     if (dateDiff !== 0) return dateDiff;
     if (x.type !== y.type) return x.type === 'income' ? -1 : 1;
@@ -726,7 +810,7 @@ forecast.post('/settle', async (c) => {
   const parts = event_key.split(':');
   const kind = parts[0];
   const targetId = parts[1];
-  if ((kind !== 'recurring' && kind !== 'card_due') || !targetId) {
+  if ((kind !== 'recurring' && kind !== 'card_due' && kind !== 'budget') || !targetId) {
     return c.json({ success: false, error: '無效的 event_key 格式' }, 400);
   }
 

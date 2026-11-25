@@ -3,9 +3,11 @@ import { useState, useEffect, useRef } from 'react'
 import {
   txApi,
   budgetsApi,
+  TOTAL_BUDGET_CATEGORY,
   CategorySummary,
   MonthlyStats,
-  BudgetWithSpent
+  BudgetWithSpent,
+  BudgetSummary
 } from '../api/client'
 import {
   formatCurrency,
@@ -44,7 +46,11 @@ import {
   CheckCircle2,
   Coins,
   User,
-  Lightbulb
+  Lightbulb,
+  Home,
+  Lock,
+  Trash2,
+  RefreshCw,
 } from 'lucide-react'
 
 const PIE_COLORS = [
@@ -72,11 +78,13 @@ export default function Analytics() {
   const [catSummary, setCatSummary] = useState<CategorySummary[]>([])
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([])
   const [budgets, setBudgets] = useState<BudgetWithSpent[]>([])
+  const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null)
   const [householdShares, setHouseholdShares] = useState<Array<{ user_id: string; user_name: string; total: number }>>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 640 : false)
-  const loadedMonthRef = useRef<string | null>(null)
+  const loadedMonthScopeRef = useRef<string | null>(null)
+  const loadedMonthSharesRef = useRef<string | null>(null)
   const loadedYearScopeRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -89,7 +97,8 @@ export default function Analytics() {
 
   // 預算設定 Modal
   const [showBudgetModal, setShowBudgetModal] = useState(false)
-  const [selectedCat, setSelectedCat] = useState('餐飲')
+  const [selectedCat, setSelectedCat] = useState<string>('餐飲')
+  const [budgetIsShared, setBudgetIsShared] = useState<0 | 1>(0)
   const [budgetAmount, setBudgetAmount] = useState('')
   const [submittingBudget, setSubmittingBudget] = useState(false)
 
@@ -99,23 +108,31 @@ export default function Analytics() {
       setLoadError(null)
       const year = month.slice(0, 4)
       const yearScopeKey = `${year}:${currentScope}`
-      const needMonthData = forceBudgets || loadedMonthRef.current !== month
+      const monthScopeKey = `${month}:${currentScope}`
+      const needMonthScopeData = forceBudgets || loadedMonthScopeRef.current !== monthScopeKey
+      const needMonthShares = forceBudgets || loadedMonthSharesRef.current !== month
       const needYearScopeData = loadedYearScopeRef.current !== yearScopeKey
 
-      const [sum, mStats, buds, shares] = await Promise.all([
+      const [sum, mStats, budsRes, shares] = await Promise.all([
         txApi.summary(month, currentScope),
         needYearScopeData ? txApi.monthly(year, currentScope) : Promise.resolve(null),
-        needMonthData ? budgetsApi.list(month) : Promise.resolve(null),
-        needMonthData ? txApi.householdShares(month) : Promise.resolve(null),
+        needMonthScopeData ? budgetsApi.listWithSummary(month, currentScope) : Promise.resolve(null),
+        needMonthShares ? txApi.householdShares(month) : Promise.resolve(null),
       ])
       setCatSummary(sum)
       if (mStats !== null) {
         setMonthlyStats(mStats)
         loadedYearScopeRef.current = yearScopeKey
       }
-      if (buds !== null) setBudgets(buds)
-      if (shares !== null) setHouseholdShares(shares)
-      if (needMonthData) loadedMonthRef.current = month
+      if (budsRes !== null) {
+        setBudgets(budsRes.items)
+        setBudgetSummary(budsRes.summary)
+        loadedMonthScopeRef.current = monthScopeKey
+      }
+      if (shares !== null) {
+        setHouseholdShares(shares)
+        loadedMonthSharesRef.current = month
+      }
     } catch (e: any) {
       console.error('Failed to load analytics data:', e)
       setLoadError(e.message || '統計資料載入失敗，請檢查連線')
@@ -148,6 +165,20 @@ export default function Analytics() {
   const totalExpense = catSummary.reduce((s, c) => s + c.total, 0)
   const totalSharedExpense = householdShares.reduce((s, m) => s + m.total, 0)
 
+  const getExistingLayerBudgetAmount = (cat: string, isShared: 0 | 1): number => {
+    if (cat === TOTAL_BUDGET_CATEGORY) {
+      if (!budgetSummary) return 0
+      return isShared === 1
+        ? (budgetSummary.shared_manual_total_budget || 0)
+        : (budgetSummary.personal_manual_total_budget || 0)
+    }
+    const b = budgets.find(bg => bg.category === cat)
+    if (!b) return 0
+    if (scope === 'household') return isShared === 1 ? b.amount : (b.personal_amount || 0)
+    if (scope === 'personal') return isShared === 0 ? b.amount : (b.shared_amount || 0)
+    return isShared === 1 ? (b.shared_amount ?? 0) : (b.personal_amount ?? 0)
+  }
+
   const handleSaveBudget = async (e: React.FormEvent) => {
     e.preventDefault()
     const amt = parseFloat(budgetAmount)
@@ -161,7 +192,8 @@ export default function Analytics() {
       await budgetsApi.upsert({
         category: selectedCat,
         amount: amt,
-        month: currentMonth,
+        month: 'default',
+        is_shared: budgetIsShared,
       })
       setShowBudgetModal(false)
       setBudgetAmount('')
@@ -173,10 +205,44 @@ export default function Analytics() {
     }
   }
 
-  const openBudgetDialog = (cat: string, existingAmount?: number) => {
+  const handleClearBudget = async () => {
+    try {
+      setSubmittingBudget(true)
+      await budgetsApi.remove(selectedCat, budgetIsShared)
+      setShowBudgetModal(false)
+      setBudgetAmount('')
+      loadData(currentMonth, scope, true)
+    } catch (err: any) {
+      alert(err.message || '清除預算失敗')
+    } finally {
+      setSubmittingBudget(false)
+    }
+  }
+
+  const openBudgetDialog = (cat: string, preferredIsShared?: 0 | 1) => {
+    const defaultLayer: 0 | 1 =
+      preferredIsShared !== undefined
+        ? preferredIsShared
+        : scope === 'household'
+        ? 1
+        : 0
     setSelectedCat(cat)
-    setBudgetAmount(existingAmount ? existingAmount.toString() : '5000')
+    setBudgetIsShared(defaultLayer)
+    const existingAmt = getExistingLayerBudgetAmount(cat, defaultLayer)
+    setBudgetAmount(existingAmt > 0 ? existingAmt.toString() : (cat === TOTAL_BUDGET_CATEGORY ? '30000' : '5000'))
     setShowBudgetModal(true)
+  }
+
+  const handleSwitchBudgetLayer = (nextLayer: 0 | 1) => {
+    setBudgetIsShared(nextLayer)
+    const existingAmt = getExistingLayerBudgetAmount(selectedCat, nextLayer)
+    setBudgetAmount(existingAmt > 0 ? existingAmt.toString() : (selectedCat === TOTAL_BUDGET_CATEGORY ? '30000' : '5000'))
+  }
+
+  const handleSwitchBudgetCategory = (nextCat: string) => {
+    setSelectedCat(nextCat)
+    const existingAmt = getExistingLayerBudgetAmount(nextCat, budgetIsShared)
+    setBudgetAmount(existingAmt > 0 ? existingAmt.toString() : (nextCat === TOTAL_BUDGET_CATEGORY ? '30000' : '5000'))
   }
 
   if (loading && !catSummary.length && !monthlyStats.length) {
@@ -403,31 +469,164 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* 年度預算管理模組 */}
+      {/* 預算管理模組 (ADR-0046：三態常駐預算與智慧每月總預算) */}
       <div className="card">
         <div className="flex items-center justify-between" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <div>
             <h2 className="text-xl flex items-center gap-xs">
               <Sliders size={20} color="var(--color-primary)" />
-              {currentMonth} 預算限額把關
+              {currentMonth} 預算限額把關 ({scope === 'household' ? '公帳' : scope === 'personal' ? '私帳' : '全部'})
             </h2>
             <p className="text-xs text-muted" style={{ marginTop: 2 }}>
-              為經常支出設定預算上限，防範在不自覺中超支
+              設定一次即作為每月常駐預設自動跨月沿用，區分公私帳並自動彙算每月有效總預算
             </p>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={() => openBudgetDialog(CATEGORIES.expense[0])}>
-            設定新預算
-          </button>
+          <div className="flex items-center gap-xs" style={{ flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => openBudgetDialog(TOTAL_BUDGET_CATEGORY)}
+            >
+              設定每月總預算
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => openBudgetDialog(CATEGORIES.expense[0])}
+            >
+              設定分類預算
+            </button>
+          </div>
         </div>
+
+        {/* 每月總預算進度總覽卡 */}
+        {(() => {
+          const effTotal = budgetSummary?.effective_total_budget ?? budgets.reduce((s, b) => s + (b.amount || 0), 0)
+          const manualTotal = budgetSummary?.manual_total_budget ?? 0
+          const catSum = budgetSummary?.category_budget_sum ?? budgets.reduce((s, b) => s + (b.amount || 0), 0)
+          const spentTotal = budgetSummary?.total_spent ?? totalExpense
+          const remTotal = Math.max(0, effTotal - spentTotal)
+          const isOverTotal = effTotal > 0 && spentTotal > effTotal
+          const isWarnTotal = effTotal > 0 && !isOverTotal && spentTotal / effTotal >= 0.8
+          const pctTotal = effTotal > 0 ? Math.round((spentTotal / effTotal) * 100) : 0
+
+          return (
+            <div
+              style={{
+                padding: 18,
+                borderRadius: 'var(--radius-md)',
+                marginBottom: 20,
+                background: isOverTotal
+                  ? 'rgba(255, 107, 107, 0.08)'
+                  : isWarnTotal
+                  ? 'rgba(247, 185, 85, 0.1)'
+                  : 'var(--bg-surface-2)',
+                border: `1.5px solid ${
+                  isOverTotal
+                    ? 'var(--color-danger)'
+                    : isWarnTotal
+                    ? 'var(--color-warning)'
+                    : 'var(--border-color)'
+                }`,
+              }}
+            >
+              <div className="flex items-center justify-between" style={{ marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                <div className="flex items-center gap-xs" style={{ flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>
+                    每月有效總預算 ({scope === 'household' ? '公帳' : scope === 'personal' ? '私帳' : '全部'})
+                  </span>
+                  <FormulaTooltip
+                    label="檢視每月有效總預算與剩餘額度計算公式"
+                    formula="每月有效總預算 ＝ max(手動設定每月總預算, ∑ 已設定各分類預算總和)；當月剩餘可花費 ＝ max(0, 每月有效總預算 － 當月日常消費總支出)"
+                    calculation={`max(手動總預算 ${formatCurrency(manualTotal)}, 分類加總 ${formatCurrency(catSum)}) = 有效總預算 ${formatCurrency(effTotal)}；已花 ${formatCurrency(spentTotal)} → ${isOverTotal ? `超支 ${formatCurrency(spentTotal - effTotal)}` : `剩餘可花 ${formatCurrency(remTotal)}`}`}
+                  />
+                  {effTotal > 0 && (
+                    <span
+                      className={`badge ${isOverTotal ? 'badge-expense' : 'badge-secondary'}`}
+                      style={{ fontSize: '0.72rem' }}
+                    >
+                      {manualTotal >= catSum && manualTotal > 0 ? '依手動總預算上限' : '依分類預算加總'} · 已用 {pctTotal}%
+                    </span>
+                  )}
+                  {isOverTotal && (
+                    <span className="badge badge-expense flex items-center gap-xs">
+                      <AlertTriangle size={12} /> 總預算超支 {formatCurrency(spentTotal - effTotal)}
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ border: '1px solid var(--border-color)', fontSize: '0.78rem' }}
+                  onClick={() => openBudgetDialog(TOTAL_BUDGET_CATEGORY)}
+                >
+                  {manualTotal > 0 ? '調整總預算' : '+ 設定總預算'}
+                </button>
+              </div>
+
+              <div className="grid grid-3" style={{ gap: 12, marginBottom: 12 }}>
+                <div>
+                  <div className="text-xs text-muted">當月日常消費已花</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 700, fontFamily: 'var(--font-display)', color: isOverTotal ? 'var(--color-danger)' : 'var(--text-primary)' }}>
+                    {formatCurrency(spentTotal)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">每月有效總預算</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 700, fontFamily: 'var(--font-display)' }}>
+                    {effTotal > 0 ? formatCurrency(effTotal) : '未設定'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">{isOverTotal ? '本月已超支' : '本月剩餘可花費'}</div>
+                  <div
+                    style={{
+                      fontSize: '1.2rem',
+                      fontWeight: 700,
+                      fontFamily: 'var(--font-display)',
+                      color: isOverTotal
+                        ? 'var(--color-danger)'
+                        : effTotal > 0
+                        ? 'var(--color-success)'
+                        : 'var(--text-muted)',
+                    }}
+                  >
+                    {effTotal > 0
+                      ? isOverTotal
+                        ? `-${formatCurrency(spentTotal - effTotal)}`
+                        : formatCurrency(remTotal)
+                      : '—'}
+                  </div>
+                </div>
+              </div>
+
+              {effTotal > 0 ? (
+                <ProgressBar
+                  value={spentTotal}
+                  max={effTotal}
+                  variant={isOverTotal ? 'over' : isWarnTotal ? 'default' : 'safe'}
+                  height={10}
+                />
+              ) : (
+                <div className="text-xs text-muted">
+                  尚未設定任何總預算或分類預算。點擊右上角「+ 設定總預算」或下方各分類「+ 設定」，系統將自動跨月常駐把關並於真實可支配現金預留當月剩餘預算。
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* 分類預算進度清單 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {CATEGORIES.expense.map(cat => {
             const b = budgets.find(bg => bg.category === cat)
-            const spent = catSummary.find(cs => cs.category === cat)?.total || 0
+            const spent = b ? b.spent : (catSummary.find(cs => cs.category === cat)?.total || 0)
             const amount = b?.amount || 0
             const hasBudget = !!b && amount > 0
             const isOver = hasBudget && spent > amount
+            const personalAmt = b?.personal_amount || 0
+            const sharedAmt = b?.shared_amount || 0
 
             return (
               <div
@@ -445,6 +644,36 @@ export default function Analytics() {
                       <CategoryIcon category={cat} size={16} />
                     </span>
                     <span style={{ fontWeight: 600 }}>{cat}</span>
+                    {hasBudget && (
+                      <span
+                        className="badge"
+                        style={{
+                          fontSize: '0.68rem',
+                          background: 'var(--bg-surface)',
+                          color: 'var(--text-secondary)',
+                          border: '1px solid var(--border-color)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                        }}
+                      >
+                        <RefreshCw size={10} /> 常駐每月
+                      </span>
+                    )}
+                    {scope === 'all' && hasBudget && (
+                      <>
+                        {sharedAmt > 0 && (
+                          <span className="badge badge-primary" style={{ fontSize: '0.68rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <Home size={10} /> 公帳 {formatCurrency(sharedAmt)}
+                          </span>
+                        )}
+                        {personalAmt > 0 && (
+                          <span className="badge badge-secondary" style={{ fontSize: '0.68rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <Lock size={10} /> 私帳 {formatCurrency(personalAmt)}
+                          </span>
+                        )}
+                      </>
+                    )}
                     {isOver && (
                       <span className="badge badge-expense flex items-center gap-xs">
                         <AlertTriangle size={12} /> 超支 {formatCurrency(spent - amount)}
@@ -456,16 +685,24 @@ export default function Analytics() {
                     <div className="budget-item-amounts">
                       已花 <strong>{formatCurrency(spent)}</strong>
                       {hasBudget ? (
-                        <span className="text-muted"> / 預算 {formatCurrency(amount)}</span>
+                        <span className="text-muted">
+                          {' '}/ 預算 {formatCurrency(amount)}（{isOver ? `超支 ${formatCurrency(spent - amount)}` : `剩餘 ${formatCurrency(amount - spent)}`}）
+                        </span>
                       ) : (
                         <span className="text-muted"> (未設定預算)</span>
                       )}
                     </div>
 
                     <button
+                      type="button"
                       className="btn btn-ghost btn-sm"
                       style={{ fontSize: '0.78rem', padding: '4px 10px', flexShrink: 0 }}
-                      onClick={() => openBudgetDialog(cat, amount)}
+                      onClick={() =>
+                        openBudgetDialog(
+                          cat,
+                          scope === 'household' ? 1 : scope === 'personal' ? 0 : (sharedAmt > 0 && personalAmt === 0 ? 1 : 0)
+                        )
+                      }
                     >
                       {hasBudget ? '調整' : '+ 設定'}
                     </button>
@@ -490,44 +727,110 @@ export default function Analytics() {
 
       {/* 預算設定彈窗 */}
       {showBudgetModal && (
-        <Modal title={`設定 ${selectedCat} 的預算`} onClose={() => setShowBudgetModal(false)} maxWidth={400}>
+        <Modal
+          title={selectedCat === TOTAL_BUDGET_CATEGORY ? '設定每月總預算上限' : `設定「${selectedCat}」每月常駐預算`}
+          onClose={() => setShowBudgetModal(false)}
+          maxWidth={440}
+        >
           <form onSubmit={handleSaveBudget} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* 預算項目選擇 */}
             <div className="input-group">
-              <label className="input-label">支出類別</label>
+              <label className="input-label">預算項目</label>
               <select
                 className="input"
                 value={selectedCat}
-                onChange={e => setSelectedCat(e.target.value)}
+                onChange={e => handleSwitchBudgetCategory(e.target.value)}
               >
+                <option value={TOTAL_BUDGET_CATEGORY}>每月總預算上限（全分類總和把關）</option>
                 {CATEGORIES.expense.map(c => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>
 
+            {/* 帳本歸屬選擇 (私帳 / 公帳) */}
             <div className="input-group">
-              <label className="input-label">{currentMonth} 預算上限 (NT$)</label>
+              <label className="input-label">預算歸屬</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  className={`btn ${budgetIsShared === 0 ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{
+                    border: budgetIsShared === 0 ? 'none' : '1px solid var(--border-color)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                  }}
+                  onClick={() => handleSwitchBudgetLayer(0)}
+                >
+                  <Lock size={14} />
+                  <span>私帳預算</span>
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${budgetIsShared === 1 ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{
+                    border: budgetIsShared === 1 ? 'none' : '1px solid var(--border-color)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                  }}
+                  onClick={() => handleSwitchBudgetLayer(1)}
+                >
+                  <Home size={14} />
+                  <span>公帳預算</span>
+                </button>
+              </div>
+              <p className="text-xs text-muted" style={{ marginTop: 4 }}>
+                {budgetIsShared === 1
+                  ? '家庭公帳預算：全體家庭成員共享檢視並協作共管，專門把關家庭公帳日常開銷。'
+                  : '個人私帳預算：僅您本人可見，把關個人私帳日常消費；於「全部」視角將與公帳預算自動相加。'}
+              </p>
+            </div>
+
+            {/* 每月常駐預算金額 */}
+            <div className="input-group">
+              <label className="input-label">每月常駐預算上限 (NT$)</label>
               <input
                 className="input"
                 type="number"
                 step="1"
                 min="1"
-                placeholder="例如 8000"
+                placeholder={selectedCat === TOTAL_BUDGET_CATEGORY ? '例如 30000' : '例如 8000'}
                 required
                 autoFocus
                 value={budgetAmount}
                 onChange={e => setBudgetAmount(e.target.value)}
               />
+              <span className="text-xs text-muted" style={{ marginTop: 4 }}>
+                設定後將作為每月常駐預設值自動跨月沿用，無須每個月重新設定。
+              </span>
             </div>
 
-            <button
-              type="submit"
-              className="btn btn-primary btn-full btn-lg"
-              disabled={submittingBudget}
-              style={{ marginTop: 8 }}
-            >
-              {submittingBudget ? '儲存中...' : '確認儲存設定'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
+              {getExistingLayerBudgetAmount(selectedCat, budgetIsShared) > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px' }}
+                  disabled={submittingBudget}
+                  onClick={handleClearBudget}
+                >
+                  <Trash2 size={16} />
+                  <span>清除此項預算</span>
+                </button>
+              )}
+              <button
+                type="submit"
+                className="btn btn-primary btn-lg"
+                disabled={submittingBudget}
+                style={{ flex: 1 }}
+              >
+                {submittingBudget ? '儲存中...' : '確認儲存常駐預算'}
+              </button>
+            </div>
           </form>
         </Modal>
       )}

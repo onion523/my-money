@@ -91,6 +91,7 @@ export interface Budget {
   category: string;
   amount: number;
   month: string;
+  is_shared?: number;
 }
 
 export interface Household {

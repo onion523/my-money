@@ -12,6 +12,7 @@ interface CacheEntry {
   etag: string;
   data: any;
   nextCursor?: string | null;
+  summary?: any;
 }
 const apiCache = new Map<string, CacheEntry>();
 
@@ -19,7 +20,7 @@ export function clearApiCache() {
   apiCache.clear();
 }
 
-async function requestEnvelope<T>(path: string, options: RequestInit = {}): Promise<{ data: T; nextCursor: string | null }> {
+async function requestEnvelope<T>(path: string, options: RequestInit = {}): Promise<{ data: T; nextCursor: string | null; summary?: any }> {
   const token = getToken();
   const method = (options.method || 'GET').toUpperCase();
   const isGet = method === 'GET';
@@ -46,7 +47,7 @@ async function requestEnvelope<T>(path: string, options: RequestInit = {}): Prom
   if (res.status === 304) {
     const latestCached = cached || (isGet ? apiCache.get(path) : undefined);
     if (latestCached) {
-      return { data: latestCached.data as T, nextCursor: latestCached.nextCursor ?? null };
+      return { data: latestCached.data as T, nextCursor: latestCached.nextCursor ?? null, summary: latestCached.summary };
     }
     res = await fetch(`${BASE}${path}`, {
       ...options,
@@ -102,14 +103,14 @@ async function requestEnvelope<T>(path: string, options: RequestInit = {}): Prom
   if (isGet) {
     const etag = res.headers.get('ETag') || res.headers.get('etag');
     if (etag) {
-      apiCache.set(path, { etag, data: data.data, nextCursor: data.next_cursor ?? null });
+      apiCache.set(path, { etag, data: data.data, nextCursor: data.next_cursor ?? null, summary: data.summary });
     }
   } else {
     // 寫入操作 (POST, PUT, DELETE) 立即清空快取以維持資料即時一致
     apiCache.clear();
   }
 
-  return { data: data.data as T, nextCursor: data.next_cursor ?? null };
+  return { data: data.data as T, nextCursor: data.next_cursor ?? null, summary: data.summary };
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -340,17 +341,62 @@ export const goalsApi = {
   deposit: (id: string, amount: number) => post<Goal>(`/goals/${id}/deposit`, { amount }),
 };
 
-// Budgets
+// Budgets (ADR-0046：三態常駐預算體系與智慧每月總預算)
+export const TOTAL_BUDGET_CATEGORY = '__TOTAL__';
+
 export const budgetsApi = {
-  list: (month?: string) => get<BudgetWithSpent[]>(`/budgets${month ? '?month=' + month : ''}`),
-  set: (body: { category: string; amount: number; month: string }) => put<Budget>('/budgets', body),
-  upsert: (body: { category: string; amount: number; month: string }) => put<Budget>('/budgets', body),
+  list: (month?: string, scope?: string) => {
+    const q = new URLSearchParams();
+    if (month) q.set('month', month);
+    if (scope) q.set('scope', scope);
+    const qs = q.toString();
+    return get<BudgetWithSpent[]>(`/budgets${qs ? '?' + qs : ''}`);
+  },
+  listWithSummary: async (month?: string, scope?: string): Promise<{ items: BudgetWithSpent[]; summary: BudgetSummary }> => {
+    const q = new URLSearchParams();
+    if (month) q.set('month', month);
+    if (scope) q.set('scope', scope);
+    const qs = q.toString();
+    const res = await requestEnvelope<BudgetWithSpent[]>(`/budgets${qs ? '?' + qs : ''}`);
+    const items = res.data || [];
+    const fallbackSum = items.reduce((s, b) => s + (b.amount || 0), 0);
+    const fallbackSpent = items.reduce((s, b) => s + (b.spent || 0), 0);
+    const summary: BudgetSummary = res.summary || {
+      month: month || '',
+      scope: scope || 'all',
+      manual_total_budget: 0,
+      personal_manual_total_budget: 0,
+      shared_manual_total_budget: 0,
+      category_budget_sum: fallbackSum,
+      effective_total_budget: fallbackSum,
+      total_spent: fallbackSpent,
+      remaining_budget: Math.max(0, fallbackSum - fallbackSpent),
+      over_budget: fallbackSum > 0 && fallbackSpent > fallbackSum,
+    };
+    return { items, summary };
+  },
+  set: (body: { category: string; amount: number; month?: string; is_shared?: number }) =>
+    put<Budget | null>('/budgets', { month: 'default', is_shared: 0, ...body }),
+  upsert: (body: { category: string; amount: number; month?: string; is_shared?: number }) =>
+    put<Budget | null>('/budgets', { month: 'default', is_shared: 0, ...body }),
+  remove: (category: string, is_shared = 0, month?: string) => {
+    const q = new URLSearchParams({ category, is_shared: String(is_shared) });
+    if (month) q.set('month', month);
+    return del<{ deleted: boolean }>(`/budgets?${q.toString()}`);
+  },
 };
 
 // Forecast & Purchase check
 export const forecastApi = {
-  get: (scope?: string) => get<ForecastResult>(`/forecast${scope ? '?scope=' + scope : ''}`),
-  purchaseCheck: (amount: number, scope?: string) => post<PurchaseCheckResult>('/forecast/purchase-check', { amount, scope }),
+  get: (scope?: string, includeBudget?: boolean) => {
+    const q = new URLSearchParams();
+    if (scope) q.set('scope', scope);
+    if (includeBudget) q.set('include_budget', '1');
+    const qs = q.toString();
+    return get<ForecastResult>(`/forecast${qs ? '?' + qs : ''}`);
+  },
+  purchaseCheck: (amount: number, scope?: string, includeBudget?: boolean) =>
+    post<PurchaseCheckResult>('/forecast/purchase-check', { amount, scope, include_budget: Boolean(includeBudget) }),
   toggleSettle: (event_key: string, settled: boolean) => post<{ event_key: string; is_settled: boolean }>('/forecast/settle', { event_key, settled }),
 };
 
@@ -480,6 +526,9 @@ export interface BalanceSummary {
   available: number;
   monthlyFixed: number;
   monthlyGoals: number;
+  monthlyBudget?: number;
+  monthSpent?: number;
+  remainingBudget?: number;
   disposable: number;
 }
 
@@ -558,11 +607,28 @@ export interface Budget {
   category: string;
   amount: number;
   month: string;
+  is_shared?: number;
 }
 
 export interface BudgetWithSpent extends Budget {
+  is_persistent?: boolean;
+  personal_amount?: number;
+  shared_amount?: number;
   spent: number;
   over: boolean;
+}
+
+export interface BudgetSummary {
+  month: string;
+  scope: string;
+  manual_total_budget: number;
+  personal_manual_total_budget: number;
+  shared_manual_total_budget: number;
+  category_budget_sum: number;
+  effective_total_budget: number;
+  total_spent: number;
+  remaining_budget: number;
+  over_budget: boolean;
 }
 
 export interface ForecastResult {

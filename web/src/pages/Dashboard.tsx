@@ -2,9 +2,9 @@ import { DashboardSkeleton } from '../components/Skeleton'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
-import { accountsApi, txApi, goalsApi, budgetsApi, recurringApi, Account, Transaction, RecurringItem } from '../api/client'
+import { accountsApi, txApi, goalsApi, budgetsApi, recurringApi, Account, Transaction, RecurringItem, BudgetSummary } from '../api/client'
 import { formatCurrency, formatDate, today, thisMonth, getGreeting, CATEGORIES, buildHistoryMemo, recommendCategory, compareTransactionsNewestFirst } from '../components/utils'
-import { GoalIcon } from '../components/icons'
+import { GoalIcon, CategoryIcon } from '../components/icons'
 import ScopeTabBar from '../components/ScopeTabBar'
 import Modal from '../components/Modal'
 import ProgressBar from '../components/ProgressBar'
@@ -32,6 +32,7 @@ import {
   User,
   Landmark,
   CheckCircle2,
+  Sliders,
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [budgets, setBudgets] = useState<any[]>([])
+  const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null)
   const [goalsList, setGoalsList] = useState<any[]>([])
   const [recurringItems, setRecurringItems] = useState<RecurringItem[]>([])
   const [selectedRecurringId, setSelectedRecurringId] = useState('')
@@ -78,15 +80,16 @@ export default function Dashboard() {
     try {
       setLoading(true)
       setLoadError(null)
-      const currentYear = thisMonth().slice(0, 4)
+      const currentMonthStr = thisMonth()
+      const currentYear = currentMonthStr.slice(0, 4)
       const shouldFetchStatic = forceStatic || !hasLoadedStaticRef.current
 
-      const [bal, accs, txs, monthlyData, buds, g, recs] = await Promise.all([
+      const [bal, accs, txs, monthlyData, budsRes, g, recs] = await Promise.all([
         accountsApi.balance(scope),
         accountsApi.list(scope),
         txApi.list({ limit: '10', scope }),
         txApi.monthly(currentYear, scope),
-        shouldFetchStatic ? budgetsApi.list() : Promise.resolve(null),
+        budgetsApi.listWithSummary(currentMonthStr, scope),
         shouldFetchStatic ? goalsApi.list() : Promise.resolve(null),
         shouldFetchStatic ? recurringApi.list('all').catch(() => []) : Promise.resolve(null),
       ])
@@ -95,7 +98,10 @@ export default function Dashboard() {
       setAccounts(accs)
       setTransactions(txs)
       setMonthlyStats(monthlyData)
-      if (buds !== null) setBudgets(buds)
+      if (budsRes !== null) {
+        setBudgets(budsRes.items)
+        setBudgetSummary(budsRes.summary)
+      }
       if (g !== null) setGoalsList(g)
       if (recs !== null) setRecurringItems(recs)
       if (shouldFetchStatic) hasLoadedStaticRef.current = true
@@ -253,8 +259,8 @@ export default function Dashboard() {
               <span>真實可支配現金</span>
               <FormulaTooltip
                 label="檢視真實可支配現金計算公式"
-                formula="淨可用餘額 － 週期支出每月平均預留 － 每月儲蓄目標預留"
-                calculation={`${formatCurrency(balance?.available ?? 0)} - ${formatCurrency(balance?.monthlyFixed ?? 0)} - ${formatCurrency(balance?.monthlyGoals ?? 0)} = ${formatCurrency(balance?.disposable ?? 0)}`}
+                formula="淨可用餘額 － 週期支出每月平均預留 － 每月儲蓄目標預留 － 當月剩餘未用預算預留"
+                calculation={`${formatCurrency(balance?.available ?? 0)} - 週期 ${formatCurrency(balance?.monthlyFixed ?? 0)} - 儲蓄 ${formatCurrency(balance?.monthlyGoals ?? 0)}${(balance?.remainingBudget ?? 0) > 0 ? ` - 剩餘預算 ${formatCurrency(balance?.remainingBudget ?? 0)}` : ''} = ${formatCurrency(balance?.disposable ?? 0)}`}
               />
             </span>
             <div style={{ background: 'var(--color-success)', color: 'white', padding: 6, borderRadius: '50%' }}>
@@ -265,7 +271,8 @@ export default function Dashboard() {
             {formatCurrency(balance?.disposable ?? 0)}
           </div>
           <div className="stat-sub">
-            含固定開銷分攤 {formatCurrency(balance?.monthlyFixed ?? 0)} 與儲蓄扣款 {formatCurrency(balance?.monthlyGoals ?? 0)}
+            含固定開銷分攤 {formatCurrency(balance?.monthlyFixed ?? 0)}、儲蓄扣款 {formatCurrency(balance?.monthlyGoals ?? 0)}
+            {(balance?.remainingBudget ?? 0) > 0 ? ` 與剩餘預算預留 ${formatCurrency(balance?.remainingBudget ?? 0)}` : ''}
           </div>
         </div>
 
@@ -625,6 +632,93 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* 本月預算把關摘要 (ADR-0046) */}
+          <div className="card">
+            <div className="flex items-center justify-between gap-sm" style={{ marginBottom: 14 }}>
+              <h2 className="text-xl flex items-center gap-xs" style={{ minWidth: 0 }}>
+                <Sliders size={20} color="var(--color-primary)" style={{ flexShrink: 0 }} />
+                <span>本月預算把關 ({viewScope === 'household' ? '公帳' : viewScope === 'personal' ? '私帳' : '全部'})</span>
+              </h2>
+              <Link to="/analytics" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>
+                設定 <ChevronRight size={16} />
+              </Link>
+            </div>
+
+            {(() => {
+              const effTotal = budgetSummary?.effective_total_budget ?? (balance?.monthlyBudget ?? 0)
+              const spentTotal = budgetSummary?.total_spent ?? (balance?.monthSpent ?? 0)
+              const remTotal = Math.max(0, effTotal - spentTotal)
+              const isOverTotal = effTotal > 0 && spentTotal > effTotal
+              const isWarnTotal = effTotal > 0 && !isOverTotal && spentTotal / effTotal >= 0.8
+
+              if (effTotal <= 0 && budgets.length === 0) {
+                return (
+                  <div className="text-sm text-muted" style={{ textAlign: 'center', padding: '14px 0' }}>
+                    <p style={{ marginBottom: 10 }}>尚未設定{viewScope === 'household' ? '家庭公帳' : viewScope === 'personal' ? '個人私帳' : ''}常駐每月預算</p>
+                    <Link to="/analytics" className="btn btn-secondary btn-sm">前往設定每月預算</Link>
+                  </div>
+                )
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div
+                    style={{
+                      padding: 12,
+                      borderRadius: 'var(--radius-sm)',
+                      background: isOverTotal
+                        ? 'rgba(255, 107, 107, 0.08)'
+                        : 'var(--bg-surface-2)',
+                      border: `1px solid ${isOverTotal ? 'var(--color-danger)' : 'var(--border-color)'}`,
+                    }}
+                  >
+                    <div className="flex items-center justify-between text-sm" style={{ marginBottom: 4 }}>
+                      <span style={{ fontWeight: 700 }}>每月有效總預算</span>
+                      <span style={{ fontWeight: 700, color: isOverTotal ? 'var(--color-danger)' : 'var(--text-primary)' }}>
+                        {formatCurrency(spentTotal)} / {formatCurrency(effTotal)}
+                      </span>
+                    </div>
+                    <ProgressBar
+                      value={spentTotal}
+                      max={effTotal || 1}
+                      variant={isOverTotal ? 'over' : isWarnTotal ? 'default' : 'safe'}
+                      height={7}
+                    />
+                    <div className="text-xs" style={{ marginTop: 6, color: isOverTotal ? 'var(--color-danger)' : 'var(--text-secondary)', fontWeight: 600 }}>
+                      {isOverTotal
+                        ? `本月已超支 ${formatCurrency(spentTotal - effTotal)}`
+                        : `本月剩餘可花費 ${formatCurrency(remTotal)}（已預留於真實可支配現金）`}
+                    </div>
+                  </div>
+
+                  {budgets.slice(0, 4).map((b: any) => {
+                    const isOver = b.spent > b.amount
+                    const isWarn = !isOver && b.amount > 0 && b.spent / b.amount >= 0.8
+                    return (
+                      <div key={b.category}>
+                        <div className="flex items-center justify-between text-sm" style={{ marginBottom: 4 }}>
+                          <span className="flex items-center gap-xs" style={{ fontWeight: 600 }}>
+                            <CategoryIcon category={b.category} size={15} />
+                            <span>{b.category}</span>
+                          </span>
+                          <span className="text-xs" style={{ color: isOver ? 'var(--color-danger)' : 'var(--text-muted)', fontWeight: isOver ? 700 : 500 }}>
+                            {formatCurrency(b.spent)} / {formatCurrency(b.amount)}
+                          </span>
+                        </div>
+                        <ProgressBar
+                          value={b.spent}
+                          max={b.amount || 1}
+                          variant={isOver ? 'over' : isWarn ? 'default' : 'safe'}
+                          height={5}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+          </div>
+
           {/* 智慧理財提示 */}
           <div className="card" style={{ background: 'var(--bg-surface-2)' }}>
             <h3 className="text-lg flex items-center gap-xs" style={{ marginBottom: 12 }}>
@@ -635,6 +729,11 @@ export default function Dashboard() {
               <li>
                 週期支出每月平均預算 <strong>{formatCurrency(balance?.monthlyFixed ?? 0)}</strong>，已自動從真實可支配現金扣除。
               </li>
+              {(balance?.monthlyBudget ?? 0) > 0 && (
+                <li>
+                  本月有效總預算 <strong>{formatCurrency(balance?.monthlyBudget ?? 0)}</strong>，未花完之剩餘額度 <strong>{formatCurrency(balance?.remainingBudget ?? 0)}</strong> 已預留把關。
+                </li>
+              )}
               <li>
                 每月計劃儲蓄金額 <strong>{formatCurrency(balance?.monthlyGoals ?? 0)}</strong>，建議按款項留存。
               </li>

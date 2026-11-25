@@ -29,6 +29,7 @@ import {
   ArrowRight,
   ShieldCheck,
   AlertCircle,
+  Sliders,
 } from 'lucide-react'
 
 interface OverdraftInterval {
@@ -88,6 +89,7 @@ function computeOverdraftIntervals(
 
 export default function Forecast() {
   const [scope, setScope] = useState<'all' | 'household' | 'personal'>('all')
+  const [includeBudget, setIncludeBudget] = useState(false)
   const [forecast, setForecast] = useState<ForecastResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [settlingKey, setSettlingKey] = useState<string | null>(null)
@@ -103,10 +105,13 @@ export default function Forecast() {
   const [checking, setChecking] = useState(false)
   const [checkError, setCheckError] = useState('')
 
-  const loadForecast = async (targetScope: 'all' | 'household' | 'personal' = scope) => {
+  const loadForecast = async (
+    targetScope: 'all' | 'household' | 'personal' = scope,
+    withBudget: boolean = includeBudget
+  ) => {
     try {
       setLoading(true)
-      const data = await forecastApi.get(targetScope)
+      const data = await forecastApi.get(targetScope, withBudget)
       setForecast(data)
     } catch (e) {
       console.error(e)
@@ -116,27 +121,27 @@ export default function Forecast() {
   }
 
   useEffect(() => {
-    loadForecast(scope)
+    loadForecast(scope, includeBudget)
     if (checkAmount) {
       const amt = parseFloat(checkAmount)
       if (!isNaN(amt) && amt > 0) {
-        forecastApi.purchaseCheck(amt, scope)
+        forecastApi.purchaseCheck(amt, scope, includeBudget)
           .then(res => setCheckResult(res))
           .catch(() => {})
       }
     }
-  }, [scope])
+  }, [scope, includeBudget])
 
   const handleToggleSettle = async (ev: DayEvent) => {
     if (!ev.event_key || ev.can_settle === false || settlingKey) return
     try {
       setSettlingKey(ev.event_key)
       await forecastApi.toggleSettle(ev.event_key, !ev.is_settled)
-      await loadForecast(scope)
+      await loadForecast(scope, includeBudget)
       if (checkAmount) {
         const amt = parseFloat(checkAmount)
         if (!isNaN(amt) && amt > 0) {
-          forecastApi.purchaseCheck(amt, scope)
+          forecastApi.purchaseCheck(amt, scope, includeBudget)
             .then(res => setCheckResult(res))
             .catch(() => {})
         }
@@ -159,7 +164,7 @@ export default function Forecast() {
 
     try {
       setChecking(true)
-      const res = await forecastApi.purchaseCheck(amt, scope)
+      const res = await forecastApi.purchaseCheck(amt, scope, includeBudget)
       setCheckResult(res)
     } catch (err: any) {
       setCheckError(err.message || '檢查失敗')
@@ -359,6 +364,22 @@ export default function Forecast() {
               onClick={() => applyPresetDays(null)}
             >
               完整 12 個月
+            </button>
+            <button
+              type="button"
+              id="btn-toggle-budget-forecast"
+              className={`btn btn-sm ${includeBudget ? 'btn-primary' : 'btn-ghost'}`}
+              style={{
+                border: '1px solid var(--border-color)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+              }}
+              onClick={() => setIncludeBudget(prev => !prev)}
+              title="開啟後將當月剩餘未用預算與未來各月有效總預算於每月月底預扣，模擬預算花滿時的資金水位"
+            >
+              <Sliders size={13} />
+              <span>{includeBudget ? '已納入預算預扣' : '納入預算預扣'}</span>
             </button>
           </div>
         </div>

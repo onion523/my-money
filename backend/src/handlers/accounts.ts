@@ -94,6 +94,7 @@ import { Env } from '../types';
 import { authMiddleware, generateId } from '../middleware/jwt';
 import { getUserHousehold } from './households';
 import { ensureRecurringSchema } from './recurring';
+import { computeScopedBudgets, ensureBudgetsSchema } from './budgets';
 
 type Vars = { userId: string; userEmail: string; userName: string };
 const accounts = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -1452,14 +1453,16 @@ accounts.post('/:id/reconcile', async (c) => {
 });
 
 
-// GET /accounts/balance 淨可用資金 (純唯讀批次聚合，零資料庫寫入，ADR-0023)
+// GET /accounts/balance 淨可用資金 (純唯讀批次聚合，零資料庫寫入，ADR-0023 & ADR-0046)
 accounts.get('/balance', async (c) => {
   await ensureAccountsSchema(c.env.DB);
   await ensureRecurringSchema(c.env.DB);
+  await ensureBudgetsSchema(c.env.DB);
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
   const placeholders = memberUserIds.map(() => '?').join(',');
   const scope = c.req.query('scope') || 'all';
+  const currentMonth = getTaipeiDateString().slice(0, 7);
 
   let sqlCondition = `(user_id = ? OR (user_id IN (${placeholders}) AND is_joint = 1))`;
   let sqlParams: (string | number)[] = [userId, ...memberUserIds];
@@ -1501,7 +1504,10 @@ accounts.get('/balance', async (c) => {
     );
   }
 
-  const batchResults = await c.env.DB.batch(batchQueries);
+  const [batchResults, budgetSummary] = await Promise.all([
+    c.env.DB.batch(batchQueries),
+    computeScopedBudgets(c.env.DB, userId, memberUserIds, currentMonth, scope),
+  ]);
   const accs = (batchResults[0].results || []) as Array<{ id: string; type: string; balance: number; unbilled: number; statement_day?: number | null; last_rollover_at?: string | null }>;
   const recurringRows = (batchResults[1].results || []) as Array<{ amount: number; cycle: string }>;
   const thirdRows = (batchResults[2]?.results || []) as any[];
@@ -1556,8 +1562,27 @@ accounts.get('/balance', async (c) => {
     ? (thirdRows as Array<{ monthly_reserve: number }>).reduce((s, g) => s + (g.monthly_reserve || 0), 0)
     : 0;
 
-  const disposable = available - monthlyFixed - monthlyGoals;
-  return c.json({ success: true, data: { cashTotal, bankTotal, ccBilled, ccUnbilled, available, monthlyFixed, monthlyGoals, disposable } });
+  const monthlyBudget = budgetSummary.effective_total_budget;
+  const monthSpent = budgetSummary.total_spent;
+  const remainingBudget = budgetSummary.remaining_budget;
+
+  const disposable = available - monthlyFixed - monthlyGoals - remainingBudget;
+  return c.json({
+    success: true,
+    data: {
+      cashTotal,
+      bankTotal,
+      ccBilled,
+      ccUnbilled,
+      available,
+      monthlyFixed,
+      monthlyGoals,
+      monthlyBudget,
+      monthSpent,
+      remainingBudget,
+      disposable,
+    },
+  });
 });
 
 
