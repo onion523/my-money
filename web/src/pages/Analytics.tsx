@@ -86,7 +86,7 @@ export default function Analytics() {
 
       const [sum, mStats, shares] = await Promise.all([
         txApi.summary(month, currentScope),
-        needYearScopeData ? txApi.monthly(year, currentScope) : Promise.resolve(null),
+        needYearScopeData ? txApi.monthly(year, currentScope, true) : Promise.resolve(null),
         needMonthShares ? txApi.householdShares(month) : Promise.resolve(null),
       ])
       setCatSummary(sum)

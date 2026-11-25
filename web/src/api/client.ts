@@ -303,10 +303,11 @@ export const txApi = {
     const qs = q.toString();
     return get<CategorySummary[]>(`/transactions/summary/category${qs ? '?' + qs : ''}`);
   },
-  monthly: (year?: string, scope?: string) => {
+  monthly: (year?: string, scope?: string, excludeSystem?: boolean) => {
     const q = new URLSearchParams();
     if (year) q.set('year', year);
     if (scope) q.set('scope', scope);
+    if (excludeSystem) q.set('exclude_system', '1');
     const qs = q.toString();
     return get<MonthlyStats[]>(`/transactions/summary/monthly${qs ? '?' + qs : ''}`);
   },
@@ -316,8 +317,8 @@ export const txApi = {
     ),
   categorySummary: (month?: string, scope?: string) =>
     txApi.summary(month, scope),
-  monthlyStats: (year?: string, scope?: string) =>
-    txApi.monthly(year, scope),
+  monthlyStats: (year?: string, scope?: string, excludeSystem?: boolean) =>
+    txApi.monthly(year, scope, excludeSystem),
   create: (body: Partial<Transaction> & { is_shared?: number }) => post<Transaction>('/transactions', body),
   update: (id: string, body: Partial<Transaction> & { is_shared?: number }) => put<Transaction>(`/transactions/${id}`, body),
   remove: (id: string) => del<null>(`/transactions/${id}`),

@@ -94,12 +94,14 @@ _Avoid_: 到期日 (due date)、繳納日 (payment date)、截止日 (deadline)
 從指定銀行存款扣款以償還信用卡欠款的沖銷程序（系統同時建立一筆銀行帳戶端之 `expense`「信用卡還款」與一筆信用卡端之 `income`「信用卡還款」沖銷流水）。統計分析消費分類圓餅圖（Category Breakdown）維持僅統計日常消費分類，不將「信用卡還款」混入日常消費類別佔比。
 _Avoid_: 將信用卡還款混入日常消費圓餅圖分類佔比 (mixing credit card repayment into category pie chart breakdown)
 
-**Direct Ledger Sign Aggregation (收支正負號全量直觀加總)**:
-在「收支明細頁（上方篩選摘要之總收入／總支出／淨收支、以及每日分組卡片右上角小計）」與「儀表板（當月收入／支出／當月淨收支，`GET /transactions/summary/monthly`）」中，針對當前篩選條件與視角下之**所有相關收支紀錄全部納入計算**，不做任何隱藏分類剔除：
-1. **總收入（與當日 `+` 收入小計）**：凡明細為正項（`type = 'income'`，畫面顯示 `+`）一律列入收入加總。
-2. **總支出（與當日 `-` 支出小計）**：凡明細為負項（`type = 'expense'`，畫面顯示 `-`）一律列入支出加總。
-3. **淨收支**：`總收入 － 總支出`，確保畫面列表上每一筆看得到的 `+` 與 `-` 明細加總結果 100% 與上方「總收入、總支出、淨收支」及每日小計完全吻合。
-_Avoid_: 隱藏排除特定分類導致畫面明細與上方總計數字兜不攏 (silently excluding categories so visible rows do not sum to totals)
+**Direct Ledger Sign Aggregation & Analytics System-Category Exclusion (收支明細正負號全量直觀加總 vs 統計圖表系統移轉類別排除)**:
+1. **收支明細頁 (`Transactions.tsx`) 與總覽頁當月收支結算 (`Dashboard.tsx`，取自 `GET /transactions/summary/range` 或 `GET /transactions/summary/monthly`)**：針對當前篩選條件與視角下之**所有可見收支紀錄全部納入計算**，不做任何隱藏分類剔除：
+   - **總收入（與當日 `+` 收入小計）**：凡明細為正項（`type = 'income'`，畫面顯示 `+`）一律列入收入加總。
+   - **總支出（與當日 `-` 支出小計）**：凡明細為負項（`type = 'expense'`，畫面顯示 `-`）一律列入支出加總。
+   - **淨收支**：`總收入 － 總支出`，確保畫面列表上每一筆看得到的 `+` 與 `-` 明細加總結果 100% 與上方「總收入、總支出、淨收支」及每日小計完全吻合。
+2. **統計分析頁 (`Analytics.tsx`) 與預算管理頁 (`Budgets.tsx`)**：
+   - 支出分類圓餅圖（`GET /transactions/summary/category`）、預算已花費計算（`GET /budgets`）以及**统计分析頁之年度收支趨勢長條圖（`GET /transactions/summary/monthly?exclude_system=1`）**，統一**排除 4 項系統內部移轉類別（`'信用卡還款'`, `'內部轉帳'`, `'ATM提款'`, `'公帳代墊報銷'`）**，真實反映日常消費支出與實質收入趨勢，避免內部轉帳或收到公帳代墊報銷款虛增年度收支長條圖。
+_Avoid_: 隱藏排除特定分類導致收支明細畫面列表與上方總計數字兜不攏 (silently excluding categories on transaction ledger so visible rows do not sum to totals)、將內部轉帳或公帳代墊報銷混入統計分析之年度收支趨勢長條圖導致收支虛胖 (mixing internal transfers or advance reimbursements into analytics annual trend bar chart)
 
 **Statement Rollover & Idempotent Recalculation (結帳日出帳作業與冪等真實明細重算)**:
 結帳日到達前後，在持卡人尚未手動點擊「出帳作業」確認前，當期刷卡消費（含結帳日當天及該結帳週期內明細）一律維持為未出帳（`is_billed = 0`）並保留於「未出帳款（`unbilled`）」顯示，嚴禁於結帳日當天自動將未出帳歸零或未經出帳作業即覆寫為 `is_billed = 1`。當使用者點擊「出帳作業」時，系統開啟**出帳作業預覽彈窗（Statement Rollover Modal）**，並採行**客觀區間推算、全量未結透視、重複出帳覆蓋與真實明細冪等重算機制（ADR-0030）**：
@@ -316,8 +318,8 @@ _Avoid_: 全部 (本人 + 家庭公用) (all with verbose suffix)、全貌合併
 _Avoid_: 家庭公帳 (household shared)、家庭公用 (共同基金/家庭卡) (verbose household tag)
 
 **Personal Scope (私帳)**:
-全站三態切換的第三個選項（value: `personal`，搭配 `Lock` 向量鎖頭圖示），嚴格僅呈現登入者本人名下之個人私密收支（`is_shared = 0`）、個人現金皮夾、活存銀行存款與個人信用卡（`is_joint = 0`），徹底隔離家庭公帳與他人帳務。
-_Avoid_: 個人私帳 (personal account verbose)、無圖示純文字私帳 (plain text without canonical SVG icon)
+全站三態切換的第三個選項（value: `personal`，搭配 `Lock` 向量鎖頭圖示），嚴格僅呈現登入者本人名下之個人私密收支（`t.user_id = ? AND t.is_shared = 0`）、個人現金皮夾、活存銀行存款與個人信用卡（`is_joint = 0`），**徹底隔離並排除家庭公帳（包含本人以個人私帳／私卡／現金代墊之公帳 `is_shared = 1`）**與他人帳務。在後端 `buildScopeCondition`（涵蓋 `GET /transactions`、`GET /transactions/summary/range`、`GET /transactions/summary/category`、`GET /transactions/summary/monthly`）中，當 `scope === 'personal'` 時一律強制 `t.user_id = ? AND t.is_shared = 0`，絕不可因漏篩 `is_shared = 0` 而將本人代墊之公帳混入私帳明細或私帳統計中。
+_Avoid_: 個人私帳 (personal account verbose)、無圖示純文字私帳 (plain text without canonical SVG icon)、私帳視角僅過濾 `t.user_id = ?` 卻漏加 `t.is_shared = 0` 導致本人代墊公帳被算入私帳支出 (omitting `t.is_shared = 0` in personal scope causing personal shared advances to pollute personal statistics and ledger)
 
 **Account Category Filter Tabs (帳戶管理四態類別切換器)**:
 在「資產與帳戶管理 (`Accounts.tsx`)」頁面中，於四大核心資產統計卡片（現金錢包總額、銀行存款總額、信用卡總待繳、淨可用餘額）正下方、各類別帳戶清單正上方，配置四態帳戶類別切換頁籤：

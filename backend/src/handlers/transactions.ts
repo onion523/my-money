@@ -81,10 +81,12 @@ transactions.use('*', authMiddleware);
 
 function buildScopeCondition(userId: string, memberUserIds: string[], scope?: string): { condition: string; params: string[] } {
   const placeholders = memberUserIds.map(() => '?').join(',');
-  if (scope === 'personal' || (scope !== 'household' && memberUserIds.length === 1 && memberUserIds[0] === userId)) {
-    return { condition: 't.user_id = ?', params: [userId] };
+  if (scope === 'personal') {
+    return { condition: 't.user_id = ? AND t.is_shared = 0', params: [userId] };
   } else if (scope === 'household') {
     return { condition: `t.user_id IN (${placeholders}) AND t.is_shared = 1`, params: [...memberUserIds] };
+  } else if (memberUserIds.length === 1 && memberUserIds[0] === userId) {
+    return { condition: 't.user_id = ?', params: [userId] };
   } else {
     // 'all': my own (shared + private) + other household members' shared
     return { condition: `(t.user_id = ? OR (t.user_id IN (${placeholders}) AND t.is_shared = 1))`, params: [userId, ...memberUserIds] };
@@ -698,21 +700,26 @@ transactions.get('/summary/category', async (c) => {
   return c.json({ success: true, data: rows.results });
 });
 
-// GET /transactions/summary/monthly?year=YYYY&scope=all|household|personal
+// GET /transactions/summary/monthly?year=YYYY&scope=all|household|personal&exclude_system=1|0
 transactions.get('/summary/monthly', async (c) => {
   const userId = c.get('userId');
   const { memberUserIds } = await getUserHousehold(c.env.DB, userId);
   const year = c.req.query('year') || new Date().getFullYear().toString();
   const scope = c.req.query('scope') || 'all';
+  const excludeSystem = c.req.query('exclude_system') === '1' || c.req.query('exclude_system') === 'true';
 
   const { condition, params } = buildScopeCondition(userId, memberUserIds, scope);
   const startDate = `${year}-01-01`;
   const endDate = `${year}-12-31`;
+  const systemExclusionSql = excludeSystem
+    ? "AND t.category NOT IN ('信用卡還款', '內部轉帳', 'ATM提款', '公帳代墊報銷')"
+    : '';
 
   const rows = await c.env.DB.prepare(`
     SELECT strftime('%Y-%m', date) as month, type, SUM(amount) as total
     FROM transactions t
     WHERE ${condition}
+      ${systemExclusionSql}
       AND t.date >= ? AND t.date <= ?
     GROUP BY month, type ORDER BY month ASC
   `).bind(...params, startDate, endDate).all();

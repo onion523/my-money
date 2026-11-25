@@ -131,4 +131,52 @@ describe('Scoped Persistent Budget System & Cashflow Reserve (ADR-0046, #235, #2
     expect(hResCleaned.json.summary.effective_total_budget).toBe(0);
     expect(hResCleaned.json.data.length).toBe(0);
   });
+
+  it('#241: excludes personal advances for shared expenses (is_shared=1) from personal scope (transactions, category summary, monthly summary) and supports exclude_system=1 on monthly summary', async () => {
+    // 1. Record a shared advance (is_shared = 1) paid by USER1's private cash wallet (a_cash1) in 2026-06
+    const advRes = await h.request('/transactions', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        account_id: 'a_cash1',
+        type: 'expense',
+        category: '寵物毛孩',
+        amount: 3333,
+        note: '代墊買家庭貓砂',
+        date: '2026-06-15',
+        is_shared: 1,
+      },
+    });
+    expect(advRes.status).toBe(201);
+    const advTx = advRes.json.data;
+
+    // 2. Verify personal scope (scope=personal) does NOT include this shared advance in transaction list, category summary, or monthly summary
+    const personalTxs = await h.request('/transactions?scope=personal&from=2026-06-01&to=2026-06-30&limit=200', { user: USER1 });
+    expect(personalTxs.status).toBe(200);
+    expect(personalTxs.json.data.every((t: any) => t.is_shared === 0)).toBe(true);
+    expect(personalTxs.json.data.some((t: any) => t.id === advTx.id)).toBe(false);
+
+    const personalCat = await h.request('/transactions/summary/category?month=2026-06&scope=personal', { user: USER1 });
+    expect(personalCat.status).toBe(200);
+    expect(personalCat.json.data.find((c: any) => c.category === '寵物毛孩')).toBeUndefined();
+
+    // Household scope and All scope DO include this shared advance
+    const householdCat = await h.request('/transactions/summary/category?month=2026-06&scope=household', { user: USER1 });
+    expect(householdCat.status).toBe(200);
+    expect(householdCat.json.data.find((c: any) => c.category === '寵物毛孩')?.total).toBe(3333);
+
+    // 3. Verify GET /transactions/summary/monthly?exclude_system=1 excludes '信用卡還款' (4500) and '內部轉帳' (1000) in 2026-05
+    const monthlyFull = await h.request('/transactions/summary/monthly?year=2026&scope=personal', { user: USER1 });
+    const monthlyNoSys = await h.request('/transactions/summary/monthly?year=2026&scope=personal&exclude_system=1', { user: USER1 });
+    expect(monthlyFull.status).toBe(200);
+    expect(monthlyNoSys.status).toBe(200);
+
+    const mayFullExp = monthlyFull.json.data.find((m: any) => m.month === '2026-05' && m.type === 'expense')?.total || 0;
+    const mayNoSysExp = monthlyNoSys.json.data.find((m: any) => m.month === '2026-05' && m.type === 'expense')?.total || 0;
+    // In seed(), 2026-05 has '信用卡還款' 4500 and '內部轉帳' 1000 with is_shared=0 for USER1
+    expect(Math.round((mayFullExp - mayNoSysExp) * 100) / 100).toBe(5500);
+
+    // Clean up
+    await h.request(`/transactions/${advTx.id}`, { method: 'DELETE', user: USER1 });
+  });
 });
