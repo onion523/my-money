@@ -93,7 +93,7 @@ import { Hono } from 'hono';
 import { Env } from '../types';
 import { authMiddleware, generateId } from '../middleware/jwt';
 import { getUserHousehold } from './households';
-import { ensureRecurringSchema } from './recurring';
+import { computeRecurringAmortization, ensureRecurringSchema } from './recurring';
 import { computeScopedBudgets, ensureBudgetsSchema } from './budgets';
 
 type Vars = { userId: string; userEmail: string; userName: string };
@@ -1504,12 +1504,12 @@ accounts.get('/balance', async (c) => {
     );
   }
 
-  const [batchResults, budgetSummary] = await Promise.all([
+  const [batchResults, budgetSummary, recurringSummary] = await Promise.all([
     c.env.DB.batch(batchQueries),
     computeScopedBudgets(c.env.DB, userId, memberUserIds, currentMonth, scope),
+    computeRecurringAmortization(c.env.DB, userId, memberUserIds, scope),
   ]);
   const accs = (batchResults[0].results || []) as Array<{ id: string; type: string; balance: number; unbilled: number; statement_day?: number | null; last_rollover_at?: string | null }>;
-  const recurringRows = (batchResults[1].results || []) as Array<{ amount: number; cycle: string }>;
   const thirdRows = (batchResults[2]?.results || []) as any[];
 
   const personalCardsForHousehold = scope === 'household'
@@ -1555,8 +1555,12 @@ accounts.get('/balance', async (c) => {
 
   const available = cashTotal + bankTotal - ccBilled - ccUnbilled;
 
-  const cycleMonths: Record<string, number> = { weekly: 0.25, monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12 };
-  const monthlyFixed = recurringRows.reduce((s, r) => s + r.amount / (cycleMonths[r.cycle] || 1), 0);
+  const monthlyFixed = recurringSummary.monthly_expense;
+  const settledMonthlyFixed = recurringSummary.settled_monthly_expense;
+  const remainingMonthlyFixed = recurringSummary.remaining_monthly_expense;
+  const accumulatedSinkingFund = recurringSummary.accumulated_sinking_fund;
+  const annualFixedTotal = recurringSummary.annual_total_expense;
+  const annualFixedRemaining = recurringSummary.annual_remaining_expense;
 
   const monthlyGoals = scope !== 'household'
     ? (thirdRows as Array<{ monthly_reserve: number }>).reduce((s, g) => s + (g.monthly_reserve || 0), 0)
@@ -1566,7 +1570,8 @@ accounts.get('/balance', async (c) => {
   const monthSpent = budgetSummary.total_spent;
   const remainingBudget = budgetSummary.remaining_budget;
 
-  const disposable = available - monthlyFixed - monthlyGoals - remainingBudget;
+  // ADR-0047：真實可支配現金僅扣除「本月尚需預留之未繳週期支出 (remainingMonthlyFixed)」，避免已繳帳單重複雙扣
+  const disposable = available - remainingMonthlyFixed - monthlyGoals - remainingBudget;
   return c.json({
     success: true,
     data: {
@@ -1576,6 +1581,11 @@ accounts.get('/balance', async (c) => {
       ccUnbilled,
       available,
       monthlyFixed,
+      settledMonthlyFixed,
+      remainingMonthlyFixed,
+      accumulatedSinkingFund,
+      annualFixedTotal,
+      annualFixedRemaining,
       monthlyGoals,
       monthlyBudget,
       monthSpent,

@@ -128,4 +128,116 @@ describe('Weekly Recurring Items (#232, #233)', () => {
     await h.request(`/recurring/${bankWeekly.id}`, { method: 'DELETE', user: USER1 });
     await h.request(`/recurring/${cardWeekly.id}`, { method: 'DELETE', user: USER1 });
   });
+
+  it('#244: supports dual-track settled recurring deduction (transaction note auto-match + manual toggleSettle), prevents double-deduction in disposable cash, and computes 1-year sinking fund reserve', async () => {
+    // 1. Check baseline personal amortize & balance for USER1 (2026-06-15)
+    // Personal recurring items in seed for USER1:
+    // - r_salary1: income, 60000, monthly
+    // - r_bonus: income, 30000, semiannual (month 6)
+    // - r_netflix: expense, 390, monthly
+    // Let's also create an annual personal expense for USER1 (amount: 36000, month_of_cycle: 8 -> monthly_share = 3000)
+    // In 2026-06, target month is 8, cycleMonths = 12, window is 2025-09..2026-08,
+    // accumulated_months from 2025-09 to 2026-06 inclusive = 10 months -> accumulated_sinking_fund = 30000
+    const createAnnualRes = await h.request('/recurring', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        name: '個人年繳保險',
+        type: 'expense',
+        amount: 36000,
+        cycle: 'annual',
+        day_of_cycle: 31,
+        month_of_cycle: 8,
+        account_id: 'a_card1',
+        is_shared: 0,
+      },
+    });
+    expect(createAnnualRes.status).toBe(201);
+    const annualItem = createAnnualRes.json.data;
+
+    const baseAmort = await h.request('/recurring/amortize?scope=personal', { user: USER1 });
+    expect(baseAmort.status).toBe(200);
+    expect(baseAmort.json.data.monthly_expense).toBe(3390);
+    expect(baseAmort.json.data.settled_monthly_expense).toBe(0);
+    expect(baseAmort.json.data.remaining_monthly_expense).toBe(3390);
+    expect(baseAmort.json.data.accumulated_sinking_fund).toBe(30000);
+    expect(baseAmort.json.data.annual_total_expense).toBe(390 * 12 + 36000);
+    expect(baseAmort.json.data.annual_settled_expense).toBe(0);
+    expect(baseAmort.json.data.annual_remaining_expense).toBe(390 * 12 + 36000);
+
+    const baseBal = await h.request('/accounts/balance?scope=personal', { user: USER1 });
+    expect(baseBal.status).toBe(200);
+    const baseAvailable = Number(baseBal.json.data.available);
+    const baseDisposable = Number(baseBal.json.data.disposable);
+    expect(baseBal.json.data.monthlyFixed).toBe(3390);
+    expect(baseBal.json.data.settledMonthlyFixed).toBe(0);
+    expect(baseBal.json.data.remainingMonthlyFixed).toBe(3390);
+    expect(baseBal.json.data.accumulatedSinkingFund).toBe(30000);
+
+    // 2. Track 1: Auto-match via transaction note ('Netflix 6月扣款') on bank account
+    const txRes = await h.request('/transactions', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        type: 'expense',
+        amount: 390,
+        category: '娛樂',
+        note: 'Netflix 6月扣款',
+        date: '2026-06-15',
+        account_id: 'a_bank1',
+        is_shared: 0,
+      },
+    });
+    expect(txRes.status).toBe(201);
+    const txId = txRes.json.data.id;
+
+    // Now Netflix (390) is auto-settled via transaction:
+    // - available cash decreased by 390 (since it was paid from a_bank1)
+    // - remainingMonthlyFixed also decreased by 390 (from 3390 to 3000)
+    // - Since available dropped by 390 AND remainingMonthlyFixed dropped by 390, disposable is NOT double-deducted!
+    const afterTxAmort = await h.request('/recurring/amortize?scope=personal', { user: USER1 });
+    expect(afterTxAmort.status).toBe(200);
+    expect(afterTxAmort.json.data.settled_monthly_expense).toBe(390);
+    expect(afterTxAmort.json.data.remaining_monthly_expense).toBe(3000);
+    const netflixItem = afterTxAmort.json.data.items.find((b: { id: string }) => b.id === 'r_netflix');
+    expect(netflixItem.is_settled_current_cycle).toBe(true);
+    expect(netflixItem.settled_source).toBe('transaction');
+
+    const afterTxBal = await h.request('/accounts/balance?scope=personal', { user: USER1 });
+    expect(afterTxBal.json.data.available).toBe(baseAvailable - 390);
+    expect(afterTxBal.json.data.settledMonthlyFixed).toBe(390);
+    expect(afterTxBal.json.data.remainingMonthlyFixed).toBe(3000);
+    // Disposable cash stays equal to baseDisposable (not reduced twice by both available -390 and monthlyFixed -390!)
+    expect(afterTxBal.json.data.disposable).toBe(baseDisposable);
+
+    // Clean up the test transaction
+    await h.request(`/transactions/${txId}`, { method: 'DELETE', user: USER1 });
+
+    // 3. Track 2: Manual settle toggle via POST /recurring/:id/settle on long-cycle item annualItem (annual 36000, monthly 3000)
+    const manualSettle = await h.request(`/recurring/${annualItem.id}/settle`, {
+      method: 'POST',
+      user: USER1,
+      body: { settled: true },
+    });
+    expect(manualSettle.status).toBe(200);
+    expect(manualSettle.json.data.is_settled).toBe(true);
+
+    const afterManualAmort = await h.request('/recurring/amortize?scope=personal', { user: USER1 });
+    expect(afterManualAmort.json.data.settled_monthly_expense).toBe(3000);
+    expect(afterManualAmort.json.data.remaining_monthly_expense).toBe(390);
+    // Once annualItem is settled in current cycle, its accumulated_sinking_fund drops to 0 and annual_settled_expense becomes 36000
+    expect(afterManualAmort.json.data.accumulated_sinking_fund).toBe(0);
+    expect(afterManualAmort.json.data.annual_settled_expense).toBe(36000);
+    expect(afterManualAmort.json.data.annual_remaining_expense).toBe(390 * 12);
+
+    // Unsettle and delete annualItem to restore clean state
+    const manualUnsettle = await h.request(`/recurring/${annualItem.id}/settle`, {
+      method: 'POST',
+      user: USER1,
+      body: { settled: false },
+    });
+    expect(manualUnsettle.status).toBe(200);
+    expect(manualUnsettle.json.data.is_settled).toBe(false);
+    await h.request(`/recurring/${annualItem.id}`, { method: 'DELETE', user: USER1 });
+  });
 });

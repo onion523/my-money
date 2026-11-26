@@ -56,8 +56,8 @@ _Avoid_: 負債帳戶 (debt account)、卡片 (card)
 _Avoid_: 淨值 (net worth)、可用額度 (credit limit)、總餘額 (total balance)
 
 **Disposable Cash (真實可支配現金)**:
-淨可用餘額進一步扣除當期週期收支每月平均預留、進行中儲蓄目標每月預留款，以及當月剩餘未用預算預留額（`remainingBudgetReserve = max(0, 當月有效總預算 - 當月日常消費已花費)`）後的安全自由花費餘額。由於當月已經花掉的消費已實質扣減現金／銀行存款或增加信用卡欠款，僅預扣「尚未花掉的當月剩餘預算」即可精準反映本月底前扣除預計預算花費後真正可自由動用的現金，絕不重複雙扣已發生之消費。
-_Avoid_: 零用錢 (pocket money)、空閒餘額 (free cash)、閒置資金 (idle cash)、將完整每月總預算與當月已發生消費重複雙扣 (double-deducting full monthly budget on top of already spent transactions)
+淨可用餘額進一步扣除「當月尚待預留之週期支出（`remainingMonthlyFixed`：扣除當月已發生／已繳後之未繳週期支出與未到期長週期每月攤提預留）」、進行中儲蓄目標每月預留款（`monthlyGoals`），以及當月剩餘未用預算預留額（`remainingBudgetReserve = max(0, 當月有效總預算 - 當月日常消費已花費)`）後的安全自由花費餘額。由於當月已經繳納之週期帳單與已發生之日常消費皆已實質扣減現金／銀行存款或增加信用卡欠款，僅預扣「尚未繳納之週期支出與長週期當月攤提預留（`remainingMonthlyFixed`）」及「尚未花掉的當月剩餘預算（`remainingBudget`）」即可精準反映本月底前真正可自由動用的現金，徹底杜絕已繳週期帳單或已花費消費遭重複雙扣。
+_Avoid_: 零用錢 (pocket money)、空閒餘額 (free cash)、閒置資金 (idle cash)、將當月已繳納之週期帳單與每月平均預留重複雙扣 (double-deducting already-settled recurring items on top of reduced account balance)、將完整每月總預算與當月已發生消費重複雙扣 (double-deducting full monthly budget on top of already spent transactions)
 
 **Explicit Account Selection (顯式帳戶選取原則)**:
 在新增交易記帳、帳戶互轉、信用卡還款與公帳報銷等表單中，系統嚴格禁止擅自預選任何帳戶或信用卡（無自動預設值），強制使用者主動檢視並選取會計主體；未選取時表單透過原生 required 與介面警示進行防呆攔截。必填欄位之佔位項目設為 disabled 禁止反選回空；非必填之週期收支則提供「無特定帳戶」並允許選取與切換。
@@ -422,16 +422,28 @@ _Avoid_: 純依賴帳戶歸屬 (account-only inference)、無公私帳區分之�
 在現金流預測中，月／雙月／季／半年／年繳遇大小月或二月天數不足時，一律自動平貼（clamp）至該月份最後一日完成扣款與模擬；週繳項目則於未來 365 天內精確對應每一個符合該星期幾（`day_of_cycle` 1~7）之日期觸發排程，嚴禁粗暴以月份倍數模除或跨月推遲。
 _Avoid_: 模除猜測 (modulo guessing)、固定雙數月 (hardcoded even months)、跨月遞延 (month overflow drift)、週繳未指定星期幾或直接顯示「每週 1 號」(ambiguous weekly schedule or raw number label for weekday)
 
-**Amortization (週期支出每月平均)**:
-將不同週期之收支轉化為每月標準額度資金負擔（或預估收入）之試算過程，並隨當前選擇的三態視角（全部 / 公帳 / 私帳）動態過濾對應之週期收支項目進行分攤加總。各週期換算為每月金額之週期月數除數（`CYCLE_MONTHS` / `CYCLE_DIVISORS`）統一為：
-- **每週 (`weekly`)**：除數 `0.25`（即 `每週金額 × 4`，以每月 4 週直觀估算）
-- **每月 (`monthly`)**：除數 `1`
-- **每雙月 (`bimonthly`)**：除數 `2`
-- **每季 (`quarterly`)**：除數 `3`
-- **每半年 (`semiannual`)**：除數 `6`
-- **每年 (`annual`)**：除數 `12`
-凡非「每月 (`cycle !== 'monthly'`)」之週期項目（包含每週、雙月、季、半年、年），於週期收支卡片副標題皆顯示 `換算每月平均：$X / 月`。
-_Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑化 (smoothing)、攤提 (proration)、每週項目直接除以 1 當成月繳或產生非整數倍碎數 (treating weekly as monthly divisor 1 or awkward fractional multipliers)
+**Amortization & Recurring Sinking Fund Reserve (週期支出每月平均、已繳扣除與一年內週期準備金池，ADR-0047)**:
+將不同週期之收支轉化為每月標準額度資金負擔（或預估收入），並結合「雙軌已繳判定」計算**當月尚需預留之週期支出（`remainingMonthlyFixed`）**與**一年內週期準備金池（Recurring Sinking Fund Reserve）**，不混入一般夢想「儲蓄目標 (`Goals`)」：
+1. **各週期每月平均除數（`CYCLE_MONTHS` / `CYCLE_DIVISORS`）**：
+   - **每週 (`weekly`)**：除數 `0.25`（即 `每週金額 × 4`，以每月 4 週直觀估算）
+   - **每月 (`monthly`)**：除數 `1`
+   - **每雙月 (`bimonthly`)**：除數 `2`
+   - **每季 (`quarterly`)**：除數 `3`
+   - **每半年 (`semiannual`)**：除數 `6`
+   - **每年 (`annual`)**：除數 `12`
+   凡非「每月 (`cycle !== 'monthly'`)」之週期項目（包含每週、雙月、季、半年、年），於週期收支卡片副標題皆顯示 `換算每月平均：$X / 月`。
+2. **雙軌自動聯動「已發生／已繳」判定（Dual-Track Settled Detection）**：
+   - **軌道一（實際收支明細自動比對）**：於該項目當前週期區間內（`monthly`/`weekly` 為當月 `YYYY-MM-01 ~ YYYY-MM-31`；長週期 `bimonthly`/`quarterly`/`semiannual`/`annual` 為最近一次應扣款月份至當月之該期區間），若 `transactions` 中存在同收支類型（`type`）、同公私帳歸屬（`is_shared`）且備註（`note`）包含或等於該週期項目名稱（不分大小寫）之收支紀錄，系統自動認定該期已發生／已繳（`settled_source = 'transaction'`；對 `weekly` 項目則統計當月實際已發生筆數或已繳金額，上限為當月應付額）。
+   - **軌道二（手動勾選「已繳」雙向同步）**：與 `forecast_settled_events`（`event_key` 為 `recurring:${id}:${YYYY-MM-DD}` 或 `recurring:${id}:${YYYY-MM}`）雙向互通。使用者可在「週期收支 (`Recurring.tsx`)」卡片上直接一鍵切換「本期已繳 / 標記已繳」，亦可在「現金流預測 (`Forecast.tsx`)」勾選已繳，兩端狀態即時同步（`settled_source = 'manual'`）。
+3. **精準當月待預留額（`remainingMonthlyFixed`）與防雙扣機制**：
+   - **當月應付短週期（`weekly` / `monthly`）與當月剛好到期之長週期項目**：若本期已繳，則當月待預留額為 `$0`（因款項已從銀行／現金扣除或計入信用卡欠款，不再重複雙扣）；若尚未繳（或 `weekly` 僅部分週次已繳），則預留當月尚未繳納之剩餘金額。
+   - **當月未到期、但在未來一年內會到期之長週期項目（`bimonthly` / `quarterly` / `semiannual` / `annual`）**：若該期尚未提前繳納，則於當月繼續預留其「每月平均攤提額（`amount / cycleMonths`）」，確保當月應提撥之準備金不被花掉；若該期已提前繳清，則當月攤提預留為 `$0`。
+   - 「真實可支配現金 (`Disposable Cash`)」改以 `remainingMonthlyFixed`（而非死板的靜態 `monthlyFixed` 總額）進行扣減。
+4. **一年內週期準備金池與年度待付總覽（1-Year Recurring Sinking Fund & Annual Liability Overview）**：
+   - **一年內週期支出年度總額（`annual_total_expense`）**：`∑ (各筆週期支出之每月平均 × 12)`。
+   - **本週期／今年已繳納總額（`annual_settled_expense`）**與**一年內尚待支付總額（`annual_remaining_expense`）**：統計各週期項目於當前年度／當前週期內已實際繳納之金額與未來一年內尚待支付之剩餘總額。
+   - **長週期累計應留存準備金水位（`accumulated_sinking_fund`）**：針對雙月、季、半年、年繳等跨月長週期支出，依距離下次到期月已走過之攤提月數（含本月，若該期未繳），計算截至本月底**銀行帳戶內應已累積留存之專款準備金總額**（例如年繳 `$12,000` 每月攤提 `$1,000`，目前已累積 5 個月則應留存 `$5,000` 準備金），於「週期收支 (`Recurring.tsx`)」與「總覽頁 (`Dashboard.tsx`)」清晰揭示。
+_Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑化 (smoothing)、攤提 (proration)、每週項目直接除以 1 當成月繳或產生非整數倍碎數 (treating weekly as monthly divisor 1 or awkward fractional multipliers)、當月已繳納房租或帳單後仍從真實可支配現金重複扣除完整每月平均 (double-deducting already-paid recurring items from disposable cash)、將必付週期帳單準備金混入一般夢想儲蓄目標達成率 (polluting savings goals progress with mandatory recurring bill reserves)
 
 **Scoped Cash Flow Forecast (三態現金流預測)**:
 支援切換「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」之未來 12 個月（365 天）逐日資金流模擬引擎（含雙月、季、半年、年繳等長週期項目完整排程模擬）。各視角之第 0 天起始基準餘額為該視角下之「現金錢包總額 ＋ 銀行存款總額」實際正資產餘額（未設定繳款日之信用卡欠款除外），並將信用卡欠款依結帳週期拆分為「已出帳待繳款（排入最近一次繳款日）」與「未出帳款（排入下一次結帳日出帳後之繳款日）」分別排入 12 個月時間軸扣減（避免於第 0 天重複預扣或跨期混同），依視角過濾未來 12 個月預定發生之週期收支與繳卡費排程事件，於時間軸卡片標示 `Home` 公帳 / `Lock` 私帳向量徽章、扣款帳戶，以及**該筆事件執行後之逐筆累計結餘（`running_balance`，同日多筆事件依收入優先於支出之順序逐筆加減反映水位變化；若結餘 `< $0` 則以醒目珊瑚紅標示透支）**。

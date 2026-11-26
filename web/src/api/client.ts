@@ -331,6 +331,8 @@ export const recurringApi = {
   create: (body: Partial<RecurringItem>) => post<RecurringItem>('/recurring', body),
   update: (id: string, body: Partial<RecurringItem>) => put<RecurringItem>(`/recurring/${id}`, body),
   remove: (id: string) => del<null>(`/recurring/${id}`),
+  toggleSettle: (id: string, settled: boolean, month?: string) =>
+    post<{ id: string; month: string; is_settled: boolean }>(`/recurring/${id}/settle`, { settled, month }),
 };
 
 // Goals
@@ -526,6 +528,11 @@ export interface BalanceSummary {
   ccUnbilled: number;
   available: number;
   monthlyFixed: number;
+  settledMonthlyFixed?: number;
+  remainingMonthlyFixed?: number;
+  accumulatedSinkingFund?: number;
+  annualFixedTotal?: number;
+  annualFixedRemaining?: number;
   monthlyGoals: number;
   monthlyBudget?: number;
   monthSpent?: number;
@@ -582,11 +589,30 @@ export interface RecurringItem {
   month_of_cycle?: number;
   is_shared?: number;
   created_at: string;
+  monthly_share?: number;
+  is_settled_current_cycle?: boolean;
+  settled_source?: 'transaction' | 'manual' | null;
+  settled_amount_this_cycle?: number;
+  settled_monthly_share?: number;
+  remaining_monthly_share?: number;
+  accumulated_months?: number;
+  accumulated_sinking_fund?: number;
+  annual_total?: number;
+  annual_settled?: number;
+  annual_remaining?: number;
 }
 
 export interface AmortizeResult {
   monthly_expense: number;
+  settled_monthly_expense?: number;
+  remaining_monthly_expense?: number;
   monthly_income: number;
+  settled_monthly_income?: number;
+  remaining_monthly_income?: number;
+  accumulated_sinking_fund?: number;
+  annual_total_expense?: number;
+  annual_settled_expense?: number;
+  annual_remaining_expense?: number;
   items: RecurringItem[];
 }
 

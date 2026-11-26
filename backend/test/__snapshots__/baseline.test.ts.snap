@@ -3,6 +3,9 @@
 exports[`API baseline (snapshot) > accounts balance (u1) 1`] = `
 {
   "data": {
+    "accumulatedSinkingFund": 2400,
+    "annualFixedRemaining": 281880,
+    "annualFixedTotal": 281880,
     "available": 172809.99,
     "bankTotal": 200000,
     "cashTotal": 5000,
@@ -14,6 +17,8 @@ exports[`API baseline (snapshot) > accounts balance (u1) 1`] = `
     "monthlyFixed": 23490,
     "monthlyGoals": 13000,
     "remainingBudget": 0,
+    "remainingMonthlyFixed": 23490,
+    "settledMonthlyFixed": 0,
   },
   "success": true,
 }
@@ -22,6 +27,9 @@ exports[`API baseline (snapshot) > accounts balance (u1) 1`] = `
 exports[`API baseline (snapshot) > accounts balance (u2) 1`] = `
 {
   "data": {
+    "accumulatedSinkingFund": 32400,
+    "annualFixedRemaining": 313200,
+    "annualFixedTotal": 313200,
     "available": 110183.91,
     "bankTotal": 140000,
     "cashTotal": 0,
@@ -33,6 +41,8 @@ exports[`API baseline (snapshot) > accounts balance (u2) 1`] = `
     "monthlyFixed": 26100,
     "monthlyGoals": 13000,
     "remainingBudget": 0,
+    "remainingMonthlyFixed": 26100,
+    "settledMonthlyFixed": 0,
   },
   "success": true,
 }

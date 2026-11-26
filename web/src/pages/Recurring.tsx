@@ -21,6 +21,9 @@ import {
   Home,
   Lock,
   FileText,
+  CheckCircle2,
+  Circle,
+  PiggyBank,
 } from 'lucide-react'
 
 const CYCLE_DIVISORS: Record<string, number> = {
@@ -90,6 +93,7 @@ export default function Recurring() {
     is_shared: 0,
   })
   const [submitting, setSubmitting] = useState(false)
+  const [settlingId, setSettlingId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -116,9 +120,14 @@ export default function Recurring() {
         recurringApi.amortize(currentScope),
         householdApi.current().catch(() => null),
       ])
-      setItems(recList)
+      if (amort && Array.isArray(amort.items)) {
+        setItems(amort.items)
+        setAmortize(amort)
+      } else {
+        setItems(recList)
+        if (amort) setAmortize(amort)
+      }
       setAccounts(accs)
-      if (amort) setAmortize(amort)
       if (householdData?.myRole) setMyRole(householdData.myRole)
     } catch (err: any) {
       console.error('Failed to load recurring data:', err)
@@ -251,6 +260,21 @@ export default function Recurring() {
     }
   }
 
+  const handleToggleSettle = async (e: React.MouseEvent, item: RecurringItem) => {
+    e.stopPropagation()
+    if (!canModifyRecurring(item) || settlingId) return
+    const nextSettled = !item.is_settled_current_cycle
+    try {
+      setSettlingId(item.id)
+      await recurringApi.toggleSettle(item.id, nextSettled)
+      await loadData(scope)
+    } catch (err: any) {
+      alert(err.message || '更新已繳狀態失敗')
+    } finally {
+      setSettlingId(null)
+    }
+  }
+
   // 卡片獨立按鈕二段式防呆刪除（徹底廢除原生 window.confirm）
   const handleDeleteClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
@@ -353,25 +377,40 @@ export default function Recurring() {
         <ScopeTabBar scope={scope} onChange={setScope} />
       </div>
 
-      {/* 統計卡片 */}
-      <div className="grid grid-3" style={{ marginBottom: 24 }}>
+      {/* 統計卡片 (ADR-0047：每月平均扣除已繳後之待預留額 ＋ 一年內週期準備金池) */}
+      <div className="grid grid-4" style={{ marginBottom: 24 }}>
         <div className="stat-card">
           <span className="stat-label">
-            <span>週期支出每月平均</span>
+            <span>本月週期支出待預留</span>
             <FormulaTooltip
-              label="檢視週期支出每月平均計算公式"
-              formula="∑（各筆週期支出金額 ÷ 週期月數：週繳×4(÷0.25)、月繳÷1、雙月÷2、季繳÷3、半年÷6、年繳÷12）"
-              calculation={
-                expenseItems.length > 0
-                  ? `共 ${expenseItems.length} 筆週期支出平攤合計 = ${formatCurrency(amortize?.monthly_expense ?? 0)} / 月`
-                  : `0 筆週期支出 = ${formatCurrency(0)}`
-              }
+              label="檢視本月週期支出待預留計算公式"
+              formula="本月待預留 ＝ 週期支出每月平均總和 － 本月已發生／已繳之週期支出份額（已繳帳單不再重複雙扣真實可支配現金）"
+              calculation={`每月平均 ${formatCurrency(amortize?.monthly_expense ?? 0)} - 本月已繳 ${formatCurrency(amortize?.settled_monthly_expense ?? 0)} = 本月尚需預留 ${formatCurrency(amortize?.remaining_monthly_expense ?? amortize?.monthly_expense ?? 0)}`}
             />
           </span>
           <div className="stat-value" style={{ color: 'var(--color-danger)' }}>
-            {formatCurrency(amortize?.monthly_expense ?? 0)}
+            {formatCurrency(amortize?.remaining_monthly_expense ?? amortize?.monthly_expense ?? 0)}
           </div>
-          <div className="stat-sub">將每週、年繳、季繳換算為每月預留負擔</div>
+          <div className="stat-sub">
+            每月平均 {formatCurrency(amortize?.monthly_expense ?? 0)} · 本月已繳 {formatCurrency(amortize?.settled_monthly_expense ?? 0)}
+          </div>
+        </div>
+
+        <div className="stat-card" style={{ background: 'linear-gradient(135deg, rgba(255,138,138,0.1) 0%, rgba(168,216,234,0.12) 100%)' }}>
+          <span className="stat-label">
+            <span>一年內週期準備金池</span>
+            <FormulaTooltip
+              label="檢視一年內週期準備金池與年度待付計算公式"
+              formula="長週期帳戶應留存準備金 ＝ ∑ 未繳長週期項目(雙月/季/半年/年) × 已累積攤提月數 × 每月平均；一年內尚待支付 ＝ 全年週期總額(每月平均×12) － 今年已繳總額"
+              calculation={`截至本月應留存長週期準備金 ${formatCurrency(amortize?.accumulated_sinking_fund ?? 0)}；一年總額 ${formatCurrency(amortize?.annual_total_expense ?? 0)} - 今年已繳 ${formatCurrency(amortize?.annual_settled_expense ?? 0)} = 年內待付 ${formatCurrency(amortize?.annual_remaining_expense ?? 0)}`}
+            />
+          </span>
+          <div className="stat-value" style={{ color: 'var(--color-primary)' }}>
+            {formatCurrency(amortize?.accumulated_sinking_fund ?? 0)}
+          </div>
+          <div className="stat-sub">
+            一年總額 {formatCurrency(amortize?.annual_total_expense ?? 0)} · 年內待付 {formatCurrency(amortize?.annual_remaining_expense ?? 0)}
+          </div>
         </div>
 
         <div className="stat-card">
@@ -382,7 +421,7 @@ export default function Recurring() {
               formula="∑（各筆週期收入金額 ÷ 週期月數：週領×4(÷0.25)、月領÷1、雙月÷2、季領÷3、半年÷6、年領÷12）"
               calculation={
                 incomeItems.length > 0
-                  ? `共 ${incomeItems.length} 筆週期收入平攤合計 = ${formatCurrency(amortize?.monthly_income ?? 0)} / 月`
+                  ? `共 ${incomeItems.length} 筆週期收入平攤合計 = ${formatCurrency(amortize?.monthly_income ?? 0)} / 月（本月已入帳 ${formatCurrency(amortize?.settled_monthly_income ?? 0)}）`
                   : `0 筆週期收入 = ${formatCurrency(0)}`
               }
             />
@@ -390,7 +429,11 @@ export default function Recurring() {
           <div className="stat-value" style={{ color: 'var(--color-success)' }}>
             {formatCurrency(amortize?.monthly_income ?? 0)}
           </div>
-          <div className="stat-sub">穩定每月現金流進帳</div>
+          <div className="stat-sub">
+            {(amortize?.settled_monthly_income ?? 0) > 0
+              ? `本月已入帳 ${formatCurrency(amortize?.settled_monthly_income ?? 0)}`
+              : '穩定每月現金流進帳'}
+          </div>
         </div>
 
         <div className="stat-card" style={{ background: 'var(--bg-surface-2)' }}>
@@ -427,17 +470,22 @@ export default function Recurring() {
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {expenseItems.map((item) => {
-                const monthlyShare = item.amount / (CYCLE_DIVISORS[item.cycle] || 1)
+                const monthlyShare = item.monthly_share ?? (item.amount / (CYCLE_DIVISORS[item.cycle] || 1))
                 const isConfirming = confirmingDeleteId === item.id
+                const isSettled = Boolean(item.is_settled_current_cycle)
+                const sinkingFund = item.accumulated_sinking_fund || 0
                 return (
                   <div
                     key={item.id}
                     className="recurring-card"
+                    style={isSettled ? { opacity: 0.78 } : undefined}
                     onClick={() => canModifyRecurring(item) && handleOpenEdit(item)}
                   >
                     <div className="recurring-card-main">
                       <div className="recurring-card-header">
-                        <span className="recurring-card-title">{item.name}</span>
+                        <span className="recurring-card-title" style={isSettled ? { textDecoration: 'line-through' } : undefined}>
+                          {item.name}
+                        </span>
                         {item.is_shared === 1 ? (
                           <span className="badge badge-primary" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                             <Home size={11} /> 公帳
@@ -458,16 +506,41 @@ export default function Recurring() {
                         <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
                           {formatScheduleLabel(item, '扣款')}
                         </span>
+                        {isSettled ? (
+                          <span className="badge badge-income" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <CheckCircle2 size={11} />
+                            <span>
+                              本期已繳{item.settled_source === 'transaction' ? ' · 記帳自動匹配' : ' · 已豁免預留'}
+                            </span>
+                          </span>
+                        ) : sinkingFund > 0 ? (
+                          <span
+                            className="badge"
+                            style={{
+                              fontSize: '0.7rem',
+                              background: 'rgba(255, 138, 138, 0.14)',
+                              color: 'var(--color-primary-dark)',
+                              border: '1px solid var(--border-color)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                            }}
+                          >
+                            <PiggyBank size={11} />
+                            <span>帳戶應留準備金 {formatCurrency(sinkingFund)}（已累 {item.accumulated_months || 1} 個月）</span>
+                          </span>
+                        ) : null}
                       </div>
                       <div className="recurring-card-meta">
                         {item.account_name ? `關聯扣款帳戶：${item.account_name}` : '未指定關聯帳戶'}
                         {item.cycle !== 'monthly' && ` · 換算每月平均：${formatCurrency(monthlyShare)} / 月`}
+                        {` · 本月待預留：${formatCurrency(item.remaining_monthly_share ?? (isSettled ? 0 : monthlyShare))}`}
                       </div>
                     </div>
 
                     <div className="recurring-card-side">
                       <div className="recurring-card-amount-block">
-                        <div className="recurring-card-amount" style={{ color: 'var(--color-danger)' }}>
+                        <div className="recurring-card-amount" style={{ color: isSettled ? 'var(--text-muted)' : 'var(--color-danger)' }}>
                           {formatCurrency(item.amount)}
                         </div>
                         <div className="recurring-card-cycle">
@@ -477,6 +550,17 @@ export default function Recurring() {
 
                       {canModifyRecurring(item) && (
                         <div className="recurring-card-actions">
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${isSettled ? 'btn-secondary' : 'btn-ghost'}`}
+                            style={{ border: '1px solid var(--border-color)' }}
+                            disabled={settlingId === item.id}
+                            onClick={(e) => handleToggleSettle(e, item)}
+                            title={isSettled ? '取消本期已繳，恢復列入本月預留計算' : '標記本期已繳，從本月待預留額與可支配現金扣減中豁免'}
+                          >
+                            {isSettled ? <CheckCircle2 size={14} color="var(--color-success)" /> : <Circle size={14} />}
+                            <span>{settlingId === item.id ? '處理中…' : isSettled ? '已繳' : '標記已繳'}</span>
+                          </button>
                           <button
                             type="button"
                             className="btn btn-ghost btn-sm"
@@ -525,12 +609,14 @@ export default function Recurring() {
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {incomeItems.map((item) => {
-                const monthlyShare = item.amount / (CYCLE_DIVISORS[item.cycle] || 1)
+                const monthlyShare = item.monthly_share ?? (item.amount / (CYCLE_DIVISORS[item.cycle] || 1))
                 const isConfirming = confirmingDeleteId === item.id
+                const isSettled = Boolean(item.is_settled_current_cycle)
                 return (
                   <div
                     key={item.id}
                     className="recurring-card"
+                    style={isSettled ? { opacity: 0.78 } : undefined}
                     onClick={() => canModifyRecurring(item) && handleOpenEdit(item)}
                   >
                     <div className="recurring-card-main">
@@ -552,6 +638,12 @@ export default function Recurring() {
                         )}
                         <span className="badge badge-income">{CYCLE_LABELS[item.cycle] || item.cycle}</span>
                         <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>{formatScheduleLabel(item, '入帳')}</span>
+                        {isSettled && (
+                          <span className="badge badge-income" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <CheckCircle2 size={11} />
+                            <span>本期已入帳{item.settled_source === 'transaction' ? ' · 記帳自動匹配' : ''}</span>
+                          </span>
+                        )}
                       </div>
                       <div className="recurring-card-meta">
                         {item.account_name ? `入帳帳戶：${item.account_name}` : '未指定關聯帳戶'}
@@ -569,6 +661,16 @@ export default function Recurring() {
 
                       {canModifyRecurring(item) && (
                         <div className="recurring-card-actions">
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${isSettled ? 'btn-secondary' : 'btn-ghost'}`}
+                            style={{ border: '1px solid var(--border-color)' }}
+                            disabled={settlingId === item.id}
+                            onClick={(e) => handleToggleSettle(e, item)}
+                          >
+                            {isSettled ? <CheckCircle2 size={14} color="var(--color-success)" /> : <Circle size={14} />}
+                            <span>{settlingId === item.id ? '處理中…' : isSettled ? '已入帳' : '標記已入帳'}</span>
+                          </button>
                           <button
                             type="button"
                             className="btn btn-ghost btn-sm"

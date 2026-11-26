@@ -259,8 +259,8 @@ export default function Dashboard() {
               <span>真實可支配現金</span>
               <FormulaTooltip
                 label="檢視真實可支配現金計算公式"
-                formula="淨可用餘額 － 週期支出每月平均預留 － 每月儲蓄目標預留 － 當月剩餘未用預算預留"
-                calculation={`${formatCurrency(balance?.available ?? 0)} - 週期 ${formatCurrency(balance?.monthlyFixed ?? 0)} - 儲蓄 ${formatCurrency(balance?.monthlyGoals ?? 0)}${(balance?.remainingBudget ?? 0) > 0 ? ` - 剩餘預算 ${formatCurrency(balance?.remainingBudget ?? 0)}` : ''} = ${formatCurrency(balance?.disposable ?? 0)}`}
+                formula="淨可用餘額 － 本月週期支出待預留（每月平均 － 本月已繳）－ 每月儲蓄目標預留 － 當月剩餘未用預算預留"
+                calculation={`${formatCurrency(balance?.available ?? 0)} - 週期待預留 ${formatCurrency(balance?.remainingMonthlyFixed ?? balance?.monthlyFixed ?? 0)}${(balance?.settledMonthlyFixed ?? 0) > 0 ? ` (原平均 ${formatCurrency(balance?.monthlyFixed ?? 0)} 已扣已繳 ${formatCurrency(balance?.settledMonthlyFixed ?? 0)})` : ''} - 儲蓄 ${formatCurrency(balance?.monthlyGoals ?? 0)}${(balance?.remainingBudget ?? 0) > 0 ? ` - 剩餘預算 ${formatCurrency(balance?.remainingBudget ?? 0)}` : ''} = ${formatCurrency(balance?.disposable ?? 0)}`}
               />
             </span>
             <div style={{ background: 'var(--color-success)', color: 'white', padding: 6, borderRadius: '50%' }}>
@@ -271,8 +271,10 @@ export default function Dashboard() {
             {formatCurrency(balance?.disposable ?? 0)}
           </div>
           <div className="stat-sub">
-            含固定開銷分攤 {formatCurrency(balance?.monthlyFixed ?? 0)}、儲蓄扣款 {formatCurrency(balance?.monthlyGoals ?? 0)}
-            {(balance?.remainingBudget ?? 0) > 0 ? ` 與剩餘預算預留 ${formatCurrency(balance?.remainingBudget ?? 0)}` : ''}
+            週期待預留 {formatCurrency(balance?.remainingMonthlyFixed ?? balance?.monthlyFixed ?? 0)}
+            {(balance?.settledMonthlyFixed ?? 0) > 0 ? `（已扣已繳 ${formatCurrency(balance?.settledMonthlyFixed ?? 0)}）` : ''}
+            {' '}· 儲蓄 {formatCurrency(balance?.monthlyGoals ?? 0)}
+            {(balance?.remainingBudget ?? 0) > 0 ? ` · 剩餘預算 ${formatCurrency(balance?.remainingBudget ?? 0)}` : ''}
           </div>
         </div>
 
@@ -727,8 +729,14 @@ export default function Dashboard() {
             </h3>
             <ul style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', paddingLeft: 18, lineHeight: 1.8 }}>
               <li>
-                週期支出每月平均預算 <strong>{formatCurrency(balance?.monthlyFixed ?? 0)}</strong>，已自動從真實可支配現金扣除。
+                本月週期支出尚需預留 <strong>{formatCurrency(balance?.remainingMonthlyFixed ?? balance?.monthlyFixed ?? 0)}</strong>
+                （原每月平均 {formatCurrency(balance?.monthlyFixed ?? 0)}，已扣除本月已繳 <strong>{formatCurrency(balance?.settledMonthlyFixed ?? 0)}</strong>）。
               </li>
+              {(balance?.accumulatedSinkingFund ?? 0) > 0 && (
+                <li>
+                  一年內長週期帳單（年繳／半年／季／雙月）截至本月帳戶應留存準備金 <strong>{formatCurrency(balance?.accumulatedSinkingFund ?? 0)}</strong>（年內尚待支付總額 {formatCurrency(balance?.annualFixedRemaining ?? 0)}）。
+                </li>
+              )}
               {(balance?.monthlyBudget ?? 0) > 0 && (
                 <li>
                   本月有效總預算 <strong>{formatCurrency(balance?.monthlyBudget ?? 0)}</strong>，未花完之剩餘額度 <strong>{formatCurrency(balance?.remainingBudget ?? 0)}</strong> 已預留把關。
