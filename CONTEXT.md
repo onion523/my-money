@@ -719,6 +719,13 @@ _Avoid_: 手機版偏左不等寬三態按鈕 (left-aligned uneven scope tabs)�
 在全站所有統計數據儀表板卡片（總覽、帳戶管理、週期收支、儲蓄目標、現金流預測之 `.stat-card`）以及次要統計摘要區塊（收支明細篩選總計、統計分析消費總額與公帳分攤佔比、家庭協同代墊待報銷淨額）之指標標題旁，配置 `Info`（小 `i`）向量圖示按鈕。點擊時彈出自動防超出螢幕邊界之懸浮氣泡框（Popover Tooltip，點擊外部或再次點擊即收合，不撐開原卡片高度），框內分上下兩層同時呈現「會計計算公式定義」與「代入當前視角實際金額之驗算算式」，讓使用者能即時核對每一項統計指標的組成來源。
 _Avoid_: 僅支援滑鼠懸停而手機無法觸發之原生 title (hover-only native title tooltip)、無實際數值代入之空泛文字 (static formula without live values)、超出手機螢幕右側邊界之氣泡框 (off-screen overflowing popover)
 
+**Brand Logo & Dual-Variant Identity (品牌標誌與雙變體識別系統)**:
+系統專屬向量品牌標誌以「翻開雙頁線條記帳本＋上方飄浮愛心與小錢幣」為核心意象（呼應柔和水彩日系與個人／家庭雙帳本定位）：左頁以珊瑚粉線條與淡粉暈代表個人私帳、右頁以柔天藍線條與淡藍暈代表家庭公帳，書頁上方輕盈飄浮珊瑚粉線條愛心與暖杏金線條 `$` 小錢幣，全面取代通用 `BookHeart` 圖示。同源 SVG 依場景劃分兩種變體：
+1. **Mark 純圖示（無外框）**：用於桌面側邊欄、行動端頂欄等導覽區域，自動適配淺色與深色模式背景。
+2. **Badge 徽章（圓角暖白漸層底框，深色模式轉月影鈦銀微光底框）**：用於 Web 登入頁、後端 OAuth 授權頁內聯圖示、瀏覽器 `favicon.svg`、手機主畫面 `apple-touch-icon` 與 PWA `manifest.webmanifest` 圖示。
+3. **情境雙語品牌字標並存**：站內導覽與網頁 `<title>` 維持「我的記帳本」，登入頁與後端 OAuth 授權頁維持「My Money」（搭配副標「個人與家庭雙帳本」）。
+_Avoid_: 繼續使用通用第三方 `BookHeart` 圖示作為品牌標誌 (using generic `BookHeart` icon as brand logo)、缺失 `favicon.svg` 或手機主畫面圖示 (missing favicon or mobile home screen icons)、厚重不透氣實心色塊破壞日系輕盈線條感 (heavy solid blocks clashing with airy line-art aesthetic)
+
 ---
 
 ### 系統架構與 API 效能規範 (System Architecture & API Performance)

@@ -7,6 +7,24 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
+const BRAND_LOGO_SVG = `<svg width="44" height="44" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="mm-logo-bg" x1="4" y1="4" x2="60" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="var(--logo-bg-start)"/>
+      <stop offset="1" stop-color="var(--logo-bg-end)"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#mm-logo-bg)" stroke="var(--logo-border)" stroke-width="1.5"/>
+  <path d="M32 33C29 29.8 23.5 28.5 14 29.2C12.3 29.3 11 30.7 11 32.4V47.6C11 49.4 12.5 50.8 14.3 50.6C23.5 49.8 29 51 32 53.5" fill="var(--logo-pink-soft)" stroke="var(--logo-pink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 33C35 29.8 40.5 28.5 50 29.2C51.7 29.3 53 30.7 53 32.4V47.6C53 49.4 51.5 50.8 49.7 50.6C40.5 49.8 35 51 32 53.5" fill="var(--logo-blue-soft)" stroke="var(--logo-blue)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 33V53.5" stroke="var(--logo-pink)" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M16.5 36.5H25.5M16.5 42H23.5" stroke="var(--logo-pink)" stroke-width="2" stroke-opacity="0.55" stroke-linecap="round"/>
+  <path d="M38.5 36.5H47.5M40.5 42H47.5" stroke="var(--logo-blue)" stroke-width="2" stroke-opacity="0.65" stroke-linecap="round"/>
+  <path d="M25.5 23.8C25.5 23.8 19.6 20 19.6 16.2C19.6 14.3 21.1 12.9 22.9 12.9C24 12.9 25 13.5 25.5 14.5C26 13.5 27 12.9 28.1 12.9C29.9 12.9 31.4 14.3 31.4 16.2C31.4 20 25.5 23.8 25.5 23.8Z" fill="var(--logo-pink-soft)" stroke="var(--logo-pink)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="41.5" cy="18" r="7.5" fill="var(--logo-gold-soft)" stroke="var(--logo-gold)" stroke-width="2.3"/>
+  <path d="M41.5 14.2V21.8M43.4 16.1C42.9 15.5 42.2 15.3 41.5 15.3C40.3 15.3 39.7 15.9 39.7 16.6C39.7 17.4 40.3 17.8 41.5 18.1C42.7 18.4 43.4 18.8 43.4 19.6C43.4 20.4 42.7 21 41.5 21C40.6 21 39.9 20.6 39.5 20" stroke="var(--logo-gold)" stroke-width="1.8" stroke-linecap="round"/>
+</svg>`;
+
 const SHARED_CSS = `
 :root {
   --bg: linear-gradient(135deg, #fff5f5 0%, #ffe8ea 50%, #eef7fb 100%);
@@ -22,6 +40,15 @@ const SHARED_CSS = `
   --notice-bg: rgba(16, 185, 129, 0.12);
   --notice-text: #047857;
   --shadow: 0 20px 50px rgba(255, 138, 138, 0.16);
+  --logo-bg-start: #fff9f8;
+  --logo-bg-end: #fff1eb;
+  --logo-border: #ffdede;
+  --logo-pink: #f27979;
+  --logo-pink-soft: rgba(255, 138, 138, 0.14);
+  --logo-blue: #66b4d6;
+  --logo-blue-soft: rgba(168, 216, 234, 0.22);
+  --logo-gold: #eb9e38;
+  --logo-gold-soft: rgba(255, 212, 160, 0.38);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -38,6 +65,15 @@ const SHARED_CSS = `
     --notice-bg: rgba(52, 211, 153, 0.14);
     --notice-text: #6ee7b7;
     --shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    --logo-bg-start: #252b33;
+    --logo-bg-end: #1e232a;
+    --logo-border: #3b434f;
+    --logo-pink: #ff9a9a;
+    --logo-pink-soft: rgba(255, 154, 154, 0.14);
+    --logo-blue: #92d0e8;
+    --logo-blue-soft: rgba(146, 208, 232, 0.14);
+    --logo-gold: #f9c46b;
+    --logo-gold-soft: rgba(249, 196, 107, 0.18);
   }
 }
 * { box-sizing: border-box; }
@@ -70,15 +106,12 @@ body {
   margin-bottom: 6px;
 }
 .logo {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 12px;
-  background: var(--primary);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 1.125rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 h1 { margin: 0; font-size: 1.25rem; font-weight: 700; }
 .sub { margin: 0 0 20px; font-size: 0.8125rem; color: var(--muted); }
@@ -352,7 +385,7 @@ html { font-size: ${Math.round(display.fontScale * 100)}%; }</style>
 <body>
   <main class="card">
     <div class="brand">
-      <div class="logo">M</div>
+      <div class="logo">${BRAND_LOGO_SVG}</div>
       <div>
         <h1>My Money</h1>
         <p class="sub">${clientText}</p>
@@ -416,7 +449,7 @@ export function renderOAuthErrorPage(title: string, message: string, backUrl?: s
 <body>
   <main class="card">
     <div class="brand">
-      <div class="logo">M</div>
+      <div class="logo">${BRAND_LOGO_SVG}</div>
       <div>
         <h1>${escapeHtml(title)}</h1>
         <p class="sub">授權請求無法完成</p>

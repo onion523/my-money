@@ -17,12 +17,12 @@ import {
   Sun,
   Moon,
   LogOut,
-  BookHeart,
   Menu,
   X,
   Plus,
   Sliders,
 } from 'lucide-react'
+import BrandLogo from './BrandLogo'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: '儀表板', end: true },
@@ -107,7 +107,7 @@ export default function Layout() {
         </button>
 
         <div className="mobile-header-title">
-          <BookHeart size={20} style={{ flexShrink: 0 }} />
+          <BrandLogo variant="mark" size={24} />
           <span>我的記帳本</span>
           {currentNavItem && currentNavItem.to !== '/' && (
             <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
@@ -140,7 +140,7 @@ export default function Layout() {
       <nav className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
         <div className="sidebar-logo" style={{ justifyContent: 'space-between' }}>
           <div className="flex items-center gap-sm">
-            <BookHeart size={24} />
+            <BrandLogo variant="mark" size={28} />
             <span>我的記帳本</span>
           </div>
           <button

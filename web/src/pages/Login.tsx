@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookHeart, KeyRound, LogIn, UserPlus } from 'lucide-react';
+import { KeyRound, LogIn, UserPlus } from 'lucide-react';
+import BrandLogo from '../components/BrandLogo';
 import { loginWithPasskey, startOAuthLogin } from '../auth/oauth';
 
 export default function Login() {
@@ -40,17 +41,12 @@ export default function Login() {
     }}>
       <div className="card" style={{ maxWidth: 400, width: '100%', padding: 32, textAlign: 'center' }}>
         <div style={{
-          width: 52,
-          height: 52,
-          borderRadius: 16,
-          background: 'var(--color-primary)',
-          color: '#fff',
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: 14,
         }}>
-          <BookHeart size={26} />
+          <BrandLogo variant="badge" size={56} />
         </div>
         <h1 style={{ fontSize: '1.5rem', marginBottom: 6 }}>My Money</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', marginBottom: 24 }}>

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bg-light" x1="4" y1="4" x2="60" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF9F8"/>
+      <stop offset="1" stop-color="#FFF1EB"/>
+    </linearGradient>
+    <linearGradient id="bg-dark" x1="4" y1="4" x2="60" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#252B33"/>
+      <stop offset="1" stop-color="#1E232A"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .badge { fill: url(#bg-light); stroke: #FFDEDE; }
+    .pink-fill { fill: rgba(255, 138, 138, 0.14); stroke: #F27979; }
+    .blue-fill { fill: rgba(168, 216, 234, 0.22); stroke: #66B4D6; }
+    .pink-line { stroke: #F27979; }
+    .blue-line { stroke: #66B4D6; }
+    .gold-fill { fill: rgba(255, 212, 160, 0.38); stroke: #EB9E38; }
+    .gold-line { stroke: #EB9E38; }
+    @media (prefers-color-scheme: dark) {
+      .badge { fill: url(#bg-dark); stroke: #3B434F; }
+      .pink-fill { fill: rgba(255, 154, 154, 0.14); stroke: #FF9A9A; }
+      .blue-fill { fill: rgba(146, 208, 232, 0.14); stroke: #92D0E8; }
+      .pink-line { stroke: #FF9A9A; }
+      .blue-line { stroke: #92D0E8; }
+      .gold-fill { fill: rgba(249, 196, 107, 0.18); stroke: #F9C46B; }
+      .gold-line { stroke: #F9C46B; }
+    }
+  </style>
+  <rect class="badge" x="2" y="2" width="60" height="60" rx="16" stroke-width="1.5"/>
+  <path class="pink-fill" d="M32 33C29 29.8 23.5 28.5 14 29.2C12.3 29.3 11 30.7 11 32.4V47.6C11 49.4 12.5 50.8 14.3 50.6C23.5 49.8 29 51 32 53.5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path class="blue-fill" d="M32 33C35 29.8 40.5 28.5 50 29.2C51.7 29.3 53 30.7 53 32.4V47.6C53 49.4 51.5 50.8 49.7 50.6C40.5 49.8 35 51 32 53.5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path class="pink-line" d="M32 33V53.5" stroke-width="2.2" stroke-linecap="round"/>
+  <path class="pink-line" d="M16.5 36.5H25.5M16.5 42H23.5" stroke-width="2" stroke-opacity="0.55" stroke-linecap="round"/>
+  <path class="blue-line" d="M38.5 36.5H47.5M40.5 42H47.5" stroke-width="2" stroke-opacity="0.65" stroke-linecap="round"/>
+  <path class="pink-fill" d="M25.5 23.8C25.5 23.8 19.6 20 19.6 16.2C19.6 14.3 21.1 12.9 22.9 12.9C24 12.9 25 13.5 25.5 14.5C26 13.5 27 12.9 28.1 12.9C29.9 12.9 31.4 14.3 31.4 16.2C31.4 20 25.5 23.8 25.5 23.8Z" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle class="gold-fill" cx="41.5" cy="18" r="7.5" stroke-width="2.3"/>
+  <path class="gold-line" d="M41.5 14.2V21.8M43.4 16.1C42.9 15.5 42.2 15.3 41.5 15.3C40.3 15.3 39.7 15.9 39.7 16.6C39.7 17.4 40.3 17.8 41.5 18.1C42.7 18.4 43.4 18.8 43.4 19.6C43.4 20.4 42.7 21 41.5 21C40.6 21 39.9 20.6 39.5 20" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

@@ -2332,3 +2332,28 @@ a { text-decoration: none; color: inherit; }
     font-size: 0.82rem;
   }
 }
+
+/* Brand Logo Tokens */
+:root {
+  --logo-bg-start: #FFF9F8;
+  --logo-bg-end: #FFF1EB;
+  --logo-border: #FFDEDE;
+  --logo-pink: #F27979;
+  --logo-pink-soft: rgba(255, 138, 138, 0.14);
+  --logo-blue: #66B4D6;
+  --logo-blue-soft: rgba(168, 216, 234, 0.22);
+  --logo-gold: #EB9E38;
+  --logo-gold-soft: rgba(255, 212, 160, 0.38);
+}
+
+[data-theme="dark"] {
+  --logo-bg-start: #252B33;
+  --logo-bg-end: #1E232A;
+  --logo-border: #3B434F;
+  --logo-pink: #FF9A9A;
+  --logo-pink-soft: rgba(255, 154, 154, 0.14);
+  --logo-blue: #92D0E8;
+  --logo-blue-soft: rgba(146, 208, 232, 0.14);
+  --logo-gold: #F9C46B;
+  --logo-gold-soft: rgba(249, 196, 107, 0.18);
+}
