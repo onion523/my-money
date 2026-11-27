@@ -60,6 +60,8 @@ export default function Accounts() {
     statement_day: '',
     payment_due_day: '',
     payment_account_id: '',
+    is_reserve: 0,
+    parent_account_id: '',
     unbilled: '',
     is_joint: 0,
     color: ACCOUNT_COLORS[0],
@@ -142,19 +144,21 @@ export default function Accounts() {
     loadData(scope)
   }, [scope])
 
-  const handleOpenAdd = (type: 'cash' | 'bank' | 'credit_card' = 'cash') => {
+  const handleOpenAdd = (type: 'cash' | 'bank' | 'credit_card' = 'cash', parentBank?: Account) => {
     setEditingAcc(null)
     setForm({
-      name: '',
+      name: parentBank ? `${parentBank.name} - 週期預留金` : '',
       type,
       balance: '0',
       credit_limit: type === 'credit_card' ? '100000' : '',
       statement_day: type === 'credit_card' ? '15' : '',
       payment_due_day: type === 'credit_card' ? '5' : '',
       payment_account_id: '',
+      is_reserve: parentBank ? 1 : 0,
+      parent_account_id: parentBank ? parentBank.id : '',
       unbilled: '0',
-      is_joint: 0,
-      color: type === 'cash' ? '#10B981' : ACCOUNT_COLORS[Math.floor(Math.random() * ACCOUNT_COLORS.length)],
+      is_joint: parentBank ? (parentBank.is_joint || 0) : (scope === 'household' ? 1 : 0),
+      color: parentBank ? (parentBank.color || '#8B5CF6') : (type === 'cash' ? '#10B981' : ACCOUNT_COLORS[Math.floor(Math.random() * ACCOUNT_COLORS.length)]),
     })
     setErrorMsg('')
     setShowModal(true)
@@ -170,6 +174,8 @@ export default function Accounts() {
       statement_day: acc.statement_day?.toString() || '',
       payment_due_day: acc.payment_due_day?.toString() || '',
       payment_account_id: acc.payment_account_id || '',
+      is_reserve: acc.is_reserve || 0,
+      parent_account_id: acc.parent_account_id || '',
       unbilled: acc.unbilled?.toString() || '0',
       is_joint: acc.is_joint || 0,
       color: acc.color || ACCOUNT_COLORS[0],
@@ -192,6 +198,8 @@ export default function Accounts() {
     const stmtDay = form.statement_day ? parseInt(form.statement_day) : undefined
     const dueDay = form.payment_due_day ? parseInt(form.payment_due_day) : undefined
     const payAccId = form.type === 'credit_card' ? (form.payment_account_id || null) : null
+    const isReserveVal = form.type === 'bank' ? (form.is_reserve ? 1 : 0) : 0
+    const parentAccId = form.type === 'bank' ? (form.parent_account_id || null) : null
 
     try {
       setSubmitting(true)
@@ -205,6 +213,8 @@ export default function Accounts() {
           statement_day: stmtDay,
           payment_due_day: dueDay,
           payment_account_id: payAccId,
+          is_reserve: isReserveVal,
+          parent_account_id: parentAccId,
           is_joint: form.is_joint,
           color: form.color,
         })
@@ -218,6 +228,8 @@ export default function Accounts() {
           statement_day: stmtDay,
           payment_due_day: dueDay,
           payment_account_id: payAccId,
+          is_reserve: isReserveVal,
+          parent_account_id: parentAccId,
           is_joint: form.is_joint,
           color: form.color,
         })
@@ -624,10 +636,10 @@ export default function Accounts() {
             <span>銀行存款總額</span>
             <FormulaTooltip
               label="檢視銀行存款總額計算公式"
-              formula="當前視角下所有「銀行存款帳戶」之活存餘額加總"
+              formula="當前視角下所有「銀行存款帳戶（含主帳戶＋預留金帳戶）」之活存餘額加總"
               calculation={
                 bankAccounts.length > 0
-                  ? `${bankAccounts.map(a => `${a.name} ${formatCurrency(a.balance)}`).join(' + ')} = ${formatCurrency(balance?.bankTotal ?? 0)}`
+                  ? `主帳戶 ${formatCurrency(balance?.mainBankTotal ?? (balance?.bankTotal ?? 0))} + 預留金帳戶 ${formatCurrency(balance?.reserveBankTotal ?? 0)} = ${formatCurrency(balance?.bankTotal ?? 0)}`
                   : `0 個銀行存款帳戶 = ${formatCurrency(0)}`
               }
             />
@@ -635,7 +647,11 @@ export default function Accounts() {
           <div className="stat-value" style={{ color: 'var(--color-primary)' }}>
             {formatCurrency(balance?.bankTotal ?? 0)}
           </div>
-          <div className="stat-sub">{bankAccounts.length} 個銀行存款帳戶</div>
+          <div className="stat-sub">
+            {(balance?.reserveBankTotal ?? 0) > 0 || bankAccounts.some(b => Number(b.is_reserve) === 1)
+              ? `主帳戶 ${formatCurrency(balance?.mainBankTotal ?? ((balance?.bankTotal ?? 0) - (balance?.reserveBankTotal ?? 0)))} · 預留金 ${formatCurrency(balance?.reserveBankTotal ?? 0)}`
+              : `${bankAccounts.length} 個銀行存款帳戶`}
+          </div>
         </div>
 
         <div className="stat-card" style={{ borderLeft: '4px solid var(--color-danger)' }}>
@@ -825,7 +841,21 @@ export default function Accounts() {
           </div>
         ) : (
           <div className="grid grid-3">
-            {bankAccounts.map(acc => {
+            {bankAccounts
+              .filter(acc => {
+                // 若為子帳戶且其主銀行帳戶亦在當前清單中，則已整合顯示於主銀行卡片內，不重複單獨渲染頂層卡片
+                if (acc.parent_account_id && bankAccounts.some(b => b.id === acc.parent_account_id)) {
+                  return false
+                }
+                return true
+              })
+              .map(acc => {
+              const subAccounts = bankAccounts.filter(b => b.parent_account_id === acc.id)
+              const hasSubAccounts = subAccounts.length > 0
+              const subReserveBalance = subAccounts.reduce((s, b) => s + (b.balance || 0), 0)
+              const combinedBalance = acc.balance + subReserveBalance
+              const isReserveSelf = Number(acc.is_reserve) === 1
+
               const boundCards = creditCards.filter(c => c.payment_account_id === acc.id)
               const boundBilled = boundCards.reduce((sum, c) => sum + (c.balance || 0), 0)
               const boundUnbilled = boundCards.reduce((sum, c) => sum + (c.unbilled || 0), 0)
@@ -836,12 +866,36 @@ export default function Accounts() {
               return (
                 <div key={acc.id} className="card account-card" style={{ borderTop: `4px solid ${acc.color}` }}>
                   <div className="account-card-header">
-                    <div className="account-name-group">
+                    <div className="account-name-group" style={{ flexWrap: 'wrap', gap: 6 }}>
                       <span className="account-color-dot" style={{ backgroundColor: acc.color }} />
                       <h3 className="account-name">{acc.name}</h3>
+                      {isReserveSelf && (
+                        <span
+                          className="badge"
+                          style={{
+                            background: 'rgba(139, 92, 246, 0.14)',
+                            color: '#7C3AED',
+                            border: '1px solid rgba(139, 92, 246, 0.3)',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          週期預留金帳戶
+                        </span>
+                      )}
                     </div>
                     {canModifyAccount(acc) && (
                       <div className="flex gap-xs">
+                        {!isReserveSelf && (
+                          <button
+                            className="btn btn-xs btn-secondary"
+                            title="在此銀行帳戶下建立週期預留金子帳戶"
+                            onClick={() => handleOpenAdd('bank', acc)}
+                            style={{ fontSize: '0.72rem', padding: '2px 7px' }}
+                          >
+                            + 預留子帳戶
+                          </button>
+                        )}
                         <button className="btn-icon" title="編輯" onClick={() => handleOpenEdit(acc)}>
                           <Edit2 size={16} />
                         </button>
@@ -853,10 +907,99 @@ export default function Accounts() {
                   </div>
 
                   <div className="account-balance-group" style={{ margin: '14px 0' }}>
-                    <span className="account-balance-label">存款餘額</span>
-                    <div className="account-balance" style={{ color: 'var(--color-primary)', fontSize: '1.75rem', fontWeight: 700 }}>
-                      {formatCurrency(acc.balance)}
+                    <span className="account-balance-label">
+                      {hasSubAccounts ? '帳戶總餘額（主帳戶＋預留金加總）' : isReserveSelf ? '預留金帳戶餘額' : '存款餘額'}
+                    </span>
+                    <div className="account-balance" style={{ color: isReserveSelf ? '#7C3AED' : 'var(--color-primary)', fontSize: '1.75rem', fontWeight: 700 }}>
+                      {formatCurrency(combinedBalance)}
                     </div>
+
+                    {/* 主帳戶金額 vs 預留金帳戶金額 拆解顯示 (ADR-0048) */}
+                    {(hasSubAccounts || isReserveSelf) && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: 'rgba(139, 92, 246, 0.06)',
+                          border: '1px solid rgba(139, 92, 246, 0.22)',
+                          fontSize: '0.82rem',
+                        }}
+                      >
+                        <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>主帳戶金額：</span>
+                          <strong style={{ color: 'var(--text-primary)' }}>
+                            {formatCurrency(isReserveSelf ? 0 : acc.balance)}
+                          </strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span style={{ color: '#7C3AED', fontWeight: 600 }}>預留金帳戶金額：</span>
+                          <strong style={{ color: '#7C3AED', fontSize: '0.9rem' }}>
+                            {formatCurrency(isReserveSelf ? acc.balance : subReserveBalance)}
+                          </strong>
+                        </div>
+
+                        {hasSubAccounts && (
+                          <div
+                            style={{
+                              borderTop: '1px dashed rgba(139, 92, 246, 0.25)',
+                              marginTop: 8,
+                              paddingTop: 8,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 6,
+                            }}
+                          >
+                            {subAccounts.map(sub => (
+                              <div
+                                key={sub.id}
+                                className="flex items-center justify-between"
+                                style={{ fontSize: '0.78rem', gap: 6, flexWrap: 'wrap' }}
+                              >
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#8B5CF6' }} />
+                                  <span>{sub.name}</span>
+                                </span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                  <strong style={{ color: '#7C3AED' }}>{formatCurrency(sub.balance)}</strong>
+                                  <button
+                                    type="button"
+                                    className="btn btn-xs btn-secondary"
+                                    style={{ padding: '1px 6px', fontSize: '0.7rem' }}
+                                    title="從主帳戶撥款至此預留金子帳戶"
+                                    onClick={() => handleOpenTransfer(acc.id, sub.id)}
+                                  >
+                                    撥入預留金
+                                  </button>
+                                  {canModifyAccount(sub) && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="btn-icon"
+                                        style={{ padding: 2 }}
+                                        title="編輯預留金子帳戶"
+                                        onClick={() => handleOpenEdit(sub)}
+                                      >
+                                        <Edit2 size={13} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-icon danger"
+                                        style={{ padding: 2 }}
+                                        title="刪除預留金子帳戶"
+                                        onClick={() => handleDelete(sub.id, sub.name)}
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </>
+                                  )}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {boundCards.length > 0 && (
@@ -1418,18 +1561,83 @@ export default function Accounts() {
             </div>
 
             {form.type !== 'credit_card' ? (
-              <div className="form-group">
-                <label className="form-label">{form.type === 'cash' ? '目前現金餘額 (NT$)' : '目前存款餘額 (NT$)'}</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input"
-                  placeholder="0"
-                  value={form.balance}
-                  onChange={e => setForm(p => ({ ...p, balance: e.target.value }))}
-                  required
-                />
-              </div>
+              <>
+                <div className="form-group">
+                  <label className="form-label">{form.type === 'cash' ? '目前現金餘額 (NT$)' : '目前存款餘額 (NT$)'}</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input"
+                    placeholder="0"
+                    value={form.balance}
+                    onChange={e => setForm(p => ({ ...p, balance: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                {form.type === 'bank' && (
+                  <div
+                    className="form-group"
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      background: 'rgba(139, 92, 246, 0.06)',
+                      border: '1px solid rgba(139, 92, 246, 0.22)',
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        fontSize: '0.9rem',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.is_reserve)}
+                        onChange={e =>
+                          setForm(p => ({
+                            ...p,
+                            is_reserve: e.target.checked ? 1 : 0,
+                            parent_account_id: e.target.checked ? p.parent_account_id : '',
+                          }))
+                        }
+                        style={{ width: 16, height: 16 }}
+                      />
+                      <span>設為「週期支出預留金帳戶 / 子帳戶」</span>
+                    </label>
+                    <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 4, lineHeight: 1.5 }}>
+                      勾選後，此帳戶餘額將計入「週期支出預留金總數」，並與日常花用之主帳戶金額分開計算；若預留金不足，系統會自動將缺口往後平攤至下次繳款前的月份。
+                    </small>
+
+                    {Boolean(form.is_reserve) && (
+                      <div style={{ marginTop: 10 }}>
+                        <label className="form-label" style={{ fontSize: '0.82rem' }}>
+                          所屬主銀行帳戶（選填，選取後將於主銀行卡片合併顯示總餘額並拆解主帳戶／預留金）
+                        </label>
+                        <select
+                          className="input"
+                          value={form.parent_account_id}
+                          onChange={e => setForm(p => ({ ...p, parent_account_id: e.target.value }))}
+                        >
+                          <option value="">-- 獨立預留金銀行帳戶（不掛載於其他主帳戶下） --</option>
+                          {bankAccounts
+                            .filter(b => b.id !== editingAcc?.id && !b.parent_account_id && Number(b.is_reserve) !== 1)
+                            .map(b => (
+                              <option key={b.id} value={b.id}>
+                                {b.name} (主帳戶餘額：{formatCurrency(b.balance)})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             ) : (
               <>
                 <div className="grid grid-2 gap-sm">

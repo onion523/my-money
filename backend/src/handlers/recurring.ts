@@ -4,6 +4,7 @@ import { authMiddleware, generateId } from '../middleware/jwt';
 import { getUserHousehold } from './households';
 import { getTaipeiDate } from '../utils/date';
 import { ensureForecastSchema } from './forecast';
+import { ensureAccountsSchema } from './accounts';
 
 type Vars = { userId: string; userEmail: string; userName: string };
 const recurring = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -80,6 +81,13 @@ export interface EnrichedRecurringItem extends RecurringItem {
   remaining_monthly_share: number;
   accumulated_months: number;
   accumulated_sinking_fund: number;
+  prior_accumulated_months: number;
+  prior_expected_sinking_fund: number;
+  remaining_months_to_due: number;
+  allocated_reserve_balance: number;
+  shortfall_amount: number;
+  catchup_monthly_add: number;
+  effective_monthly_share: number;
   annual_total: number;
   annual_settled: number;
   annual_remaining: number;
@@ -89,10 +97,15 @@ export interface RecurringAmortizationSummary {
   monthly_expense: number;
   settled_monthly_expense: number;
   remaining_monthly_expense: number;
+  base_remaining_monthly_expense: number;
+  catchup_monthly_add: number;
   monthly_income: number;
   settled_monthly_income: number;
   remaining_monthly_income: number;
   accumulated_sinking_fund: number;
+  prior_expected_sinking_fund: number;
+  actual_reserve_balance: number;
+  reserve_shortfall: number;
   annual_total_expense: number;
   annual_settled_expense: number;
   annual_remaining_expense: number;
@@ -147,6 +160,7 @@ export async function computeRecurringAmortization(
   await Promise.all([
     ensureRecurringSchema(db),
     ensureForecastSchema(db),
+    ensureAccountsSchema(db),
   ]);
 
   const placeholders = memberUserIds.map(() => '?').join(',');
@@ -159,6 +173,16 @@ export async function computeRecurringAmortization(
   } else if (scope === 'personal') {
     sqlCondition = `r.user_id = ? AND r.is_shared = 0`;
     sqlParams = [userId];
+  }
+
+  let accScopeCond = `(user_id = ? OR (user_id IN (${placeholders}) AND is_joint = 1))`;
+  let accScopeParams: any[] = [userId, ...memberUserIds];
+  if (scope === 'household') {
+    accScopeCond = `user_id IN (${placeholders}) AND is_joint = 1`;
+    accScopeParams = [...memberUserIds];
+  } else if (scope === 'personal') {
+    accScopeCond = `user_id = ? AND is_joint = 0`;
+    accScopeParams = [userId];
   }
 
   const todayObj = getTaipeiDate();
@@ -180,7 +204,7 @@ export async function computeRecurringAmortization(
     txScopeParams = [userId];
   }
 
-  const [recRowsRes, txRowsRes, settledRowsRes] = await Promise.all([
+  const [recRowsRes, txRowsRes, settledRowsRes, reserveRowRes] = await Promise.all([
     db.prepare(`
       SELECT r.*, a.name as account_name, a.is_joint as account_is_joint, u.name as user_name
       FROM recurring_items r
@@ -202,6 +226,11 @@ export async function computeRecurringAmortization(
       FROM forecast_settled_events
       WHERE user_id IN (${placeholders}) AND event_key LIKE 'recurring:%'
     `).bind(...memberUserIds).all(),
+    db.prepare(`
+      SELECT COALESCE(SUM(balance), 0) as reserve_total
+      FROM accounts
+      WHERE ${accScopeCond} AND type = 'bank' AND is_reserve = 1
+    `).bind(...accScopeParams).first(),
   ]);
 
   const rawItems = (recRowsRes.results || []) as RecurringItem[];
@@ -215,8 +244,9 @@ export async function computeRecurringAmortization(
     is_shared: number;
   }>;
   const settledKeys = ((settledRowsRes.results || []) as Array<{ event_key: string }>).map(r => r.event_key);
+  const actualReserveBalance = Math.max(0, Number((reserveRowRes as any)?.reserve_total || 0));
 
-  const enrichedItems: EnrichedRecurringItem[] = rawItems.map(item => {
+  const prelimItems: EnrichedRecurringItem[] = rawItems.map(item => {
     const cycleM = CYCLE_MONTHS[item.cycle] || 1;
     const monthlyShare = item.amount / cycleM;
     const annualTotal = monthlyShare * 12;
@@ -243,6 +273,9 @@ export async function computeRecurringAmortization(
     let settledMonthlyShare = 0;
     let accumulatedMonths = 1;
     let accumulatedSinkingFund = 0;
+    let priorAccumulatedMonths = 0;
+    let priorExpectedSinkingFund = 0;
+    let remainingMonthsToDue = 1;
 
     if (item.cycle === 'weekly') {
       const monthStart = `${currentYm}-01`;
@@ -296,6 +329,8 @@ export async function computeRecurringAmortization(
       const anchorM = item.month_of_cycle || 1;
       const win = resolveLongCycleWindow(currYear, currMonth, cycleM, anchorM);
       accumulatedMonths = win.accumulatedMonths;
+      priorAccumulatedMonths = Math.max(0, accumulatedMonths - 1);
+      remainingMonthsToDue = Math.max(1, cycleM - priorAccumulatedMonths);
 
       const cycleTxs = matchingTxs.filter(tx => tx.date >= win.startDate && tx.date <= win.endDate);
       const hasManual = itemSettledKeys.some(k => {
@@ -310,16 +345,19 @@ export async function computeRecurringAmortization(
         settledAmountThisCycle = item.amount;
         settledMonthlyShare = monthlyShare;
         accumulatedSinkingFund = 0;
+        priorExpectedSinkingFund = 0;
       } else if (hasManual) {
         isSettledCurrentCycle = true;
         settledSource = 'manual';
         settledAmountThisCycle = item.amount;
         settledMonthlyShare = monthlyShare;
         accumulatedSinkingFund = 0;
+        priorExpectedSinkingFund = 0;
       } else {
         // 本期尚未繳納：截至本月帳戶應已累積留存之長週期準備金 = accumulatedMonths * monthlyShare
         if (item.type === 'expense') {
           accumulatedSinkingFund = accumulatedMonths * monthlyShare;
+          priorExpectedSinkingFund = priorAccumulatedMonths * monthlyShare;
         }
       }
     }
@@ -343,9 +381,44 @@ export async function computeRecurringAmortization(
       remaining_monthly_share: Math.round(remainingMonthlyShare * 100) / 100,
       accumulated_months: accumulatedMonths,
       accumulated_sinking_fund: Math.round(accumulatedSinkingFund * 100) / 100,
+      prior_accumulated_months: priorAccumulatedMonths,
+      prior_expected_sinking_fund: Math.round(priorExpectedSinkingFund * 100) / 100,
+      remaining_months_to_due: remainingMonthsToDue,
+      allocated_reserve_balance: 0,
+      shortfall_amount: 0,
+      catchup_monthly_add: 0,
+      effective_monthly_share: Math.round(remainingMonthlyShare * 100) / 100,
       annual_total: Math.round(annualTotal * 100) / 100,
       annual_settled: Math.round(annualSettled * 100) / 100,
       annual_remaining: Math.round(annualRemaining * 100) / 100,
+    };
+  });
+
+  // ADR-0048：計算預留金不足額並按比例往後平攤至下次繳款之前的剩餘月份
+  const totalPriorExpectedSinkingFund = prelimItems
+    .filter(i => i.type === 'expense' && !i.is_settled_current_cycle)
+    .reduce((s, i) => s + i.prior_expected_sinking_fund, 0);
+
+  const reserveShortfall = Math.max(0, totalPriorExpectedSinkingFund - actualReserveBalance);
+
+  const enrichedItems: EnrichedRecurringItem[] = prelimItems.map(item => {
+    const cycleM = CYCLE_MONTHS[item.cycle] || 1;
+    if (item.type !== 'expense' || item.is_settled_current_cycle || cycleM < 2 || totalPriorExpectedSinkingFund <= 0) {
+      return item;
+    }
+    const weight = item.prior_expected_sinking_fund / totalPriorExpectedSinkingFund;
+    const allocatedReserve = Math.min(item.prior_expected_sinking_fund, actualReserveBalance * weight);
+    const shortfall = Math.max(0, item.prior_expected_sinking_fund - allocatedReserve);
+    const catchupAdd = shortfall > 0 ? shortfall / item.remaining_months_to_due : 0;
+    const effectiveRemaining = item.remaining_monthly_share + catchupAdd;
+
+    return {
+      ...item,
+      allocated_reserve_balance: Math.round(allocatedReserve * 100) / 100,
+      shortfall_amount: Math.round(shortfall * 100) / 100,
+      catchup_monthly_add: Math.round(catchupAdd * 100) / 100,
+      effective_monthly_share: Math.round(effectiveRemaining * 100) / 100,
+      remaining_monthly_share: Math.round(effectiveRemaining * 100) / 100,
     };
   });
 
@@ -354,7 +427,9 @@ export async function computeRecurringAmortization(
 
   const monthlyExpense = expItems.reduce((s, i) => s + i.monthly_share, 0);
   const settledMonthlyExpense = expItems.reduce((s, i) => s + i.settled_monthly_share, 0);
-  const remainingMonthlyExpense = Math.max(0, monthlyExpense - settledMonthlyExpense);
+  const baseRemainingMonthlyExpense = Math.max(0, monthlyExpense - settledMonthlyExpense);
+  const catchupMonthlyAdd = expItems.reduce((s, i) => s + i.catchup_monthly_add, 0);
+  const remainingMonthlyExpense = baseRemainingMonthlyExpense + catchupMonthlyAdd;
 
   const monthlyIncome = incItems.reduce((s, i) => s + i.monthly_share, 0);
   const settledMonthlyIncome = incItems.reduce((s, i) => s + i.settled_monthly_share, 0);
@@ -369,10 +444,15 @@ export async function computeRecurringAmortization(
     monthly_expense: Math.round(monthlyExpense * 100) / 100,
     settled_monthly_expense: Math.round(settledMonthlyExpense * 100) / 100,
     remaining_monthly_expense: Math.round(remainingMonthlyExpense * 100) / 100,
+    base_remaining_monthly_expense: Math.round(baseRemainingMonthlyExpense * 100) / 100,
+    catchup_monthly_add: Math.round(catchupMonthlyAdd * 100) / 100,
     monthly_income: Math.round(monthlyIncome * 100) / 100,
     settled_monthly_income: Math.round(settledMonthlyIncome * 100) / 100,
     remaining_monthly_income: Math.round(remainingMonthlyIncome * 100) / 100,
     accumulated_sinking_fund: Math.round(accumulatedSinkingFund * 100) / 100,
+    prior_expected_sinking_fund: Math.round(totalPriorExpectedSinkingFund * 100) / 100,
+    actual_reserve_balance: Math.round(actualReserveBalance * 100) / 100,
+    reserve_shortfall: Math.round(reserveShortfall * 100) / 100,
     annual_total_expense: Math.round(annualTotalExpense * 100) / 100,
     annual_settled_expense: Math.round(annualSettledExpense * 100) / 100,
     annual_remaining_expense: Math.round(annualRemainingExpense * 100) / 100,

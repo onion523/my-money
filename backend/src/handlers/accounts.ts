@@ -17,6 +17,12 @@ export async function ensureAccountsSchema(db: any) {
         await db.prepare('ALTER TABLE accounts ADD COLUMN payment_account_id TEXT').run();
       } catch (_) {}
       try {
+        await db.prepare('ALTER TABLE accounts ADD COLUMN is_reserve INTEGER NOT NULL DEFAULT 0').run();
+      } catch (_) {}
+      try {
+        await db.prepare('ALTER TABLE accounts ADD COLUMN parent_account_id TEXT DEFAULT NULL').run();
+      } catch (_) {}
+      try {
         await db.prepare('ALTER TABLE transactions ADD COLUMN unbilled_offset REAL DEFAULT 0').run();
       } catch (_) {}
       try {
@@ -297,7 +303,7 @@ async function validatePaymentAccountId(
 accounts.post('/', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.json();
-  const { name, type, balance = 0, credit_limit, statement_day, payment_due_day, payment_account_id, unbilled = 0, color = '#FF8A8A', is_joint = 0 } = body;
+  const { name, type, balance = 0, credit_limit, statement_day, payment_due_day, payment_account_id, is_reserve = 0, parent_account_id, unbilled = 0, color = '#FF8A8A', is_joint = 0 } = body;
   const [, { memberUserIds }] = await Promise.all([
     ensureAccountsSchema(c.env.DB),
     getUserHousehold(c.env.DB, userId),
@@ -308,10 +314,20 @@ accounts.post('/', async (c) => {
     const err = await validatePaymentAccountId(c.env.DB, resolvedPayAccId, userId, memberUserIds);
     if (err) return c.json({ success: false, error: err }, 400);
   }
+  const resolvedIsReserve = type === 'bank' && Number(is_reserve) ? 1 : 0;
+  let resolvedParentAccId = type === 'bank' && parent_account_id ? String(parent_account_id) : null;
+  if (resolvedParentAccId) {
+    const parentAcc = await c.env.DB.prepare(
+      `SELECT id, type FROM accounts WHERE id = ?`
+    ).bind(resolvedParentAccId).first<{ id: string; type: string }>();
+    if (!parentAcc || parentAcc.type !== 'bank') {
+      resolvedParentAccId = null;
+    }
+  }
   const id = generateId();
   await c.env.DB.prepare(
-    'INSERT INTO accounts (id, user_id, name, type, balance, credit_limit, statement_day, payment_due_day, payment_account_id, unbilled, color, is_joint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, userId, name, type, balance, credit_limit ?? null, statement_day ?? null, payment_due_day ?? null, resolvedPayAccId, unbilled, color, is_joint ? 1 : 0).run();
+    'INSERT INTO accounts (id, user_id, name, type, balance, credit_limit, statement_day, payment_due_day, payment_account_id, is_reserve, parent_account_id, unbilled, color, is_joint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, userId, name, type, balance, credit_limit ?? null, statement_day ?? null, payment_due_day ?? null, resolvedPayAccId, resolvedIsReserve, resolvedParentAccId, unbilled, color, is_joint ? 1 : 0).run();
   const row = await c.env.DB.prepare('SELECT * FROM accounts WHERE id = ?').bind(id).first();
   return c.json({ success: true, data: row }, 201);
 });
@@ -324,7 +340,7 @@ accounts.put('/:id', async (c) => {
 
   const { id } = c.req.param();
   const body = await c.req.json();
-  const { name, balance, credit_limit, statement_day, payment_due_day, payment_account_id, unbilled, color, is_joint } = body;
+  const { name, balance, credit_limit, statement_day, payment_due_day, payment_account_id, is_reserve, parent_account_id, unbilled, color, is_joint } = body;
   await ensureAccountsSchema(c.env.DB);
   const existing = await c.env.DB.prepare(`SELECT * FROM accounts WHERE id = ? AND user_id IN (${placeholders})`).bind(id, ...memberUserIds).first<any>();
   if (!existing) return c.json({ success: false, error: '帳戶不存在' }, 404);
@@ -348,8 +364,22 @@ accounts.put('/:id', async (c) => {
     }
   }
 
+  let nextIsReserve = Number(existing.is_reserve || 0);
+  let nextParentAccId: string | null = existing.parent_account_id || null;
+  if (existing.type === 'bank') {
+    if (is_reserve !== undefined) {
+      nextIsReserve = Number(is_reserve) ? 1 : 0;
+    }
+    if (parent_account_id !== undefined) {
+      nextParentAccId = parent_account_id && String(parent_account_id) !== id ? String(parent_account_id) : null;
+    }
+  } else {
+    nextIsReserve = 0;
+    nextParentAccId = null;
+  }
+
   await c.env.DB.prepare(
-    'UPDATE accounts SET name = ?, balance = ?, credit_limit = ?, statement_day = ?, payment_due_day = ?, payment_account_id = ?, unbilled = ?, color = ?, is_joint = ? WHERE id = ?'
+    'UPDATE accounts SET name = ?, balance = ?, credit_limit = ?, statement_day = ?, payment_due_day = ?, payment_account_id = ?, is_reserve = ?, parent_account_id = ?, unbilled = ?, color = ?, is_joint = ? WHERE id = ?'
   ).bind(
     name ?? existing.name,
     balance !== undefined ? balance : existing.balance,
@@ -357,6 +387,8 @@ accounts.put('/:id', async (c) => {
     statement_day !== undefined ? (statement_day ?? null) : existing.statement_day,
     payment_due_day !== undefined ? (payment_due_day ?? null) : existing.payment_due_day,
     nextPayAccId ?? null,
+    nextIsReserve,
+    nextParentAccId,
     unbilled !== undefined ? unbilled : existing.unbilled,
     color ?? existing.color,
     is_joint !== undefined ? (Number(is_joint) ? 1 : 0) : existing.is_joint,
@@ -1509,7 +1541,7 @@ accounts.get('/balance', async (c) => {
     computeScopedBudgets(c.env.DB, userId, memberUserIds, currentMonth, scope),
     computeRecurringAmortization(c.env.DB, userId, memberUserIds, scope),
   ]);
-  const accs = (batchResults[0].results || []) as Array<{ id: string; type: string; balance: number; unbilled: number; statement_day?: number | null; last_rollover_at?: string | null }>;
+  const accs = (batchResults[0].results || []) as Array<{ id: string; type: string; balance: number; unbilled: number; is_reserve?: number; parent_account_id?: string | null; statement_day?: number | null; last_rollover_at?: string | null }>;
   const thirdRows = (batchResults[2]?.results || []) as any[];
 
   const personalCardsForHousehold = scope === 'household'
@@ -1538,7 +1570,10 @@ accounts.get('/balance', async (c) => {
   }
 
   const cashTotal = accs.filter(a => a.type === 'cash').reduce((s, a) => s + (a.balance || 0), 0);
-  const bankTotal = accs.filter(a => a.type === 'bank').reduce((s, a) => s + (a.balance || 0), 0);
+  const bankAccs = accs.filter(a => a.type === 'bank');
+  const bankTotal = bankAccs.reduce((s, a) => s + (a.balance || 0), 0);
+  const reserveBankTotal = Math.max(0, bankAccs.filter(a => Number(a.is_reserve || 0) === 1).reduce((s, a) => s + (a.balance || 0), 0));
+  const mainBankTotal = bankTotal - reserveBankTotal;
   let ccBilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.balance || 0), 0);
   let ccUnbilled = accs.filter(a => a.type === 'credit_card').reduce((s, a) => s + (a.unbilled || 0), 0);
 
@@ -1557,8 +1592,12 @@ accounts.get('/balance', async (c) => {
 
   const monthlyFixed = recurringSummary.monthly_expense;
   const settledMonthlyFixed = recurringSummary.settled_monthly_expense;
+  const baseRemainingMonthlyFixed = recurringSummary.base_remaining_monthly_expense;
+  const catchupMonthlyAdd = recurringSummary.catchup_monthly_add;
   const remainingMonthlyFixed = recurringSummary.remaining_monthly_expense;
   const accumulatedSinkingFund = recurringSummary.accumulated_sinking_fund;
+  const priorExpectedSinkingFund = recurringSummary.prior_expected_sinking_fund;
+  const reserveShortfall = recurringSummary.reserve_shortfall;
   const annualFixedTotal = recurringSummary.annual_total_expense;
   const annualFixedRemaining = recurringSummary.annual_remaining_expense;
 
@@ -1570,20 +1609,28 @@ accounts.get('/balance', async (c) => {
   const monthSpent = budgetSummary.total_spent;
   const remainingBudget = budgetSummary.remaining_budget;
 
-  // ADR-0047：真實可支配現金僅扣除「本月尚需預留之未繳週期支出 (remainingMonthlyFixed)」，避免已繳帳單重複雙扣
-  const disposable = available - remainingMonthlyFixed - monthlyGoals - remainingBudget;
+  // ADR-0047 & ADR-0048：
+  // 1. 預留金帳戶專款專用 (reserveBankTotal 從可自由動用之可支配現金中隔離扣除)
+  // 2. 扣除「本月尚需預留之未繳週期支出 (remainingMonthlyFixed，含預留不足往後平攤追補額 catchupMonthlyAdd)」
+  const disposable = (available - reserveBankTotal) - remainingMonthlyFixed - monthlyGoals - remainingBudget;
   return c.json({
     success: true,
     data: {
       cashTotal,
       bankTotal,
+      mainBankTotal,
+      reserveBankTotal,
       ccBilled,
       ccUnbilled,
       available,
       monthlyFixed,
       settledMonthlyFixed,
+      baseRemainingMonthlyFixed,
+      catchupMonthlyAdd,
       remainingMonthlyFixed,
       accumulatedSinkingFund,
+      priorExpectedSinkingFund,
+      reserveShortfall,
       annualFixedTotal,
       annualFixedRemaining,
       monthlyGoals,

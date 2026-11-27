@@ -259,8 +259,8 @@ export default function Dashboard() {
               <span>真實可支配現金</span>
               <FormulaTooltip
                 label="檢視真實可支配現金計算公式"
-                formula="淨可用餘額 － 本月週期支出待預留（每月平均 － 本月已繳）－ 每月儲蓄目標預留 － 當月剩餘未用預算預留"
-                calculation={`${formatCurrency(balance?.available ?? 0)} - 週期待預留 ${formatCurrency(balance?.remainingMonthlyFixed ?? balance?.monthlyFixed ?? 0)}${(balance?.settledMonthlyFixed ?? 0) > 0 ? ` (原平均 ${formatCurrency(balance?.monthlyFixed ?? 0)} 已扣已繳 ${formatCurrency(balance?.settledMonthlyFixed ?? 0)})` : ''} - 儲蓄 ${formatCurrency(balance?.monthlyGoals ?? 0)}${(balance?.remainingBudget ?? 0) > 0 ? ` - 剩餘預算 ${formatCurrency(balance?.remainingBudget ?? 0)}` : ''} = ${formatCurrency(balance?.disposable ?? 0)}`}
+                formula="（淨可用餘額 － 預留金帳戶專款）－ 本月週期支出待預留（每月平均 － 本月已繳 ＋ 預留不足往後平攤追補）－ 每月儲蓄目標預留 － 當月剩餘未用預算預留"
+                calculation={`${formatCurrency(balance?.available ?? 0)}${(balance?.reserveBankTotal ?? 0) > 0 ? ` - 預留金專款 ${formatCurrency(balance?.reserveBankTotal ?? 0)}` : ''} - 週期待預留 ${formatCurrency(balance?.remainingMonthlyFixed ?? balance?.monthlyFixed ?? 0)}${(balance?.settledMonthlyFixed ?? 0) > 0 ? ` (已扣已繳 ${formatCurrency(balance?.settledMonthlyFixed ?? 0)})` : ''}${(balance?.catchupMonthlyAdd ?? 0) > 0 ? ` (含不足平攤 +${formatCurrency(balance?.catchupMonthlyAdd ?? 0)})` : ''} - 儲蓄 ${formatCurrency(balance?.monthlyGoals ?? 0)}${(balance?.remainingBudget ?? 0) > 0 ? ` - 剩餘預算 ${formatCurrency(balance?.remainingBudget ?? 0)}` : ''} = ${formatCurrency(balance?.disposable ?? 0)}`}
               />
             </span>
             <div style={{ background: 'var(--color-success)', color: 'white', padding: 6, borderRadius: '50%' }}>
@@ -271,8 +271,9 @@ export default function Dashboard() {
             {formatCurrency(balance?.disposable ?? 0)}
           </div>
           <div className="stat-sub">
+            {(balance?.reserveBankTotal ?? 0) > 0 ? `預留金專款 ${formatCurrency(balance?.reserveBankTotal ?? 0)} · ` : ''}
             週期待預留 {formatCurrency(balance?.remainingMonthlyFixed ?? balance?.monthlyFixed ?? 0)}
-            {(balance?.settledMonthlyFixed ?? 0) > 0 ? `（已扣已繳 ${formatCurrency(balance?.settledMonthlyFixed ?? 0)}）` : ''}
+            {(balance?.catchupMonthlyAdd ?? 0) > 0 ? `（含追補 +${formatCurrency(balance?.catchupMonthlyAdd ?? 0)}）` : (balance?.settledMonthlyFixed ?? 0) > 0 ? `（已扣已繳 ${formatCurrency(balance?.settledMonthlyFixed ?? 0)}）` : ''}
             {' '}· 儲蓄 {formatCurrency(balance?.monthlyGoals ?? 0)}
             {(balance?.remainingBudget ?? 0) > 0 ? ` · 剩餘預算 ${formatCurrency(balance?.remainingBudget ?? 0)}` : ''}
           </div>
@@ -352,11 +353,21 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="grid grid-2">
-                {displayAccounts.map(acc => {
+                {displayAccounts
+                  .filter(acc => {
+                    if (acc.type === 'bank' && acc.parent_account_id && displayAccounts.some(b => b.id === acc.parent_account_id)) {
+                      return false
+                    }
+                    return true
+                  })
+                  .map(acc => {
                   const isCc = acc.type === 'credit_card';
                   const isCash = acc.type === 'cash';
                   const isBank = acc.type === 'bank';
-                  const totalDue = isCc ? (acc.balance || 0) + (acc.unbilled || 0) : acc.balance;
+                  const subBankAccounts = isBank ? displayAccounts.filter(b => b.type === 'bank' && b.parent_account_id === acc.id) : [];
+                  const subReserveTotal = subBankAccounts.reduce((s, b) => s + (b.balance || 0), 0);
+                  const isReserveSelf = isBank && Number(acc.is_reserve) === 1;
+                  const totalDue = isCc ? (acc.balance || 0) + (acc.unbilled || 0) : (acc.balance + subReserveTotal);
                   const boundCards = isBank
                     ? accounts.filter(c => c.type === 'credit_card' && c.payment_account_id === acc.id)
                     : [];
@@ -398,6 +409,11 @@ export default function Dashboard() {
                               <span>私帳</span>
                             </span>
                           )}
+                          {isReserveSelf && (
+                            <span className="badge" style={{ fontSize: '0.68rem', padding: '1px 5px', background: 'rgba(139, 92, 246, 0.14)', color: '#7C3AED', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
+                              預留金帳戶
+                            </span>
+                          )}
                           <span className="badge" style={{ fontSize: '0.68rem', padding: '1px 5px', background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}>
                             {isCash ? '現金' : isCc ? '信用卡' : '銀行存款帳戶'}
                           </span>
@@ -409,10 +425,34 @@ export default function Dashboard() {
                         fontWeight: 700,
                         marginTop: 4,
                         fontFamily: 'var(--font-display)',
-                        color: isCc && totalDue > 0 ? 'var(--color-danger)' : isCash ? '#10B981' : 'var(--text-primary)'
+                        color: isCc && totalDue > 0 ? 'var(--color-danger)' : isCash ? '#10B981' : isReserveSelf ? '#7C3AED' : 'var(--text-primary)'
                       }}>
                         {formatCurrency(totalDue)}
                       </div>
+
+                      {isBank && (subBankAccounts.length > 0 || isReserveSelf) && (
+                        <div
+                          style={{
+                            marginTop: 5,
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(139, 92, 246, 0.08)',
+                            border: '1px solid rgba(139, 92, 246, 0.22)',
+                            fontSize: '0.74rem',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 6,
+                          }}
+                        >
+                          <span style={{ color: 'var(--text-secondary)' }}>
+                            主帳戶 <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(isReserveSelf ? 0 : acc.balance)}</strong>
+                          </span>
+                          <span style={{ color: '#7C3AED', fontWeight: 600 }}>
+                            預留金 <strong>{formatCurrency(isReserveSelf ? acc.balance : subReserveTotal)}</strong>
+                          </span>
+                        </div>
+                      )}
 
                       {/* 銀行帳戶綁定信用卡待扣款提醒 */}
                       {isBank && boundCards.length > 0 && (
@@ -730,11 +770,16 @@ export default function Dashboard() {
             <ul style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', paddingLeft: 18, lineHeight: 1.8 }}>
               <li>
                 本月週期支出尚需預留 <strong>{formatCurrency(balance?.remainingMonthlyFixed ?? balance?.monthlyFixed ?? 0)}</strong>
-                （原每月平均 {formatCurrency(balance?.monthlyFixed ?? 0)}，已扣除本月已繳 <strong>{formatCurrency(balance?.settledMonthlyFixed ?? 0)}</strong>）。
+                （原每月平均 {formatCurrency(balance?.monthlyFixed ?? 0)}，已扣除本月已繳 <strong>{formatCurrency(balance?.settledMonthlyFixed ?? 0)}</strong>
+                {(balance?.catchupMonthlyAdd ?? 0) > 0 && (
+                  <>，並含預留金不足往後平攤追補 <strong>+{formatCurrency(balance?.catchupMonthlyAdd ?? 0)}</strong></>
+                )}）。
               </li>
               {(balance?.accumulatedSinkingFund ?? 0) > 0 && (
                 <li>
-                  一年內長週期帳單（年繳／半年／季／雙月）截至本月帳戶應留存準備金 <strong>{formatCurrency(balance?.accumulatedSinkingFund ?? 0)}</strong>（年內尚待支付總額 {formatCurrency(balance?.annualFixedRemaining ?? 0)}）。
+                  一年內長週期帳單（年繳／半年／季／雙月）截至本月底應留存準備金 <strong>{formatCurrency(balance?.accumulatedSinkingFund ?? 0)}</strong>
+                  （目前預留金帳戶已存 <strong>{formatCurrency(balance?.reserveBankTotal ?? 0)}</strong>
+                  {(balance?.reserveShortfall ?? 0) > 0 ? `，前期缺口 ${formatCurrency(balance?.reserveShortfall ?? 0)} 已平攤至下次繳款前月份` : ''}）。
                 </li>
               )}
               {(balance?.monthlyBudget ?? 0) > 0 && (

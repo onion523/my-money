@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS accounts (
   credit_limit REAL,
   statement_day INTEGER,
   payment_due_day INTEGER,
+  payment_account_id TEXT,
+  is_reserve INTEGER NOT NULL DEFAULT 0,
+  parent_account_id TEXT DEFAULT NULL,
   unbilled REAL NOT NULL DEFAULT 0,
   color TEXT NOT NULL DEFAULT '#FF8A8A',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP

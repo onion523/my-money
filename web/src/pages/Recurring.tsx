@@ -377,22 +377,27 @@ export default function Recurring() {
         <ScopeTabBar scope={scope} onChange={setScope} />
       </div>
 
-      {/* 統計卡片 (ADR-0047：每月平均扣除已繳後之待預留額 ＋ 一年內週期準備金池) */}
+      {/* 統計卡片 (ADR-0047 & ADR-0048：每月平均扣除已繳後之待預留額 ＋ 預留不足往後平攤追補 ＋ 一年內週期準備金池) */}
       <div className="grid grid-4" style={{ marginBottom: 24 }}>
         <div className="stat-card">
           <span className="stat-label">
             <span>本月週期支出待預留</span>
             <FormulaTooltip
               label="檢視本月週期支出待預留計算公式"
-              formula="本月待預留 ＝ 週期支出每月平均總和 － 本月已發生／已繳之週期支出份額（已繳帳單不再重複雙扣真實可支配現金）"
-              calculation={`每月平均 ${formatCurrency(amortize?.monthly_expense ?? 0)} - 本月已繳 ${formatCurrency(amortize?.settled_monthly_expense ?? 0)} = 本月尚需預留 ${formatCurrency(amortize?.remaining_monthly_expense ?? amortize?.monthly_expense ?? 0)}`}
+              formula="本月待預留 ＝（週期支出每月平均總和 － 本月已繳份額）＋ 預留金不足往後平攤之本月追補額"
+              calculation={`每月平均 ${formatCurrency(amortize?.monthly_expense ?? 0)} - 本月已繳 ${formatCurrency(amortize?.settled_monthly_expense ?? 0)}${(amortize?.catchup_monthly_add ?? 0) > 0 ? ` + 預留不足追補 ${formatCurrency(amortize?.catchup_monthly_add ?? 0)}` : ''} = 本月尚需預留 ${formatCurrency(amortize?.remaining_monthly_expense ?? amortize?.monthly_expense ?? 0)}`}
             />
           </span>
           <div className="stat-value" style={{ color: 'var(--color-danger)' }}>
             {formatCurrency(amortize?.remaining_monthly_expense ?? amortize?.monthly_expense ?? 0)}
           </div>
           <div className="stat-sub">
-            每月平均 {formatCurrency(amortize?.monthly_expense ?? 0)} · 本月已繳 {formatCurrency(amortize?.settled_monthly_expense ?? 0)}
+            每月平均 {formatCurrency(amortize?.monthly_expense ?? 0)} · 已繳 {formatCurrency(amortize?.settled_monthly_expense ?? 0)}
+            {(amortize?.catchup_monthly_add ?? 0) > 0 && (
+              <span style={{ color: 'var(--color-danger)', fontWeight: 700 }}>
+                {' '}· 含不足平攤 +{formatCurrency(amortize?.catchup_monthly_add ?? 0)}
+              </span>
+            )}
           </div>
         </div>
 
@@ -400,16 +405,19 @@ export default function Recurring() {
           <span className="stat-label">
             <span>一年內週期準備金池</span>
             <FormulaTooltip
-              label="檢視一年內週期準備金池與年度待付計算公式"
-              formula="長週期帳戶應留存準備金 ＝ ∑ 未繳長週期項目(雙月/季/半年/年) × 已累積攤提月數 × 每月平均；一年內尚待支付 ＝ 全年週期總額(每月平均×12) － 今年已繳總額"
-              calculation={`截至本月應留存長週期準備金 ${formatCurrency(amortize?.accumulated_sinking_fund ?? 0)}；一年總額 ${formatCurrency(amortize?.annual_total_expense ?? 0)} - 今年已繳 ${formatCurrency(amortize?.annual_settled_expense ?? 0)} = 年內待付 ${formatCurrency(amortize?.annual_remaining_expense ?? 0)}`}
+              label="檢視一年內週期準備金池與預留金帳戶比對公式"
+              formula="截至本月底應留存準備金 ＝ ∑ 未繳長週期項目(雙月/季/半年/年) × 已累積月數 × 每月平均；截至上月底應有準備金 vs 預留金帳戶實際總額，若不足則自動往後平攤至下次繳款前的月份"
+              calculation={`截至上月底應有 ${formatCurrency(amortize?.prior_expected_sinking_fund ?? 0)} vs 預留金帳戶實際總額 ${formatCurrency(amortize?.actual_reserve_balance ?? 0)}（前期缺口 ${formatCurrency(amortize?.reserve_shortfall ?? 0)}）；含本月應達標 ${formatCurrency(amortize?.accumulated_sinking_fund ?? 0)}`}
             />
           </span>
           <div className="stat-value" style={{ color: 'var(--color-primary)' }}>
             {formatCurrency(amortize?.accumulated_sinking_fund ?? 0)}
           </div>
           <div className="stat-sub">
-            一年總額 {formatCurrency(amortize?.annual_total_expense ?? 0)} · 年內待付 {formatCurrency(amortize?.annual_remaining_expense ?? 0)}
+            預留金帳戶已存 {formatCurrency(amortize?.actual_reserve_balance ?? 0)}
+            {(amortize?.reserve_shortfall ?? 0) > 0
+              ? ` · 缺口 ${formatCurrency(amortize?.reserve_shortfall ?? 0)} (已往後平攤)`
+              : ` · 年內待付 ${formatCurrency(amortize?.annual_remaining_expense ?? 0)}`}
           </div>
         </div>
 
@@ -514,27 +522,46 @@ export default function Recurring() {
                             </span>
                           </span>
                         ) : sinkingFund > 0 ? (
-                          <span
-                            className="badge"
-                            style={{
-                              fontSize: '0.7rem',
-                              background: 'rgba(255, 138, 138, 0.14)',
-                              color: 'var(--color-primary-dark)',
-                              border: '1px solid var(--border-color)',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 3,
-                            }}
-                          >
-                            <PiggyBank size={11} />
-                            <span>帳戶應留準備金 {formatCurrency(sinkingFund)}（已累 {item.accumulated_months || 1} 個月）</span>
-                          </span>
+                          <>
+                            <span
+                              className="badge"
+                              style={{
+                                fontSize: '0.7rem',
+                                background: 'rgba(255, 138, 138, 0.14)',
+                                color: 'var(--color-primary-dark)',
+                                border: '1px solid var(--border-color)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                              }}
+                            >
+                              <PiggyBank size={11} />
+                              <span>應留準備金 {formatCurrency(sinkingFund)}（已累 {item.accumulated_months || 1} 個月）</span>
+                            </span>
+                            {(item.catchup_monthly_add ?? 0) > 0 && (
+                              <span
+                                className="badge badge-danger"
+                                style={{
+                                  fontSize: '0.7rem',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                }}
+                              >
+                                <AlertCircle size={11} />
+                                <span>
+                                  預留不足 {formatCurrency(item.shortfall_amount ?? 0)} · 往後平攤 {item.remaining_months_to_due ?? 1} 個月 (+{formatCurrency(item.catchup_monthly_add ?? 0)}/月)
+                                </span>
+                              </span>
+                            )}
+                          </>
                         ) : null}
                       </div>
                       <div className="recurring-card-meta">
                         {item.account_name ? `關聯扣款帳戶：${item.account_name}` : '未指定關聯帳戶'}
                         {item.cycle !== 'monthly' && ` · 換算每月平均：${formatCurrency(monthlyShare)} / 月`}
                         {` · 本月待預留：${formatCurrency(item.remaining_monthly_share ?? (isSettled ? 0 : monthlyShare))}`}
+                        {(item.catchup_monthly_add ?? 0) > 0 && `（原 ${formatCurrency(monthlyShare)} + 追補 ${formatCurrency(item.catchup_monthly_add ?? 0)}）`}
                       </div>
                     </div>
 

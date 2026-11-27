@@ -129,15 +129,21 @@ describe('Weekly Recurring Items (#232, #233)', () => {
     await h.request(`/recurring/${cardWeekly.id}`, { method: 'DELETE', user: USER1 });
   });
 
-  it('#244: supports dual-track settled recurring deduction (transaction note auto-match + manual toggleSettle), prevents double-deduction in disposable cash, and computes 1-year sinking fund reserve', async () => {
+  it('#244 & #247: supports dual-track settled recurring deduction, reserve sub-accounts, shortfall catch-up amortization across remaining months before due date, and disposable cash reserve isolation', async () => {
     // 1. Check baseline personal amortize & balance for USER1 (2026-06-15)
     // Personal recurring items in seed for USER1:
     // - r_salary1: income, 60000, monthly
     // - r_bonus: income, 30000, semiannual (month 6)
     // - r_netflix: expense, 390, monthly
     // Let's also create an annual personal expense for USER1 (amount: 36000, month_of_cycle: 8 -> monthly_share = 3000)
-    // In 2026-06, target month is 8, cycleMonths = 12, window is 2025-09..2026-08,
-    // accumulated_months from 2025-09 to 2026-06 inclusive = 10 months -> accumulated_sinking_fund = 30000
+    // In 2026-06, target month is 8, cycleMonths = 12, window is 2025-09..2026-08:
+    // - accumulated_months (through 2026-06) = 10 -> accumulated_sinking_fund = 30000
+    // - prior_accumulated_months (through 2026-05) = 9 -> prior_expected_sinking_fund = 27000
+    // - remaining_months_to_due (June, July, August) = 3 months
+    // When no reserve sub-account exists yet (actual_reserve_balance = 0):
+    // - shortfall_amount = 27000 - 0 = 27000
+    // - catchup_monthly_add = 27000 / 3 = 9000
+    // - effective_monthly_share = 3000 + 9000 = 12000 (so 12000 * 3 months = 36000 ready by August!)
     const createAnnualRes = await h.request('/recurring', {
       method: 'POST',
       user: USER1,
@@ -159,22 +165,69 @@ describe('Weekly Recurring Items (#232, #233)', () => {
     expect(baseAmort.status).toBe(200);
     expect(baseAmort.json.data.monthly_expense).toBe(3390);
     expect(baseAmort.json.data.settled_monthly_expense).toBe(0);
-    expect(baseAmort.json.data.remaining_monthly_expense).toBe(3390);
+    expect(baseAmort.json.data.base_remaining_monthly_expense).toBe(3390);
+    expect(baseAmort.json.data.prior_expected_sinking_fund).toBe(27000);
+    expect(baseAmort.json.data.actual_reserve_balance).toBe(0);
+    expect(baseAmort.json.data.reserve_shortfall).toBe(27000);
+    expect(baseAmort.json.data.catchup_monthly_add).toBe(9000);
+    expect(baseAmort.json.data.remaining_monthly_expense).toBe(3390 + 9000);
     expect(baseAmort.json.data.accumulated_sinking_fund).toBe(30000);
     expect(baseAmort.json.data.annual_total_expense).toBe(390 * 12 + 36000);
-    expect(baseAmort.json.data.annual_settled_expense).toBe(0);
-    expect(baseAmort.json.data.annual_remaining_expense).toBe(390 * 12 + 36000);
+
+    // 2. Create a Reserve Sub-Account under a_bank1 (薪轉戶) with initial balance 0, then transfer 18,000 from a_bank1 into the reserve sub-account
+    const createReserveAcc = await h.request('/accounts', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        name: '薪轉戶 - 週期預留金子帳戶',
+        type: 'bank',
+        balance: 0,
+        is_reserve: 1,
+        parent_account_id: 'a_bank1',
+        is_joint: 0,
+      },
+    });
+    expect(createReserveAcc.status).toBe(201);
+    const reserveAcc = createReserveAcc.json.data;
+    expect(reserveAcc.is_reserve).toBe(1);
+    expect(reserveAcc.parent_account_id).toBe('a_bank1');
+
+    // Transfer 18,000 from main bank account (a_bank1) to reserve sub-account
+    const transferRes = await h.request('/accounts/transfer', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        from_account_id: 'a_bank1',
+        to_account_id: reserveAcc.id,
+        amount: 18000,
+        date: '2026-06-15',
+        note: '撥入週期預留金',
+      },
+    });
+    expect(transferRes.status).toBe(200);
+
+    // Now actual_reserve_balance = 18000 vs prior_expected_sinking_fund = 27000:
+    // - reserve_shortfall = 27000 - 18000 = 9000
+    // - spread across remaining 3 months (June, July, August) -> catchup_monthly_add = 9000 / 3 = 3000
+    // - effective_monthly_share for annualItem = 3000 + 3000 = 6000 (18000 + 6000 * 3 = 36000!)
+    // - total remaining_monthly_expense = 390 (Netflix) + 6000 = 6390
+    const afterReserveAmort = await h.request('/recurring/amortize?scope=personal', { user: USER1 });
+    expect(afterReserveAmort.status).toBe(200);
+    expect(afterReserveAmort.json.data.actual_reserve_balance).toBe(18000);
+    expect(afterReserveAmort.json.data.reserve_shortfall).toBe(9000);
+    expect(afterReserveAmort.json.data.catchup_monthly_add).toBe(3000);
+    expect(afterReserveAmort.json.data.remaining_monthly_expense).toBe(6390);
 
     const baseBal = await h.request('/accounts/balance?scope=personal', { user: USER1 });
     expect(baseBal.status).toBe(200);
     const baseAvailable = Number(baseBal.json.data.available);
     const baseDisposable = Number(baseBal.json.data.disposable);
+    expect(baseBal.json.data.reserveBankTotal).toBe(18000);
     expect(baseBal.json.data.monthlyFixed).toBe(3390);
-    expect(baseBal.json.data.settledMonthlyFixed).toBe(0);
-    expect(baseBal.json.data.remainingMonthlyFixed).toBe(3390);
-    expect(baseBal.json.data.accumulatedSinkingFund).toBe(30000);
+    expect(baseBal.json.data.catchupMonthlyAdd).toBe(3000);
+    expect(baseBal.json.data.remainingMonthlyFixed).toBe(6390);
 
-    // 2. Track 1: Auto-match via transaction note ('Netflix 6月扣款') on bank account
+    // 3. Track 1: Auto-match via transaction note ('Netflix 6月扣款') on bank account
     const txRes = await h.request('/transactions', {
       method: 'POST',
       user: USER1,
@@ -193,12 +246,12 @@ describe('Weekly Recurring Items (#232, #233)', () => {
 
     // Now Netflix (390) is auto-settled via transaction:
     // - available cash decreased by 390 (since it was paid from a_bank1)
-    // - remainingMonthlyFixed also decreased by 390 (from 3390 to 3000)
+    // - remainingMonthlyFixed also decreased by 390 (from 6390 to 6000)
     // - Since available dropped by 390 AND remainingMonthlyFixed dropped by 390, disposable is NOT double-deducted!
     const afterTxAmort = await h.request('/recurring/amortize?scope=personal', { user: USER1 });
     expect(afterTxAmort.status).toBe(200);
     expect(afterTxAmort.json.data.settled_monthly_expense).toBe(390);
-    expect(afterTxAmort.json.data.remaining_monthly_expense).toBe(3000);
+    expect(afterTxAmort.json.data.remaining_monthly_expense).toBe(6000);
     const netflixItem = afterTxAmort.json.data.items.find((b: { id: string }) => b.id === 'r_netflix');
     expect(netflixItem.is_settled_current_cycle).toBe(true);
     expect(netflixItem.settled_source).toBe('transaction');
@@ -206,14 +259,14 @@ describe('Weekly Recurring Items (#232, #233)', () => {
     const afterTxBal = await h.request('/accounts/balance?scope=personal', { user: USER1 });
     expect(afterTxBal.json.data.available).toBe(baseAvailable - 390);
     expect(afterTxBal.json.data.settledMonthlyFixed).toBe(390);
-    expect(afterTxBal.json.data.remainingMonthlyFixed).toBe(3000);
+    expect(afterTxBal.json.data.remainingMonthlyFixed).toBe(6000);
     // Disposable cash stays equal to baseDisposable (not reduced twice by both available -390 and monthlyFixed -390!)
     expect(afterTxBal.json.data.disposable).toBe(baseDisposable);
 
     // Clean up the test transaction
     await h.request(`/transactions/${txId}`, { method: 'DELETE', user: USER1 });
 
-    // 3. Track 2: Manual settle toggle via POST /recurring/:id/settle on long-cycle item annualItem (annual 36000, monthly 3000)
+    // 4. Track 2: Manual settle toggle via POST /recurring/:id/settle on long-cycle item annualItem (annual 36000, monthly 3000)
     const manualSettle = await h.request(`/recurring/${annualItem.id}/settle`, {
       method: 'POST',
       user: USER1,
@@ -224,13 +277,26 @@ describe('Weekly Recurring Items (#232, #233)', () => {
 
     const afterManualAmort = await h.request('/recurring/amortize?scope=personal', { user: USER1 });
     expect(afterManualAmort.json.data.settled_monthly_expense).toBe(3000);
+    expect(afterManualAmort.json.data.catchup_monthly_add).toBe(0);
     expect(afterManualAmort.json.data.remaining_monthly_expense).toBe(390);
     // Once annualItem is settled in current cycle, its accumulated_sinking_fund drops to 0 and annual_settled_expense becomes 36000
     expect(afterManualAmort.json.data.accumulated_sinking_fund).toBe(0);
     expect(afterManualAmort.json.data.annual_settled_expense).toBe(36000);
     expect(afterManualAmort.json.data.annual_remaining_expense).toBe(390 * 12);
 
-    // Unsettle and delete annualItem to restore clean state
+    // Transfer 18,000 back to a_bank1, delete reserve sub-account, unsettle and delete annualItem to restore clean state
+    await h.request('/accounts/transfer', {
+      method: 'POST',
+      user: USER1,
+      body: {
+        from_account_id: reserveAcc.id,
+        to_account_id: 'a_bank1',
+        amount: 18000,
+        date: '2026-06-15',
+        note: '測試還原',
+      },
+    });
+    await h.request(`/accounts/${reserveAcc.id}`, { method: 'DELETE', user: USER1 });
     const manualUnsettle = await h.request(`/recurring/${annualItem.id}/settle`, {
       method: 'POST',
       user: USER1,

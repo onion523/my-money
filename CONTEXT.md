@@ -44,20 +44,33 @@ _Avoid_: 錢包 (wallet)、卡片 (card)、總帳 (ledger)
 _Avoid_: 零錢包 (coin pouch)、皮夾 (wallet)、現金帳 (cash ledger)
 
 **Bank Account (銀行存款帳戶)**:
-個人或共同持有的活期存款正資產帳戶。
+個人或共同持有的活期存款正資產帳戶。支援於主銀行帳戶下建立獨立之「預留金子帳戶（`parent_account_id` 指向主銀行帳戶且 `is_reserve = 1`）」或將任一銀行帳戶標記為「週期預留帳戶（`is_reserve = 1`）」。
 _Avoid_: 現金帳戶 (cash account)、活存帳戶 (deposit account)
+
+**Reserve Sub-Account & Combined Bank Balance Display (預留金子帳戶與主／預留金加總區分顯示，ADR-0048)**:
+在銀行存款帳戶（`type = 'bank'`）架構下，支援將預留金與主帳戶日常資金獨立分開記帳，同時於主帳戶卡片呈現加總與拆解：
+1. **建立預留金子帳戶或標記預留帳戶**：
+   - 使用者可於任一主銀行帳戶卡片直接點擊「＋ 預留子帳戶」建立掛載於該主帳戶下之預留金子帳戶（`parent_account_id = 主帳戶 ID`, `is_reserve = 1`），亦可於新增／編輯銀行帳戶時勾選「設為週期支出預留帳戶（`is_reserve = 1`）」並選擇所屬主銀行帳戶（選填）。
+   - 主帳戶與預留金子帳戶各自擁有獨立餘額，日常可透過「帳戶互轉」將資金從主帳戶撥入預留金子帳戶（或於繳費時從預留金子帳戶扣款／轉回）。
+2. **主銀行卡片「帳戶總餘額（加總）」與「主帳戶金額 vs 預留金帳戶金額」雙軌揭示**：
+   - 當主銀行帳戶下掛載有一個或多個預留金子帳戶時，主銀行帳戶卡片主數字顯示**「整戶加總總餘額（`= 主帳戶金額 + 預留金子帳戶金額`）」**（與實體網銀 App 整戶總存款一致），並於卡片內清楚拆解並列：
+     - **主帳戶金額**：`$主帳戶餘額`
+     - **預留金帳戶金額**：`$預留金子帳戶餘額加總`（並提供快捷轉帳／編輯子帳戶入口）
+3. **預留金總數（Reserve Pool Total）**：
+   - 當前視角（全部／公帳／私帳）下所有標記為 `is_reserve = 1` 之預留金帳戶（含預留金子帳戶與獨立預留銀行帳戶）餘額加總，即為目前實際已留存之**「預留金總數（`actual_reserve_balance`）」**。
+_Avoid_: 主帳戶與預留金混在同一個數字看不出各自多少 (mixing main and reserve balances without breakdown)、建了子帳戶卻在母帳戶看不到整戶加總金額導致與網銀總額對不上 (failing to show combined total on parent bank card)
 
 **Credit Card (信用卡帳戶)**:
 發卡機構授予循環信用額度之負債帳戶。
 _Avoid_: 負債帳戶 (debt account)、卡片 (card)
 
 **Available Balance (淨可用餘額)**:
-名下隨身現金錢包與活存銀行存款總額，扣除所有信用卡總欠款（已出帳與未出帳）後的實質淨可用資產。
+名下隨身現金錢包與活存銀行存款總額（含主帳戶與預留金帳戶），扣除所有信用卡總欠款（已出帳與未出帳）後的實質淨可用資產。
 _Avoid_: 淨值 (net worth)、可用額度 (credit limit)、總餘額 (total balance)
 
 **Disposable Cash (真實可支配現金)**:
-淨可用餘額進一步扣除「當月尚待預留之週期支出（`remainingMonthlyFixed`：扣除當月已發生／已繳後之未繳週期支出與未到期長週期每月攤提預留）」、進行中儲蓄目標每月預留款（`monthlyGoals`），以及當月剩餘未用預算預留額（`remainingBudgetReserve = max(0, 當月有效總預算 - 當月日常消費已花費)`）後的安全自由花費餘額。由於當月已經繳納之週期帳單與已發生之日常消費皆已實質扣減現金／銀行存款或增加信用卡欠款，僅預扣「尚未繳納之週期支出與長週期當月攤提預留（`remainingMonthlyFixed`）」及「尚未花掉的當月剩餘預算（`remainingBudget`）」即可精準反映本月底前真正可自由動用的現金，徹底杜絕已繳週期帳單或已花費消費遭重複雙扣。
-_Avoid_: 零用錢 (pocket money)、空閒餘額 (free cash)、閒置資金 (idle cash)、將當月已繳納之週期帳單與每月平均預留重複雙扣 (double-deducting already-settled recurring items on top of reduced account balance)、將完整每月總預算與當月已發生消費重複雙扣 (double-deducting full monthly budget on top of already spent transactions)
+淨可用餘額（`available`）先隔離扣除「已存放在預留金帳戶內之專款餘額（`reserveBalance`，因屬於專款專用給未來跨期帳單之準備金，不可當作當月日常自由零用錢花掉）」，再進一步扣除「當月尚待從主帳戶預留／提撥之週期支出（`remainingMonthlyFixed`：包含當月未繳短週期支出，以及長週期項目**含預留不足往後平攤追補額**後之本月應提撥金額，扣除當月已繳）」、進行中儲蓄目標每月預留款（`monthlyGoals`），以及當月剩餘未用預算預留額（`remainingBudgetReserve = max(0, 當月有效總預算 - 當月日常消費已花費)`）後的安全自由花費餘額。
+_Avoid_: 零用錢 (pocket money)、空閒餘額 (free cash)、閒置資金 (idle cash)、將已鎖入預留金子帳戶的跨期準備金混入可隨意花掉的可支配現金 (mixing locked reserve sub-account funds into free disposable cash)、將當月已繳納之週期帳單與每月平均預留重複雙扣 (double-deducting already-settled recurring items on top of reduced account balance)、將完整每月總預算與當月已發生消費重複雙扣 (double-deducting full monthly budget on top of already spent transactions)
 
 **Explicit Account Selection (顯式帳戶選取原則)**:
 在新增交易記帳、帳戶互轉、信用卡還款與公帳報銷等表單中，系統嚴格禁止擅自預選任何帳戶或信用卡（無自動預設值），強制使用者主動檢視並選取會計主體；未選取時表單透過原生 required 與介面警示進行防呆攔截。必填欄位之佔位項目設為 disabled 禁止反選回空；非必填之週期收支則提供「無特定帳戶」並允許選取與切換。
@@ -439,11 +452,20 @@ _Avoid_: 模除猜測 (modulo guessing)、固定雙數月 (hardcoded even months
    - **當月應付短週期（`weekly` / `monthly`）與當月剛好到期之長週期項目**：若本期已繳，則當月待預留額為 `$0`（因款項已從銀行／現金扣除或計入信用卡欠款，不再重複雙扣）；若尚未繳（或 `weekly` 僅部分週次已繳），則預留當月尚未繳納之剩餘金額。
    - **當月未到期、但在未來一年內會到期之長週期項目（`bimonthly` / `quarterly` / `semiannual` / `annual`）**：若該期尚未提前繳納，則於當月繼續預留其「每月平均攤提額（`amount / cycleMonths`）」，確保當月應提撥之準備金不被花掉；若該期已提前繳清，則當月攤提預留為 `$0`。
    - 「真實可支配現金 (`Disposable Cash`)」改以 `remainingMonthlyFixed`（而非死板的靜態 `monthlyFixed` 總額）進行扣減。
-4. **一年內週期準備金池與年度待付總覽（1-Year Recurring Sinking Fund & Annual Liability Overview）**：
+4. **一年內週期準備金池、預留金帳戶比對與不足額往後平攤追補（1-Year Recurring Sinking Fund & Shortfall Catch-up Amortization，ADR-0047、ADR-0048）**：
    - **一年內週期支出年度總額（`annual_total_expense`）**：`∑ (各筆週期支出之每月平均 × 12)`。
    - **本週期／今年已繳納總額（`annual_settled_expense`）**與**一年內尚待支付總額（`annual_remaining_expense`）**：統計各週期項目於當前年度／當前週期內已實際繳納之金額與未來一年內尚待支付之剩餘總額。
-   - **長週期累計應留存準備金水位（`accumulated_sinking_fund`）**：針對雙月、季、半年、年繳等跨月長週期支出，依距離下次到期月已走過之攤提月數（含本月，若該期未繳），計算截至本月底**銀行帳戶內應已累積留存之專款準備金總額**（例如年繳 `$12,000` 每月攤提 `$1,000`，目前已累積 5 個月則應留存 `$5,000` 準備金），於「週期收支 (`Recurring.tsx`)」與「總覽頁 (`Dashboard.tsx`)」清晰揭示。
-_Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑化 (smoothing)、攤提 (proration)、每週項目直接除以 1 當成月繳或產生非整數倍碎數 (treating weekly as monthly divisor 1 or awkward fractional multipliers)、當月已繳納房租或帳單後仍從真實可支配現金重複扣除完整每月平均 (double-deducting already-paid recurring items from disposable cash)、將必付週期帳單準備金混入一般夢想儲蓄目標達成率 (polluting savings goals progress with mandatory recurring bill reserves)
+   - **長週期累計應留存準備金水位（`accumulated_sinking_fund`）與前期應有水位（`prior_accumulated_sinking_fund`）**：針對雙月、季、半年、年繳等跨月長週期支出（`cycleM >= 2`），若本期未繳：
+     - 截至上月底已走過之攤提月數为 $p_i = k_i - 1 \in [0, M_i - 1]$（其中 $k_i \in [1, M_i]$ 為截至本月底之累積月數），距離下次繳款日（含本月）尚餘之存錢月數為 $r_i = M_i - p_i = M_i - k_i + 1 \in [1, M_i]$。
+     - 截至上月底理論上應已留存於預留金帳戶之準備金為 $E_i = p_i \times m_i$（全體合計 $E_{\text{prior}} = \sum E_i$），截至本月底應達標之準備金為 $k_i \times m_i$（全體合計 $E_{\text{curr}} = \sum k_i \times m_i$）。
+   - **預留金帳戶實際總額（`actual_reserve_balance`）比對與不足額往後平攤（Shortfall Catch-up across Remaining Months）**：
+     - 系統加總當前視角下所有預留金帳戶（`is_reserve = 1`）之實際餘額 $R_{\text{actual}}$。
+     - 若預留金不足（$R_{\text{actual}} < E_{\text{prior}}$，總前期缺口 $S_{\text{total}} = \max(0, E_{\text{prior}} - R_{\text{actual}})$）：
+       系統按各筆長週期項目之應有準備金比例（$w_i = E_i / E_{\text{prior}}$）分配現有預留金與前期缺口 $S_i = S_{\text{total}} \times w_i$，並將該筆缺口 $S_i$ **往後平攤至該筆項目下次繳款之前的剩餘月份 $r_i$（含本月）**：
+       $$\text{catchupMonthlyAdd}_i = \frac{S_i}{r_i}, \quad \text{effectiveMonthlyShare}_i = m_i + \frac{S_i}{r_i} = \frac{A_i - R_i}{r_i}$$
+       （其中 $R_i = E_i - S_i$ 為該項目分配到之現有預留金，確保在下次繳款前的 $r_i$ 個月內每月按 $\text{effectiveMonthlyShare}_i$ 提撥，到期時 100% 湊滿應繳全額 $A_i$！）
+     - 當月尚需預留之週期支出總額（`remainingMonthlyFixed` / `remaining_monthly_expense`）即採用含不足額往後平攤後之有效應預留額（扣除當月已繳），於「週期收支 (`Recurring.tsx`)」與「總覽頁 (`Dashboard.tsx`)」清晰揭示原本每月平攤、前期預留不足追補平攤額，以及調整後本月應預留金額。
+_Avoid_: 分攤平滑 (amortization smoothing)、分期 (installment)、平滑化 (smoothing)、攤提 (proration)、每週項目直接除以 1 當成月繳或產生非整數倍碎數 (treating weekly as monthly divisor 1 or awkward fractional multipliers)、當月已繳納房租或帳單後仍從真實可支配現金重複扣除完整每月平均 (double-deducting already-paid recurring items from disposable cash)、將必付週期帳單準備金混入一般夢想儲蓄目標達成率 (polluting savings goals progress with mandatory recurring bill reserves)、預留金帳戶餘額不足時仍死板維持原每月平均導致到期日錢不夠付 (ignoring reserve shortfall and failing to spread deficit across remaining months before due date)
 
 **Scoped Cash Flow Forecast (三態現金流預測)**:
 支援切換「全部 (`all`)」、「公帳 (`household`)」、「私帳 (`personal`)」之未來 12 個月（365 天）逐日資金流模擬引擎（含雙月、季、半年、年繳等長週期項目完整排程模擬）。各視角之第 0 天起始基準餘額為該視角下之「現金錢包總額 ＋ 銀行存款總額」實際正資產餘額（未設定繳款日之信用卡欠款除外），並將信用卡欠款依結帳週期拆分為「已出帳待繳款（排入最近一次繳款日）」與「未出帳款（排入下一次結帳日出帳後之繳款日）」分別排入 12 個月時間軸扣減（避免於第 0 天重複預扣或跨期混同），依視角過濾未來 12 個月預定發生之週期收支與繳卡費排程事件，於時間軸卡片標示 `Home` 公帳 / `Lock` 私帳向量徽章、扣款帳戶，以及**該筆事件執行後之逐筆累計結餘（`running_balance`，同日多筆事件依收入優先於支出之順序逐筆加減反映水位變化；若結餘 `< $0` 則以醒目珊瑚紅標示透支）**。

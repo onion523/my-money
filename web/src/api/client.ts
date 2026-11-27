@@ -510,6 +510,8 @@ export interface Account {
   unbilled: number;
   color: string;
   is_joint?: number;
+  is_reserve?: number;
+  parent_account_id?: string | null;
   billed_shared_debt?: number;
   billed_personal_debt?: number;
   unbilled_shared_debt?: number;
@@ -524,13 +526,19 @@ export interface Account {
 export interface BalanceSummary {
   cashTotal?: number;
   bankTotal: number;
+  mainBankTotal?: number;
+  reserveBankTotal?: number;
   ccBilled: number;
   ccUnbilled: number;
   available: number;
   monthlyFixed: number;
   settledMonthlyFixed?: number;
+  baseRemainingMonthlyFixed?: number;
+  catchupMonthlyAdd?: number;
   remainingMonthlyFixed?: number;
   accumulatedSinkingFund?: number;
+  priorExpectedSinkingFund?: number;
+  reserveShortfall?: number;
   annualFixedTotal?: number;
   annualFixedRemaining?: number;
   monthlyGoals: number;
@@ -597,6 +605,13 @@ export interface RecurringItem {
   remaining_monthly_share?: number;
   accumulated_months?: number;
   accumulated_sinking_fund?: number;
+  prior_accumulated_months?: number;
+  prior_expected_sinking_fund?: number;
+  remaining_months_to_due?: number;
+  allocated_reserve_balance?: number;
+  shortfall_amount?: number;
+  catchup_monthly_add?: number;
+  effective_monthly_share?: number;
   annual_total?: number;
   annual_settled?: number;
   annual_remaining?: number;
@@ -606,10 +621,15 @@ export interface AmortizeResult {
   monthly_expense: number;
   settled_monthly_expense?: number;
   remaining_monthly_expense?: number;
+  base_remaining_monthly_expense?: number;
+  catchup_monthly_add?: number;
   monthly_income: number;
   settled_monthly_income?: number;
   remaining_monthly_income?: number;
   accumulated_sinking_fund?: number;
+  prior_expected_sinking_fund?: number;
+  actual_reserve_balance?: number;
+  reserve_shortfall?: number;
   annual_total_expense?: number;
   annual_settled_expense?: number;
   annual_remaining_expense?: number;
